@@ -27,6 +27,7 @@ env:
 jobs:
   version:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
@@ -39,6 +40,7 @@ jobs:
 
   tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -51,6 +53,7 @@ jobs:
   build-windows:
     needs: version
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -61,7 +64,10 @@ jobs:
         run: |
           Invoke-WebRequest $env:INNO_URL -OutFile innosetup.exe
           if ((Get-FileHash innosetup.exe -Algorithm SHA256).Hash -ne $env:INNO_SHA256) { throw "Контрольная сумма Inno Setup не совпала" }
-          Start-Process innosetup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/DIR=C:\InnoSetup' -Wait
+          # Ждём только сам установщик (Start-Process -Wait в pwsh ждёт ещё и все дочерние процессы)
+          $p = Start-Process .\innosetup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/NOICONS','/DIR=C:\InnoSetup','/LOG=inno.log' -PassThru
+          if (-not $p.WaitForExit(300000)) { Get-Content inno.log -Tail 30; throw "Установка Inno Setup не завершилась за 5 минут" }
+          if (-not (Test-Path C:\InnoSetup\ISCC.exe)) { Get-Content inno.log -Tail 30; throw "ISCC.exe не найден" }
           "ISCC=C:\InnoSetup\ISCC.exe" >> $env:GITHUB_ENV
       - run: pip install -r packaging/requirements-build.txt
       - name: Сборка
@@ -75,6 +81,7 @@ jobs:
   build-linux:
     needs: version
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # AlmaLinux 9 (glibc 2.34): программа запускается на RHEL 9+, Debian 12+, Ubuntu 22.04+
     container: almalinux:9
     steps:
@@ -100,6 +107,7 @@ jobs:
   test-windows:
     needs: [version, build-windows]
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -118,7 +126,10 @@ jobs:
         shell: pwsh
         run: |
           $setup = (Get-ChildItem SwitchMap-Setup-*.exe).FullName
-          Start-Process $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LOG=install.log' -Wait
+          $p = Start-Process $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LOG=install.log' -PassThru
+          if (-not $p.WaitForExit(300000)) { Get-Content install.log -Tail 40; throw "Установка не завершилась за 5 минут" }
+          "Код установщика: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { Get-Content install.log -Tail 40; throw "Установщик завершился с ошибкой" }
           $svc = Get-CimInstance Win32_Service -Filter "Name='SwitchMap'"
           $svc | Format-List Name, State, StartMode, StartName, PathName
           if ($svc.State -ne 'Running') { Get-Content install.log -Tail 40; throw "Служба не запущена" }
@@ -132,7 +143,8 @@ jobs:
         shell: pwsh
         run: |
           $db = (Get-Item C:\ProgramData\SwitchMap\switches.db).Length
-          Start-Process (Get-ChildItem SwitchMap-Setup-*.exe).FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LOG=upgrade.log' -Wait
+          $p = Start-Process (Get-ChildItem SwitchMap-Setup-*.exe).FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LOG=upgrade.log' -PassThru
+          if (-not $p.WaitForExit(300000) -or $p.ExitCode -ne 0) { Get-Content upgrade.log -Tail 40; throw "Обновление не прошло" }
           if ((Get-Service SwitchMap).Status -ne 'Running') { Get-Content upgrade.log -Tail 40; throw "Служба не запустилась после обновления" }
           if (-not (Test-Path C:\ProgramData\SwitchMap\switchmap.secret)) { throw "Ключи пропали" }
       - name: Вход после обновления
@@ -147,7 +159,10 @@ jobs:
       - name: Удаление (данные остаются)
         shell: pwsh
         run: |
-          Start-Process "C:\Program Files\SwitchMap\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+          $p = Start-Process "C:\Program Files\SwitchMap\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru
+          $p.WaitForExit(300000) | Out-Null
+          # программа удаления перезапускает себя из временной папки — ждём, пока исчезнет служба
+          for ($i = 0; $i -lt 60 -and (Get-Service SwitchMap -ErrorAction SilentlyContinue); $i++) { Start-Sleep 1 }
           Start-Sleep 3
           if (Get-Service SwitchMap -ErrorAction SilentlyContinue) { throw "Служба осталась" }
           if (-not (Test-Path C:\ProgramData\SwitchMap\switches.db)) { throw "База удалена вместе с программой" }
@@ -161,6 +176,7 @@ jobs:
   test-deb-systemd:
     needs: [version, build-linux]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -215,6 +231,7 @@ jobs:
   test-linux-containers:
     needs: [version, build-linux]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -257,6 +274,7 @@ jobs:
     if: github.ref_type == 'tag'
     needs: [version, tests, test-windows, test-deb-systemd, test-linux-containers]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:

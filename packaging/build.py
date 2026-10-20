@@ -112,12 +112,16 @@ def windows_installer(program, version):
 
 
 def linux_packages(program, version):
-    nfpm = shutil.which("nfpm") or sys.exit("nfpm не найден: https://nfpm.goreleaser.com/install/")
-    env = dict(os.environ, SWITCHMAP_VERSION=version, SWITCHMAP_PROGRAM=program)
+    nfpm = os.environ.get("NFPM") or shutil.which("nfpm") or sys.exit("nfpm не найден: https://nfpm.goreleaser.com/install/")
+    # nfpm подставляет переменные окружения не во все поля (в пути к файлам — нет), поэтому подставляем сами
+    with open(os.path.join(PKG, "linux", "nfpm.yaml"), encoding="utf-8") as f:
+        text = f.read().replace("${SWITCHMAP_VERSION}", version).replace("${SWITCHMAP_PROGRAM}", program.replace("\\", "/"))
+    conf = os.path.join(BUILD, "nfpm.yaml")
+    with open(conf, "w", encoding="utf-8") as f:
+        f.write(text)
     outs = []
     for packager in ("deb", "rpm"):
-        run([nfpm, "package", "--config", os.path.join(PKG, "linux", "nfpm.yaml"), "--packager", packager,
-             "--target", DIST], cwd=ROOT, env=env)
+        run([nfpm, "package", "--config", conf, "--packager", packager, "--target", DIST], cwd=ROOT)
     for name in os.listdir(DIST):
         if name.endswith((".deb", ".rpm")) and version.replace("-", "~") in name:
             outs.append(os.path.join(DIST, name))
