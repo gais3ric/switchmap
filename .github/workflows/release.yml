@@ -116,19 +116,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: windows
-      - name: Симулятор SNMP
+      - name: Симулятор SNMP (установка)
         shell: pwsh
-        run: |
-          python -m venv sim; sim\Scripts\pip install -q snmpsim pysmi cryptography
-          # полные пути: с относительным путём к данным snmpsim на Windows не создаёт индекс
-          $data = (Resolve-Path tests\snmpsim\data).Path
-          $simArgs = "--data-dir=$data", "--cache-dir=$env:RUNNER_TEMP\snmpcache", "--agent-udpv4-endpoint=127.0.0.1:161",
-                     "--v3-user=simuser", "--v3-auth-key=authpass123", "--v3-auth-proto=SHA", "--v3-priv-key=privpass123", "--v3-priv-proto=AES"
-          Start-Process sim\Scripts\snmpsim-command-responder.exe -ArgumentList $simArgs -WindowStyle Hidden -RedirectStandardOutput sim.log -RedirectStandardError sim.err
-          for ($i = 0; $i -lt 90 -and -not (Get-NetUDPEndpoint -LocalPort 161 -ErrorAction SilentlyContinue); $i++) { Start-Sleep 1 }
-          Start-Sleep 3
-          Get-Content sim.log, sim.err -Tail 8
-          if (-not (Get-NetUDPEndpoint -LocalPort 161 -ErrorAction SilentlyContinue)) { throw "Симулятор не запустился" }
+        run: python -m venv sim; sim\Scripts\pip install -q snmpsim pysmi cryptography
       - name: Установка
         shell: pwsh
         run: |
@@ -144,15 +134,13 @@ jobs:
           if ($svc.StartMode -ne 'Auto') { throw "Служба не в автозапуске" }
           Get-Content C:\ProgramData\SwitchMap\switchmap.conf
           icacls C:\ProgramData\SwitchMap
-      - name: Диагностика SNMP (та же программа от пользователя runner)
-        continue-on-error: true
+      - name: Проверка установленной службы
         shell: pwsh
         run: |
-          python packaging/smoke.py --exe "C:\Program Files\SwitchMap\switchmap.exe" --snmp | Select-String "SNMP|ИТОГО"
-          Get-NetUDPEndpoint -LocalPort 161 | Format-Table LocalAddress, OwningProcess
-          Get-Content sim.log, sim.err -Tail 15
-      - name: Проверка установленной службы
-        run: python packaging/smoke.py --url http://127.0.0.1:5000 --snmp --expect-version ${{ needs.version.outputs.version }}
+          # симулятор — в этом же шаге: фоновые процессы GitHub завершает в конце каждого шага
+          ./packaging/ci/start-snmpsim.ps1
+          python packaging/smoke.py --url http://127.0.0.1:5000 --snmp --expect-version ${{ needs.version.outputs.version }}
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Обновление поверх (данные и настройки остаются)
         shell: pwsh
         run: |
@@ -235,7 +223,8 @@ jobs:
           sudo find /var/lib/switchmap -not -user switchmap | grep . && exit 1 || true
       - name: Перезапуск после сбоя
         run: |
-          sudo pkill -KILL -f /opt/switchmap/switchmap
+          # аварийное завершение процесса службы (pkill -f задел бы и сам этот шаг)
+          sudo systemctl kill -s KILL switchmap
           sleep 15
           systemctl is-active switchmap
       - name: Удаление (данные остаются)
