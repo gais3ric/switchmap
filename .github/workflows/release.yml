@@ -120,8 +120,12 @@ jobs:
         shell: pwsh
         run: |
           python -m venv sim; sim\Scripts\pip install -q snmpsim pysmi cryptography
-          Start-Process sim\Scripts\snmpsim-command-responder.exe -ArgumentList ($env:SNMPSIM_ARGS -split ' ') -WindowStyle Hidden
-          Start-Sleep 8
+          Start-Process sim\Scripts\snmpsim-command-responder.exe -ArgumentList ($env:SNMPSIM_ARGS -split ' ') -WindowStyle Hidden -RedirectStandardOutput sim.log -RedirectStandardError sim.err
+          # при первом запуске симулятор строит индекс данных — ждём, пока он начнёт слушать порт
+          for ($i = 0; $i -lt 90 -and -not (Select-String -Path sim.log,sim.err -Pattern "Listening at UDP" -Quiet); $i++) { Start-Sleep 1 }
+          Start-Sleep 2
+          Get-Content sim.log, sim.err -Tail 5
+          if (-not (Select-String -Path sim.log,sim.err -Pattern "Listening at UDP" -Quiet)) { throw "Симулятор не запустился" }
       - name: Установка
         shell: pwsh
         run: |
@@ -190,9 +194,11 @@ jobs:
           sudo nohup /tmp/sim/bin/snmpsim-command-responder --data-dir=/tmp/snmpdata --agent-udpv4-endpoint=127.0.0.1:161 \
             --v3-user=simuser --v3-auth-key=authpass123 --v3-auth-proto=SHA --v3-priv-key=privpass123 --v3-priv-proto=AES \
             --cache-dir=/tmp/snmpcache --process-user=nobody --process-group=nogroup > /tmp/sim.log 2>&1 &
-          sleep 10
-          cat /tmp/sim.log | tail -n 20
-          sudo ss -ulpn | grep ':161 ' || { echo "Симулятор не слушает порт 161"; exit 1; }
+          # при первом запуске симулятор строит индекс данных — ждём, пока он начнёт слушать порт
+          for i in $(seq 1 90); do grep -q "Listening at UDP" /tmp/sim.log && break; sleep 1; done
+          sleep 2
+          tail -n 5 /tmp/sim.log
+          grep -q "Listening at UDP" /tmp/sim.log || { echo "Симулятор не запустился"; exit 1; }
       - name: Установка
         run: |
           sudo apt-get install -y ./switchmap_*_amd64.deb
