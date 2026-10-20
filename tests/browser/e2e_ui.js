@@ -87,7 +87,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await page.evaluate(() => toggleMenu()); await sleep(400);
 
     // ── Смена темы перерисовывает графики без ошибок
-    await page.click('button[onclick="openStatsModal()"]'); await sleep(1500);
+    await page.click('button[data-click="openStatsModal"]'); await sleep(1500);
     const before = await page.evaluate(() => Chart.getChart('healthChart')?.options.scales.x.ticks.color);
     await page.evaluate(() => toggleTheme()); await sleep(900);
     const after = await page.evaluate(() => Chart.getChart('healthChart')?.options.scales.x.ticks.color);

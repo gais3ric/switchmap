@@ -49,7 +49,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     check('меню: имя, роль, пароль, пользователи, выход', menu.includes('admin') && menu.includes('Администратор')
         && menu.includes('Сменить пароль') && menu.includes('Пользователи') && menu.includes('Выйти'), menu);
     await page.screenshot({ path: path.join(shots, 'a_user_menu.png') });
-    await page.click('.user-menu .dropdown button[onclick="openPasswordModal()"]'); await sleep(300);
+    await page.click('.user-menu .dropdown button[data-click="openPasswordModal"]'); await sleep(300);
     await page.type('#pwCurrent', 'adminpass123'); await page.type('#pwNew', 'adminpass456'); await page.type('#pwNew2', 'adminpass000');
     await page.click('#passwordModal .btn-primary'); await sleep(400);
     check('несовпадающие новые пароли — ошибка', (await toasts()).includes('Новые пароли не совпадают'));
@@ -95,7 +95,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     check('наблюдатель: в навигации нет «Пользователи»', !(await page.$eval('.user-menu .dropdown', el => el.innerText)).includes('Пользователи'));
     await open('/switch/1');
     check('наблюдатель: нет «Редактировать», есть «Опросить» и «Статистика»', !(await visible('#editBtn')) && await visible('#snmpBtn')
-        && await visible('button[onclick="openStatsModal()"]'));
+        && await visible('button[data-click="openStatsModal"]'));
     const forced = await page.evaluate(async () => { const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"poll_enabled":true}' }); return [r.status, (await r.json()).error]; });
     check('наблюдатель: прямой запрос на изменение → 403 с объяснением', forced[0] === 403 && forced[1].includes('администратор'), forced);
     await page.click('#snmpBtn');

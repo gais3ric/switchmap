@@ -198,7 +198,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 const esc = eventsEscape;
 const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
     .then(async r => ({ status: r.status, data: await r.json() }));

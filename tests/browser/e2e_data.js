@@ -50,8 +50,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     // ── Экспорт и история на странице коммутатора
     await open('/switch/1');
     await page.click('.page-actions [data-menu-toggle]'); await sleep(250);
-    const sw = await page.$$eval('.page-actions .dropdown a, .page-actions .dropdown button', els => els.map(e => e.getAttribute('href') || e.getAttribute('onclick')));
-    check('коммутатор: Excel, PDF, 3 CSV, история', sw.includes('/export/switch/1.xlsx') && sw.includes('exportToPDF()')
+    const sw = await page.$$eval('.page-actions .dropdown a, .page-actions .dropdown button', els => els.map(e => e.getAttribute('href') || e.getAttribute('data-click')));
+    check('коммутатор: Excel, PDF, 3 CSV, история', sw.includes('/export/switch/1.xlsx') && sw.includes('exportToPDF')
         && sw.filter(h => h && h.endsWith('.csv')).length === 3 && sw.includes('/audit?switch=1'), sw);
     const x = await fetchHead('/export/switch/1.xlsx');
     check('Excel коммутатора скачивается', x.status === 200 && x.magic === 'PK' && x.size > 1000, x);
@@ -64,7 +64,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await page.evaluate(() => document.getElementById('snmpPanel').classList.remove('visible'));
     await page.evaluate(() => localStorage.removeItem('switchmap.statsPeriod'));
     await open('/switch/1');
-    await page.click('button[onclick="openStatsModal()"]'); await sleep(1300);
+    await page.click('button[data-click="openStatsModal"]'); await sleep(1300);
     check('по умолчанию период 24 ч', await page.$eval('#statsPeriod .is-active', b => b.dataset.period) === '24h');
     await page.select('#portSelectStats', '10109'); await sleep(1000);
     check('24 ч: сводка «Последний интервал»', (await page.$eval('#trafficSummary', el => el.textContent)).startsWith('Последний интервал'));
@@ -77,7 +77,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
         && s7.ds[0].includes('среднее'), s7);
     await page.screenshot({ path: path.join(shots, 'd_stats_7d.png') });
     await open('/switch/1');
-    await page.click('button[onclick="openStatsModal()"]'); await sleep(1000);
+    await page.click('button[data-click="openStatsModal"]'); await sleep(1000);
     check('выбор периода запоминается', await page.$eval('#statsPeriod .is-active', b => b.dataset.period) === '7d');
     await page.click('#statsPeriod button[data-period="1y"]'); await sleep(800);
     await page.click('#statsPeriod button[data-period="24h"]'); await sleep(800);

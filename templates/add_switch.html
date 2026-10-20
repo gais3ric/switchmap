@@ -52,7 +52,7 @@
                 <label for="f-ip">IP-адрес</label>
                 <input id="f-ip" type="text" name="ip_address" placeholder="192.168.1.1" autocomplete="off">
             </div>
-            <button type="button" class="btn" onclick="probeSwitchForm(this.form, this)">{{ icon('plug') }} Проверить и заполнить</button>
+            <button type="button" class="btn" data-click="probeSwitchForm" data-args='["$form", "$el"]'>{{ icon('plug') }} Проверить и заполнить</button>
         </div>
         {{ snmp_fields('page') }}
         <div class="probe-result" data-probe-result hidden></div>
@@ -60,7 +60,7 @@
 
         <div class="modal-section-title">Патч-панель</div>
         <label class="check" style="margin-bottom:14px">
-            <input type="checkbox" id="hasPatchPanel" checked onchange="togglePatch(this)">
+            <input type="checkbox" id="hasPatchPanel" checked data-change="togglePatch" data-args='["$el"]'>
             Добавить патч-панель
         </label>
         <input type="hidden" name="has_patch_panel" id="hasPatchInput" value="1">
@@ -87,7 +87,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 document.getElementById('mainForm').addEventListener('submit', e => {
     const invalid = snmpValidationError(snmpValues(e.currentTarget.querySelector('[data-snmp]')));
     if (invalid) { e.preventDefault(); notify(invalid, 'error'); }

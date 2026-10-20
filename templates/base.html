@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf-token" content="{{ csrf_token }}">
 <title>{% block title %}SwitchMap{% endblock %} · SwitchMap</title>
-<script>
+<script nonce="{{ csp_nonce }}">
 // Тема — до отрисовки страницы, чтобы не было вспышки другой темы
 (function () {
     var t = null;
@@ -31,13 +31,13 @@
             {% if is_admin %}<a href="/discover" class="rail-item {{ 'is-active' if active_nav == 'discover' }}" data-label="Поиск в сети и импорт из NetBox" aria-label="Поиск и импорт">{{ icon('radar') }}</a>{% endif %}
             {% if is_admin %}<a href="/notifications" class="rail-item {{ 'is-active' if active_nav == 'notifications' }}" data-label="Уведомления в Telegram и на почту" aria-label="Уведомления">{{ icon('send') }}</a>{% endif %}
             <button type="button" class="rail-item" data-label="Поиск устройства  (Ctrl K)" aria-label="Поиск"
-                    onclick="document.getElementById('netSearchInput').focus()">{{ icon('search') }}</button>
+                    data-click="focusById" data-args='["netSearchInput"]'>{{ icon('search') }}</button>
         </nav>
         <div class="rail-bottom">
-            <button type="button" class="rail-item" id="themeToggle" data-label="Светлая тема" aria-label="Сменить тему" onclick="toggleTheme()">
+            <button type="button" class="rail-item" id="themeToggle" data-label="Светлая тема" aria-label="Сменить тему" data-click="toggleTheme">
                 <span class="icon-sun">{{ icon('sun') }}</span><span class="icon-moon" hidden>{{ icon('moon') }}</span>
             </button>
-            <button type="button" class="rail-item admin-only" data-label="Настройки" aria-label="Настройки" onclick="openSettingsModal()">{{ icon('settings') }}</button>
+            <button type="button" class="rail-item admin-only" data-label="Настройки" aria-label="Настройки" data-click="openSettingsModal">{{ icon('settings') }}</button>
             {% if current_user %}
             <div class="menu-wrap user-menu">
                 <button type="button" class="rail-avatar" data-menu-toggle aria-haspopup="true"
@@ -48,7 +48,7 @@
                         <span class="badge {{ 'badge-accent' if is_admin else 'badge-outline' }}">{{ current_user.role_label }}</span>
                     </div>
                     <hr>
-                    <button type="button" role="menuitem" onclick="openPasswordModal()">{{ icon('pencil') }} Сменить пароль</button>
+                    <button type="button" role="menuitem" data-click="openPasswordModal">{{ icon('pencil') }} Сменить пароль</button>
                     {% if is_admin %}<a href="/users" role="menuitem">{{ icon('server') }} Пользователи</a>{% endif %}
                     <hr>
                     <form method="POST" action="/logout" style="margin:0">
@@ -75,14 +75,14 @@
             </div>
             <div class="topbar-actions">
                 {% block topbar_actions %}{% endblock %}
-                <button type="button" class="btn btn-ghost btn-icon bell-btn" onclick="toggleEventsPanel()" title="События" aria-label="События">
+                <button type="button" class="btn btn-ghost btn-icon bell-btn" data-click="toggleEventsPanel" title="События" aria-label="События">
                     {{ icon('bell') }}<span class="bell-badge" id="bellBadge">0</span>
                 </button>
             </div>
             <div class="events-panel" id="eventsPanel">
                 <div class="events-panel-header">
                     <span>События</span>
-                    <button type="button" class="btn btn-ghost btn-sm" onclick="markAllEventsRead()">Прочитать всё</button>
+                    <button type="button" class="btn btn-ghost btn-sm" data-click="markAllEventsRead">Прочитать всё</button>
                 </div>
                 <div id="eventsList">
                     <div class="events-empty">Загрузка…</div>
@@ -101,7 +101,7 @@
     <div class="modal-content is-narrow">
         <div class="modal-header">
             <h2 id="settingsTitle">Настройки</h2>
-            <button type="button" class="modal-close" onclick="closeSettingsModal()" aria-label="Закрыть">&times;</button>
+            <button type="button" class="modal-close" data-click="closeSettingsModal" aria-label="Закрыть">&times;</button>
         </div>
         <div class="modal-body">
             <div class="modal-section-title">Опрос</div>
@@ -129,8 +129,8 @@
             <div class="hint">Событие появляется при превышении порога и ещё одно — при возврате в норму. 0 — оповещение выключено.</div>
         </div>
         <div class="modal-footer">
-            <button type="button" class="btn" onclick="closeSettingsModal()">Отмена</button>
-            <button type="button" class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
+            <button type="button" class="btn" data-click="closeSettingsModal">Отмена</button>
+            <button type="button" class="btn btn-primary" data-click="saveSettings">Сохранить</button>
         </div>
     </div>
 </div>
@@ -140,7 +140,7 @@
     <div class="modal-content is-narrow">
         <div class="modal-header">
             <h2 id="passwordTitle">Смена пароля</h2>
-            <button type="button" class="modal-close" onclick="closePasswordModal()" aria-label="Закрыть">&times;</button>
+            <button type="button" class="modal-close" data-click="closePasswordModal" aria-label="Закрыть">&times;</button>
         </div>
         <form class="modal-body" id="passwordForm" autocomplete="off">
             <div class="field">
@@ -158,7 +158,7 @@
             <div class="hint">После смены пароля другие ваши сессии (на других компьютерах) завершатся.</div>
         </form>
         <div class="modal-footer">
-            <button type="button" class="btn" onclick="closePasswordModal()">Отмена</button>
+            <button type="button" class="btn" data-click="closePasswordModal">Отмена</button>
             <button type="submit" form="passwordForm" class="btn btn-primary">Сменить пароль</button>
         </div>
     </div>

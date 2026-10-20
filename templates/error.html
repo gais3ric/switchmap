@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ code }} · SwitchMap</title>
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
     var t = null;
     try { t = localStorage.getItem('switchmap.theme'); } catch (e) {}
@@ -20,7 +20,7 @@
         <h3>{{ {403: 'Нет доступа', 404: 'Не найдено', 400: 'Запрос отклонён'}.get(code, 'Ошибка') }} <span class="muted">· {{ code }}</span></h3>
         <p>{{ message }}</p>
         <div class="row" style="margin-top:6px">
-            <button type="button" class="btn" onclick="history.back()">Назад</button>
+            <button type="button" class="btn" data-click="goBack">Назад</button>
             <a href="/" class="btn btn-primary">На главную</a>
         </div>
     </div>

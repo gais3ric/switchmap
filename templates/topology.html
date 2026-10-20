@@ -7,7 +7,7 @@
 {% block content_class %}is-flush{% endblock %}
 
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="{{ cdn_script.d3[0] }}" integrity="{{ cdn_script.d3[1] }}" crossorigin="anonymous"></script>
 <style>
 .topo { position: relative; height: calc(100vh - var(--topbar-h)); overflow: hidden; }
 #graph {
@@ -118,8 +118,8 @@
             <span id="status">Загрузка…</span>
         </div>
         <div class="topo-actions">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="loadTopology()">{{ icon('refresh') }} Обновить</button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="fitGraph()">{{ icon('fit') }} Вписать</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-click="loadTopology">{{ icon('refresh') }} Обновить</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-click="fitGraph">{{ icon('fit') }} Вписать</button>
         </div>
     </div>
 
@@ -130,7 +130,7 @@
     </div>
 
     <div id="side">
-        <button type="button" class="modal-close side-close" onclick="closeSide()" aria-label="Закрыть">&times;</button>
+        <button type="button" class="modal-close side-close" data-click="closeSide" aria-label="Закрыть">&times;</button>
         <div id="sideContent"></div>
     </div>
 
@@ -145,7 +145,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 const svg = d3.select("#topologySvg");
 const graphEl = document.getElementById("graph");
 const zoomLayer = d3.select("#zoomLayer");

@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file, Response, session, abort
+from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file, Response, session, abort, g
+import secrets
 import sqlite3
 import json
 import os
@@ -120,11 +121,36 @@ def access_control():
     return None
 
 
-# CDN — только для Chart.js, pdfmake, d3. Встроенные скрипты пока нужны шаблонам (onclick и т. п.).
-CSP = ("default-src 'self'; "
-       "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-       "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; "
-       "frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'")
+# Библиотеки с CDN: точные версии и контрольные суммы (SRI) — подменённый файл браузер не выполнит.
+# Шаблоны берут адрес и хэш отсюда (cdn_script), CSP разрешает только эти файлы.
+CDN_SCRIPTS = {
+    "chartjs": ("https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js",
+                "sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g"),
+    "d3": ("https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js",
+           "sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i"),
+    "pdfmake": ("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js",
+                "sha384-VFQrHzqBh5qiJIU0uGU5CIW3+OWpdGGJM9LBnGbuIH2mkICcFZ7lPd/AAtI7SNf7"),
+    "pdfmake_fonts": ("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js",
+                      "sha384-/RlQG9uf0M2vcTw3CX7fbqgbj/h8wKxw7C3zu9/GxcBPRKOEcESxaxufwRXqzq6n"),
+}
+
+
+def csp_nonce():
+    """Одноразовый ключ страницы: выполняются только встроенные <script nonce="…"> этого ответа."""
+    if "csp_nonce" not in g:
+        g.csp_nonce = secrets.token_urlsafe(18)
+    return g.csp_nonce
+
+
+def build_csp(nonce=None):
+    sources = ["'self'"] + ([f"'nonce-{nonce}'"] if nonce else []) + [url for url, _ in CDN_SCRIPTS.values()]
+    return ("default-src 'self'; "
+            f"script-src {' '.join(sources)}; "
+            # Обработчики в атрибутах (onclick="…") и ссылки javascript: запрещены полностью
+            "script-src-attr 'none'; "
+            # Встроенные стили оставлены: выполнить код через style браузеры не позволяют
+            "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; "
+            "frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'")
 
 
 @app.after_request
@@ -132,7 +158,7 @@ def security_headers(response):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "same-origin")
-    response.headers.setdefault("Content-Security-Policy", CSP)
+    response.headers.setdefault("Content-Security-Policy", build_csp(g.get("csp_nonce")))
     if not request.path.startswith("/static/"):
         # Страницы и API с данными сети не кэшируются (в том числе после выхода)
         response.headers.setdefault("Cache-Control", "no-store")
@@ -143,7 +169,17 @@ def security_headers(response):
 def inject_user():
     user = current_user()
     return {"current_user": user, "is_admin": bool(user and user["role"] == "admin"),
-            "csrf_token": session.get("csrf", "")}
+            "csrf_token": session.get("csrf", ""), "csp_nonce": csp_nonce(), "cdn_script": CDN_SCRIPTS}
+
+
+@app.template_filter("plural")
+def plural_filter(n, one, few, many):
+    """{{ 24|plural('порт', 'порта', 'портов') }} → «24 порта»."""
+    try:
+        n = int(n or 0)
+    except (TypeError, ValueError):
+        return f"{n} {many}"
+    return f"{n} {notify._plural(n, one, few, many)}"
 
 
 def _safe_next(target):

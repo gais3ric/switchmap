@@ -68,7 +68,7 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
         </div>
         <a href="/topology" class="btn">{{ icon('topology') }} Топология</a>
         <a href="/discover" class="btn admin-only">{{ icon('radar') }} Найти в сети</a>
-        <button type="button" class="btn btn-primary admin-only" onclick="openModal()">{{ icon('plus') }} Добавить коммутатор</button>
+        <button type="button" class="btn btn-primary admin-only" data-click="openModal">{{ icon('plus') }} Добавить коммутатор</button>
     </div>
 </div>
 
@@ -150,7 +150,7 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
                             <div class="meter"><span style="width: {{ (100 * sw.ports_up / sw.ports_seen)|round(1) }}%"></span></div>
                         </div>
                         {% else %}
-                        <span class="muted num">{{ sw.ports }} портов</span>
+                        <span class="muted num">{{ sw.ports|plural('порт', 'порта', 'портов') }}</span>
                         {% endif %}
                     </td>
                     <td class="col-optional">
@@ -171,10 +171,10 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
                     <td class="col-optional"><span class="muted num rel-time" data-time="{{ sw.last_poll or '' }}">{{ sw.last_poll or 'не опрашивался' }}</span></td>
                     <td class="col-actions">
                         <div class="row-actions">
-                            <a href="/switch/{{ sw.id }}" class="btn btn-sm" onclick="event.stopPropagation()">Открыть</a>
+                            <a href="/switch/{{ sw.id }}" class="btn btn-sm">Открыть</a>
                             <button type="button" class="btn btn-ghost btn-icon btn-sm btn-delete admin-only" data-name="{{ sw.name }}"
                                     title="Удалить" aria-label="Удалить {{ sw.name }}"
-                                    onclick="event.stopPropagation(); deleteSwitch({{ sw.id }}, this.dataset.name)">{{ icon('trash') }}</button>
+                                    data-click="deleteSwitch" data-args='{{ [sw.id, sw.name]|tojson }}'>{{ icon('trash') }}</button>
                         </div>
                     </td>
                 </tr>
@@ -188,7 +188,7 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
         {{ icon('server') }}
         <h3>Пока нет коммутаторов</h3>
         <p>Добавьте первый коммутатор — укажите IP и параметры SNMP, чтобы видеть состояние портов, загрузку и устройства.</p>
-        <button type="button" class="btn btn-primary admin-only" onclick="openModal()">{{ icon('plus') }} Добавить коммутатор</button>
+        <button type="button" class="btn btn-primary admin-only" data-click="openModal">{{ icon('plus') }} Добавить коммутатор</button>
     </div>
     {% endif %}
 </div>
@@ -198,7 +198,7 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
     <div class="modal-content">
         <div class="modal-header">
             <h2 id="addTitle">Новый коммутатор</h2>
-            <button type="button" class="modal-close" onclick="closeModal()" aria-label="Закрыть">&times;</button>
+            <button type="button" class="modal-close" data-click="closeModal" aria-label="Закрыть">&times;</button>
         </div>
         <form method="POST" action="/add" id="addSwitchForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -228,7 +228,7 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
                         <label for="ip_address">IP-адрес</label>
                         <input type="text" id="ip_address" name="ip_address" placeholder="192.168.1.1" autocomplete="off">
                     </div>
-                    <button type="button" class="btn" onclick="probeSwitchForm(this.form, this)" title="Опросить по SNMP и подставить название, число портов и модель">{{ icon('plug') }} Проверить и заполнить</button>
+                    <button type="button" class="btn" data-click="probeSwitchForm" data-args='["$form", "$el"]' title="Опросить по SNMP и подставить название, число портов и модель">{{ icon('plug') }} Проверить и заполнить</button>
                 </div>
                 {{ snmp_fields('add') }}
                 <div class="probe-result" data-probe-result hidden></div>
@@ -237,13 +237,13 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
 
                 <div class="modal-section-title row" style="justify-content:space-between">
                     <span>Патч-панели</span>
-                    <button type="button" class="btn btn-sm" onclick="addPatchPanelField()">{{ icon('plus') }} Добавить</button>
+                    <button type="button" class="btn btn-sm" data-click="addPatchPanelField">{{ icon('plus') }} Добавить</button>
                 </div>
                 <div id="patchPanelsList"></div>
             </div>
             <input type="hidden" name="patch_panels_data" id="patchPanelsData">
             <div class="form-actions">
-                <button type="button" class="btn btn-cancel" onclick="closeModal()">Отмена</button>
+                <button type="button" class="btn btn-cancel" data-click="closeModal">Отмена</button>
                 <button type="submit" class="btn btn-primary btn-submit">Создать коммутатор</button>
             </div>
         </form>
@@ -252,7 +252,7 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 // ───────── Добавление коммутатора ─────────
 let patchPanelCounter = 0;
 
@@ -278,7 +278,7 @@ function addPatchPanelField() {
     panelDiv.className = 'patch-panel-field';
     panelDiv.id = `panel-${patchPanelCounter}`;
     panelDiv.innerHTML = `
-        <button type="button" class="btn btn-ghost btn-icon btn-sm remove-btn" onclick="removePatchPanel(${patchPanelCounter})" title="Удалить панель" aria-label="Удалить панель">&times;</button>
+        <button type="button" class="btn btn-ghost btn-icon btn-sm remove-btn" data-click="removePatchPanel" data-args="[${patchPanelCounter}]" title="Удалить панель" aria-label="Удалить панель">&times;</button>
         <h4>Патч-панель ${patchPanelCounter}</h4>
         <div class="form-group">
             <label class="label">Название</label>

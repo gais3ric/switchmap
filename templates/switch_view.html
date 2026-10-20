@@ -356,7 +356,7 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
             <span class="meta-sep">·</span>
             <span class="badge {{ 'badge-accent' if switch['snmp_version'] == '3' else 'badge-outline' }}">SNMP {{ 'v3' if switch['snmp_version'] == '3' else 'v2c' }}</span>
             <span class="meta-sep">·</span>
-            <span class="num">{{ switch['ports'] }} портов</span>
+            <span class="num">{{ switch['ports']|plural('порт', 'порта', 'портов') }}</span>
             {% if switch['model'] %}<span class="meta-sep">·</span><span id="switchModel">{{ switch['model'] }}</span>{% endif %}
             <span class="meta-sep">·</span>
             <span>опрос: {{ switch['last_poll_time'] or 'ещё не было' }}</span>
@@ -364,14 +364,14 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
         </div>
     </div>
     <div class="page-actions">
-        <button type="button" class="btn" onclick="pollSNMP()" id="snmpBtn">{{ icon('refresh') }} <span class="btn-text">Опросить по SNMP</span></button>
-        <button type="button" class="btn" onclick="openStatsModal()">{{ icon('chart') }} Статистика</button>
+        <button type="button" class="btn" data-click="pollSNMP" id="snmpBtn">{{ icon('refresh') }} <span class="btn-text">Опросить по SNMP</span></button>
+        <button type="button" class="btn" data-click="openStatsModal">{{ icon('chart') }} Статистика</button>
         <div class="menu-wrap">
             <button type="button" class="btn" data-menu-toggle aria-haspopup="true" title="Экспорт и история">{{ icon('download') }} Экспорт {{ icon('chevron') }}</button>
             <div class="dropdown" role="menu">
                 <div class="dropdown-title">Документы</div>
                 <a href="/export/switch/{{ switch['id'] }}.xlsx" role="menuitem">{{ icon('sheet') }} Excel <small>порты, подключения, панели, устройства</small></a>
-                <button type="button" onclick="exportToPDF()" role="menuitem">{{ icon('file') }} PDF-паспорт</button>
+                <button type="button" data-click="exportToPDF" role="menuitem">{{ icon('file') }} PDF-паспорт</button>
                 <hr>
                 <div class="dropdown-title">CSV</div>
                 <a href="/export/switch/{{ switch['id'] }}/ports.csv" role="menuitem">{{ icon('plug') }} Порты</a>
@@ -381,10 +381,10 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
                 <a href="/audit?switch={{ switch['id'] }}" role="menuitem">{{ icon('history') }} История изменений</a>
             </div>
         </div>
-        <button type="button" class="btn menu-toggle" onclick="toggleMenu()" title="Параметры коммутатора">{{ icon('sliders') }} Параметры</button>
-        <button type="button" class="btn btn-primary admin-only" onclick="toggleEdit()" id="editBtn">{{ icon('pencil') }} Редактировать</button>
-        <button type="button" class="btn" onclick="cancelEdit()" id="cancelBtn" hidden>Отмена</button>
-        <button type="button" class="btn btn-primary save" onclick="saveChanges()" id="saveBtn" hidden>{{ icon('check') }} Сохранить</button>
+        <button type="button" class="btn menu-toggle" data-click="toggleMenu" title="Параметры коммутатора">{{ icon('sliders') }} Параметры</button>
+        <button type="button" class="btn btn-primary admin-only" data-click="toggleEdit" id="editBtn">{{ icon('pencil') }} Редактировать</button>
+        <button type="button" class="btn" data-click="cancelEdit" id="cancelBtn" hidden>Отмена</button>
+        <button type="button" class="btn btn-primary save" data-click="saveChanges" id="saveBtn" hidden>{{ icon('check') }} Сохранить</button>
     </div>
 </div>
 
@@ -393,7 +393,7 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
         <div class="card-title">{{ icon('panel') }} Схема стойки</div>
         <div class="schema-toolbar">
             <label class="check load-toggle">
-                <input type="checkbox" id="loadToggle" checked onchange="onLoadToggle()">
+                <input type="checkbox" id="loadToggle" checked data-change="onLoadToggle">
                 Загрузка портов
             </label>
             <div class="load-legend" id="loadLegend">
@@ -451,7 +451,7 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
 <aside class="drawer sidebar" id="sidebar" aria-label="Параметры коммутатора">
     <div class="drawer-header">
         <h2 style="font-size:15px">Параметры</h2>
-        <button type="button" class="modal-close" onclick="toggleMenu()" aria-label="Закрыть">&times;</button>
+        <button type="button" class="modal-close" data-click="toggleMenu" aria-label="Закрыть">&times;</button>
     </div>
     <div class="drawer-body sidebar-content">
         <div class="field-name">
@@ -460,7 +460,7 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
         </div>
 
         <div class="section">
-            <div class="section-header" onclick="toggleSection('switch')">
+            <div class="section-header" data-click="toggleSection" data-args='["switch"]'>
                 <span class="section-title">{{ icon('server') }} Коммутатор</span>
                 <span class="section-arrow" id="arrow-switch">▼</span>
             </div>
@@ -480,20 +480,20 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
         </div>
 
         <div class="section">
-            <div class="section-header" onclick="toggleSection('patch')">
+            <div class="section-header" data-click="toggleSection" data-args='["patch"]'>
                 <span class="section-title">{{ icon('panel') }} Патч-панели</span>
                 <span class="section-arrow" id="arrow-patch">▼</span>
             </div>
             <div class="section-content" id="content-patch">
                 <div id="patchPanelsList"></div>
-                <button type="button" onclick="addPatchPanel()" id="addPatchPanelBtn" class="btn btn-sm btn-block" style="margin-top:8px" disabled>
+                <button type="button" data-click="addPatchPanel" id="addPatchPanelBtn" class="btn btn-sm btn-block" style="margin-top:8px" disabled>
                     {{ icon('plus') }} Добавить патч-панель
                 </button>
             </div>
         </div>
 
         <div class="section">
-            <div class="section-header" onclick="toggleSection('monitor')">
+            <div class="section-header" data-click="toggleSection" data-args='["monitor"]'>
                 <span class="section-title">{{ icon('activity') }} Мониторинг и SNMP</span>
                 <span class="section-arrow" id="arrow-monitor">▼</span>
             </div>
@@ -502,7 +502,7 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
                 <input type="text" id="ipInput" value="{{ switch['ip_address'] or '' }}" placeholder="192.168.1.1" readonly>
 
                 <label class="label" for="snmpVersionSelect">Версия SNMP</label>
-                <select id="snmpVersionSelect" disabled onchange="updateSnmpFieldsVisibility()">
+                <select id="snmpVersionSelect" disabled data-change="updateSnmpFieldsVisibility">
                     <option value="2c">v2c (community)</option>
                     <option value="3">v3 (пользователь и пароли)</option>
                 </select>
@@ -540,21 +540,21 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
                 </div>
 
                 <div class="stack-btns">
-                    <button type="button" class="btn btn-sm btn-block" onclick="checkSwitchStatus()" id="pingBtn">{{ icon('activity') }} Проверить доступность</button>
-                    <button type="button" class="btn btn-sm btn-block" onclick="testSNMP()" id="snmpTestBtn">{{ icon('plug') }} Проверить SNMP</button>
+                    <button type="button" class="btn btn-sm btn-block" data-click="checkSwitchStatus" id="pingBtn">{{ icon('activity') }} Проверить доступность</button>
+                    <button type="button" class="btn btn-sm btn-block" data-click="testSNMP" id="snmpTestBtn">{{ icon('plug') }} Проверить SNMP</button>
                     <div id="snmpTestResult" class="snmp-test-result" hidden></div>
                 </div>
             </div>
         </div>
 
         <div class="section">
-            <div class="section-header" onclick="toggleSection('vlan')">
+            <div class="section-header" data-click="toggleSection" data-args='["vlan"]'>
                 <span class="section-title">{{ icon('tag') }} VLAN</span>
                 <span class="section-arrow" id="arrow-vlan">▼</span>
             </div>
             <div class="section-content" id="content-vlan">
                 <label class="label" for="vlanFilterSelect">Показать на схеме</label>
-                <select id="vlanFilterSelect" onchange="onVlanFilterChange()">
+                <select id="vlanFilterSelect" data-change="onVlanFilterChange">
                     <option value="">Все порты</option>
                 </select>
 
@@ -578,11 +578,11 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
     <div class="stats-modal-content">
         <div class="stats-modal-header">
             <h2 id="statsTitle">{{ icon('chart') }} Статистика · {{ switch['name'] }}</h2>
-            <button type="button" class="stats-modal-close" onclick="closeStatsModal()" title="Закрыть" aria-label="Закрыть">&times;</button>
+            <button type="button" class="stats-modal-close" data-click="closeStatsModal" title="Закрыть" aria-label="Закрыть">&times;</button>
         </div>
         <div class="stats-modal-body">
             <div class="stats-toolbar">
-                <button type="button" class="btn btn-primary btn-sm refresh-stats-btn" onclick="refreshStatsData()" id="refreshStatsBtn" title="Выполнить SNMP-опрос коммутатора">{{ icon('refresh') }} Обновить данные</button>
+                <button type="button" class="btn btn-primary btn-sm refresh-stats-btn" data-click="refreshStatsData" id="refreshStatsBtn" title="Выполнить SNMP-опрос коммутатора">{{ icon('refresh') }} Обновить данные</button>
                 <span class="stats-last-poll" id="statsLastPoll"></span>
                 <span class="grow"></span>
                 <div class="segmented" id="statsPeriod" role="tablist" aria-label="Период графиков">
@@ -629,7 +629,7 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
             <div class="chart-container">
                 <h3>{{ icon('chart') }} Скорость трафика порта</h3>
                 <div class="port-selector">
-                    <select id="portSelectStats" onchange="loadPortTraffic()">
+                    <select id="portSelectStats" data-change="loadPortTraffic">
                         <option value="">Выберите порт...</option>
                     </select>
                 </div>
@@ -652,7 +652,7 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
 <div id="snmpPanel" aria-label="Результаты SNMP-опроса">
     <div class="snmp-header">
         <h3>Порты и устройства (SNMP)</h3>
-        <button type="button" class="modal-close" onclick="document.getElementById('snmpPanel').classList.remove('visible')" aria-label="Закрыть">&times;</button>
+        <button type="button" class="modal-close" data-click="hideById" data-args='["snmpPanel"]' aria-label="Закрыть">&times;</button>
     </div>
     <div id="snmpContent">
         <div class="snmp-message">Нажмите «Опросить по SNMP»</div>
@@ -662,19 +662,19 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
 <!-- Контекстное меню порта -->
 <div id="portTypeMenu">
     <div class="menu-title">Тип порта</div>
-    <button type="button" id="menuRJ45" onclick="setPortType('rj45')">RJ-45 (медь)</button>
-    <button type="button" id="menuSFP" onclick="setPortType('sfp')">SFP (оптика)</button>
+    <button type="button" id="menuRJ45" data-click="setPortType" data-args='["rj45"]'>RJ-45 (медь)</button>
+    <button type="button" id="menuSFP" data-click="setPortType" data-args='["sfp"]'>SFP (оптика)</button>
     <hr>
-    <button type="button" id="menuTrunk" onclick="toggleTrunk()">Назначить транк</button>
+    <button type="button" id="menuTrunk" data-click="toggleTrunk">Назначить транк</button>
     <hr>
-    <button type="button" id="menuAssignDirect" onclick="assignDirectPort()">Назначить напрямую…</button>
+    <button type="button" id="menuAssignDirect" data-click="assignDirectPort">Назначить напрямую…</button>
 </div>
 
 <div id="tooltip" class="tooltip"></div>
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 // Данные страницы для /static/switch_view.js (всё через tojson — безопасно для JS)
 const SWITCH_ID = {{ switch['id']|tojson }};
 const SWITCH_IP = {{ (switch['ip_address'] or '')|tojson }};
@@ -706,6 +706,10 @@ const SAVED_DEVICES = {
 };
 </script>
 <!-- Chart.js — асинхронно, чтобы медленный CDN не задерживал страницу; pdfmake грузится только при экспорте в PDF -->
-<script async src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" id="chartjsScript"></script>
+<script async src="{{ cdn_script.chartjs[0] }}" integrity="{{ cdn_script.chartjs[1] }}" crossorigin="anonymous" id="chartjsScript"></script>
+<script nonce="{{ csp_nonce }}">
+// pdfmake: адреса и контрольные суммы — с сервера (app.CDN_SCRIPTS), чтобы они совпадали с политикой CSP
+const PDFMAKE_SCRIPTS = {{ [cdn_script.pdfmake, cdn_script.pdfmake_fonts]|tojson }};
+</script>
 <script src="/static/switch_view.js"></script>
 {% endblock %}

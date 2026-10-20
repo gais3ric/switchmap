@@ -84,7 +84,7 @@
         <div class="card-title">{{ icon('history') }} Резервные копии</div>
         <div class="toolbar admin-only">
             <button type="button" class="btn btn-primary btn-sm" id="createBackup">{{ icon('plus') }} Создать копию</button>
-            <button type="button" class="btn btn-sm" onclick="document.getElementById('restoreFile').click()">{{ icon('upload') }} Восстановить из файла</button>
+            <button type="button" class="btn btn-sm" data-click="clickById" data-args='["restoreFile"]'>{{ icon('upload') }} Восстановить из файла</button>
             <input type="file" id="restoreFile" accept=".db,.sqlite,.sqlite3" hidden>
         </div>
     </div>
@@ -115,7 +115,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 const esc = eventsEscape;
 const ICONS = { download: {{ icon('download')|tojson }}, undo: {{ icon('undo')|tojson }}, trash: {{ icon('trash')|tojson }} };
 const TABLE_LABELS = {

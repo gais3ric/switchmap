@@ -54,17 +54,17 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     check('Esc закрывает список результатов', await page.$eval('#netSearchResults', el => el.hidden));
 
     // ── 2. Пороги в настройках
-    await page.click('button[onclick="openSettingsModal()"]');
+    await page.click('button[data-click="openSettingsModal"]');
     await sleep(600);
     check('окно настроек открылось', await page.$eval('#settingsModal', el => el.classList.contains('active')));
     const thr = await page.evaluate(() => ['alertUtilInput', 'alertErrorsInput', 'alertCpuInput', 'alertTempInput'].map(id => document.getElementById(id).value));
     check('настройки: пороги по умолчанию 80/10/90/70', thr.join() === '80,10,90,70', thr);
     await page.$eval('#alertUtilInput', el => { el.value = '95'; });
-    await page.click('button[onclick="saveSettings()"]'); await sleep(600);
-    await page.click('button[onclick="openSettingsModal()"]'); await sleep(600);
+    await page.click('button[data-click="saveSettings"]'); await sleep(600);
+    await page.click('button[data-click="openSettingsModal"]'); await sleep(600);
     check('порог сохраняется', await page.$eval('#alertUtilInput', el => el.value) === '95');
     await page.$eval('#alertUtilInput', el => { el.value = '80'; });
-    await page.click('button[onclick="saveSettings()"]'); await sleep(600);
+    await page.click('button[data-click="saveSettings"]'); await sleep(600);
 
     // ── 3. Колокольчик: новые события со ссылками
     await page.click('.bell-btn'); await sleep(800);
@@ -143,7 +143,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await page.click('#snmpPanel .snmp-header button'); await sleep(200);
 
     // ── 6. Окно статистики: подписи портов
-    await page.click('button[onclick="openStatsModal()"]'); await sleep(1200);
+    await page.click('button[data-click="openStatsModal"]'); await sleep(1200);
     const opts = await page.$$eval('#portSelectStats option', os => os.map(o => o.textContent));
     check('статистика: «Порт 3 · GigabitEthernet1/0/3 · «Бухгалтерия ПК-1»»', opts.includes('Порт 3 · GigabitEthernet1/0/3 · «Бухгалтерия ПК-1»'), opts.slice(0, 5));
     await page.keyboard.press('Escape'); await sleep(200);

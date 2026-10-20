@@ -77,13 +77,13 @@
         <p>Здесь появятся изменения коммутаторов, привязка устройств, смена настроек и восстановления базы.</p>
     </div>
     <div class="load-more" id="loadMore" hidden>
-        <button type="button" class="btn btn-sm" onclick="loadEntries(true)">Показать ещё</button>
+        <button type="button" class="btn btn-sm" data-click="loadEntries" data-args='[true]'>Показать ещё</button>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 const PAGE = 50;
 const ACTION_STYLE = {
     create: 'badge-success', restore_switch: 'badge-success', db_restore: 'badge-warning',
@@ -110,7 +110,7 @@ function relTime(ts) {
 
 function rowHtml(e) {
     const sw = e.switch_id
-        ? `<a href="/switch/${encodeURIComponent(e.switch_id)}" onclick="event.stopPropagation()">${esc(e.switch_name || '#' + e.switch_id)}</a>`
+        ? `<a href="/switch/${encodeURIComponent(e.switch_id)}">${esc(e.switch_name || '#' + e.switch_id)}</a>`
         : '<span class="muted">—</span>';
     let action = '';
     if (e.revertible) {

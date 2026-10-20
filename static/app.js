@@ -24,6 +24,44 @@
     };
 })();
 
+// ───────── Действия без встроенного JavaScript ─────────
+// Политика безопасности (CSP) запрещает onclick="…" и подобные атрибуты: внедрённая в страницу
+// разметка не сможет выполнить код. Вместо них — данные в атрибутах, код — здесь:
+//   <button data-click="saveSettings">                       → saveSettings()
+//   <button data-click="deleteSwitch" data-args='[5, "SW1"]'>  → deleteSwitch(5, "SW1")
+//   <input data-change="updateName" data-args='[3, "$value"]'> → updateName(3, input.value)
+// Особые аргументы: "$el" — сам элемент, "$form" — его форма, "$value" — значение поля, "$event" — событие.
+// Вызываются только функции, объявленные в скриптах приложения (глобальные function).
+// Кликабельные строки таблиц сами пропускают клики по ссылкам и кнопкам внутри.
+function runAction(el, attr, event) {
+    const name = el.getAttribute(attr);
+    const fn = window[name];
+    if (typeof fn !== 'function') {
+        console.warn('Нет действия', name);
+        return;
+    }
+    let args = [];
+    if (el.dataset.args) {
+        try { args = JSON.parse(el.dataset.args); } catch (err) { console.warn('Неверные data-args', el); return; }
+    }
+    const special = { $el: el, $form: el.form, $value: el.value, $event: event };
+    return fn.apply(el, args.map(a => (typeof a === 'string' && a in special) ? special[a] : a));
+}
+
+['click', 'change', 'input'].forEach(type => {
+    document.addEventListener(type, event => {
+        const el = event.target.closest(`[data-${type}]`);
+        if (!el || el.disabled) return;
+        runAction(el, `data-${type}`, event);
+    });
+});
+
+// Мелкие действия для разметки
+function focusById(id) { document.getElementById(id)?.focus(); }
+function clickById(id) { document.getElementById(id)?.click(); }
+function hideById(id, cls = 'visible') { document.getElementById(id)?.classList.remove(cls); }
+function goBack() { history.back(); }
+
 // ───────── Тема ─────────
 // Начальная тема ставится ещё в <head> (base.html), чтобы не было вспышки.
 const THEME_KEY = 'switchmap.theme';
@@ -326,7 +364,8 @@ document.addEventListener('keydown', e => {
 // ───────── Загрузка внешних скриптов по требованию ─────────
 const _scriptPromises = {};
 
-function loadScript(src) {
+// integrity — контрольная сумма SRI (sha384-…): подменённый на CDN файл браузер не выполнит
+function loadScript(src, integrity) {
     if (!_scriptPromises[src]) {
         _scriptPromises[src] = new Promise((resolve, reject) => {
             const existing = [...document.scripts].find(s => s.src === src);
@@ -337,6 +376,10 @@ function loadScript(src) {
             el.addEventListener('load', () => { el.dataset.loaded = '1'; done(); });
             el.addEventListener('error', fail);
             if (!existing) {
+                if (integrity) {
+                    el.integrity = integrity;
+                    el.crossOrigin = 'anonymous';
+                }
                 el.src = src;
                 el.async = true;
                 document.head.appendChild(el);

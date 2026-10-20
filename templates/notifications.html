@@ -241,7 +241,7 @@ details.more summary { cursor: pointer; font-size: 13px; color: var(--text-2); u
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 const esc = eventsEscape;
 const ICON_TRASH = {{ icon('trash')|tojson }};
 const PRESETS = {

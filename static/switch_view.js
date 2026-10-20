@@ -741,8 +741,8 @@ function renderConnectionsList() {
             </div>
             ${editMode ? `
             <div class="connection-actions">
-                <button type="button" class="small" onclick="editConnection(${parseInt(portNum)})">Изменить</button>
-                <button type="button" class="small delete" onclick="deleteConnection(${parseInt(portNum)})">Удалить</button>
+                <button type="button" class="small" data-click="editConnection" data-args="[${parseInt(portNum)}]">Изменить</button>
+                <button type="button" class="small delete" data-click="deleteConnection" data-args="[${parseInt(portNum)}]">Удалить</button>
             </div>
             ` : ''}
         `;
@@ -782,20 +782,20 @@ function renderPatchPanelsList() {
             </div>
             ${editMode ? `
                 <label class="label">Название:</label>
-                <input type="text" value="${escapeAttr(panel.name)}" onchange="updatePatchPanelName(${panel.id}, this.value)">
+                <input type="text" value="${escapeAttr(panel.name)}" data-change="updatePatchPanelName" data-args='[${panel.id}, "$value"]'>
                 <label class="label">Количество портов:</label>
-                <input type="number" value="${panel.ports}" min="1" max="96" onchange="updatePatchPanelPorts(${panel.id}, this.value)">
+                <input type="number" value="${panel.ports}" min="1" max="96" data-change="updatePatchPanelPorts" data-args='[${panel.id}, "$value"]'>
                 <label class="label">Расположение портов:</label>
-                <select onchange="updatePatchPanelLayout(${panel.id}, this.value)">
+                <select data-change="updatePatchPanelLayout" data-args='[${panel.id}, "$value"]'>
                     <option value="single" ${(panel.layout || 'single') === 'single' ? 'selected' : ''}>1 строка</option>
                     <option value="double" ${(panel.layout || 'single') === 'double' ? 'selected' : ''}>2 строки (шахматно)</option>
                 </select>
                 <label class="label">Позиция:</label>
-                <select onchange="updatePatchPanelPosition(${panel.id}, this.value)">
+                <select data-change="updatePatchPanelPosition" data-args='[${panel.id}, "$value"]'>
                     <option value="above" ${panel.position === 'above' ? 'selected' : ''}>Над коммутатором</option>
                     <option value="below" ${panel.position === 'below' ? 'selected' : ''}>Под коммутатором</option>
                 </select>
-                <button type="button" class="small delete" onclick="deletePatchPanel(${panel.id})">Удалить панель</button>
+                <button type="button" class="small delete" data-click="deletePatchPanel" data-args="[${panel.id}]">Удалить панель</button>
             ` : `
                 <div class="panel-meta">
                     Портов: ${panel.ports} | Расположение: ${(panel.layout || 'single') === 'single' ? '1 строка' : '2 строки'} | Позиция: ${panel.position === 'above' ? 'Над коммутатором' : 'Под коммутатором'}
@@ -887,17 +887,13 @@ highlightPortFromUrl();
 loadPortLoad();
 setInterval(loadPortLoad, LOAD_REFRESH_MS);
 
-const PDFMAKE_URLS = [
-    'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js',
-];
 
 async function exportToPDF() {
     // pdfmake (~1.5 МБ) нужен только здесь — загружаем при первом экспорте, а не с каждой страницей
     if (typeof pdfMake === 'undefined' || !pdfMake.vfs) {
         const wait = notify('Готовлю PDF…', 'info', 15000);
         try {
-            for (const url of PDFMAKE_URLS) await loadScript(url);  // шрифты — строго после pdfmake
+            for (const [url, integrity] of PDFMAKE_SCRIPTS) await loadScript(url, integrity);  // шрифты — строго после pdfmake
         } catch (e) {
             notify('Не удалось загрузить библиотеку PDF. Проверьте подключение к интернету.', 'error');
             return;
@@ -1031,8 +1027,10 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Значение для атрибута HTML (в кавычках). В атрибуты попадают только данные, не код (CSP запрещает onclick).
 function escapeAttr(text) {
-    return String(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function renderSNMPResults(data) {
@@ -1054,7 +1052,7 @@ function renderSNMPResults(data) {
         const alias = info.alias ? `<span class="snmp-port-alias">${escapeHtml(info.alias)}</span>` : '';
         const targetPort = parseInt(info.port || ifindex);
         html += `<div class="snmp-port-item">
-            <div class="snmp-port-header" onclick="toggleSNMPDevices(this)">
+            <div class="snmp-port-header" data-click="toggleSNMPDevices" data-args='["$el"]'>
                 <span class="port-status-dot ${statusClass}" title="${info.up ? 'Активен' : 'Неактивен'}"></span>
                 ${portNo}
                 <span class="port-name">${portName}${alias}</span>
@@ -1067,14 +1065,11 @@ function renderSNMPResults(data) {
                 const mac = escapeHtml(dev.mac || '—');
                 const ip = escapeHtml(dev.ip || '');
                 const hostname = escapeHtml(dev.hostname || '');
-                const ipAttr = escapeAttr(dev.ip || '');
-                const macAttr = escapeAttr(dev.mac || '');
-                const hostnameAttr = escapeAttr(dev.hostname || '');
                 html += `<div class="snmp-device">
                     <div class="dev-mac">MAC: ${mac}</div>
                     ${dev.ip ? `<div class="dev-ip">IP: ${ip}</div>` : ''}
                     ${dev.hostname ? `<div class="dev-host">Host: ${hostname}</div>` : ''}
-                    <button type="button" class="assign-btn" onclick="assignDeviceToPort(${targetPort}, '${ipAttr}', '${macAttr}', '${hostnameAttr}')">
+                    <button type="button" class="assign-btn" data-click="assignDeviceToPort" data-args="${escapeAttr(JSON.stringify([targetPort, dev.ip || '', dev.mac || '', dev.hostname || '']))}">
                         📌 Привязать к порту
                     </button>
                 </div>`;
@@ -1161,7 +1156,7 @@ function renderVlanList() {
             const color = state.vlanColors[id] || '#666';
             const name = vlans[id] ? ` — ${vlans[id]}` : '';
             return `<div class="vlan-item">
-                <span class="vlan-swatch" style="background:${color}" onclick="setVlanColor('${id}')" title="Назначить цвет"></span>
+                <span class="vlan-swatch" style="background:${color}" data-click="setVlanColor" data-args="${escapeAttr(JSON.stringify([id]))}" title="Назначить цвет"></span>
                 <span class="vlan-label">VLAN ${id}${name}</span>
             </div>`;
         }).join('');

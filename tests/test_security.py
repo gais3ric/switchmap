@@ -213,6 +213,47 @@ check("CSP, X-Frame-Options, nosniff, Referrer-Policy", "default-src 'self'" in 
       and "frame-ancestors 'none'" in h["Content-Security-Policy"] and h.get("X-Frame-Options") == "DENY"
       and h.get("X-Content-Type-Options") == "nosniff" and h.get("Referrer-Policy") == "same-origin")
 check("страницы не кэшируются", h.get("Cache-Control") == "no-store")
+
+# ── Защита от внедрения кода (CSP без 'unsafe-inline')
+csp = h["Content-Security-Policy"]
+script_src = next(p for p in csp.split(";") if p.strip().startswith("script-src "))
+nonce = re.search(r"'nonce-([\w-]+)'", script_src)
+check("script-src: без 'unsafe-inline' и 'unsafe-eval', с nonce", "unsafe-inline" not in script_src
+      and "unsafe-eval" not in script_src and nonce, script_src)
+check("обработчики в атрибутах запрещены (script-src-attr 'none')", "script-src-attr 'none'" in csp)
+check("CDN разрешены только конкретными файлами, без «весь сайт»", "https://cdn.jsdelivr.net " not in script_src + " "
+      and "https://cdnjs.cloudflare.com " not in script_src + " " and "chart.js@4.4.0" in script_src)
+nonce2 = re.search(r"'nonce-([\w-]+)'", admin.get("/").headers["Content-Security-Policy"])
+check("nonce новый на каждый ответ", nonce2 and nonce2.group(1) != nonce.group(1))
+check("JSON-ответы без nonce", "nonce-" not in admin.get("/api/settings").headers["Content-Security-Policy"])
+
+anon = m.app.test_client()
+pages = {"/": admin, "/switch/1": admin, "/switch/2": admin, "/topology": admin, "/audit": admin, "/maintenance": admin,
+         "/users": admin, "/notifications": admin, "/discover": admin, "/add": admin, "/no-such-page": admin, "/login": anon}
+problems = []
+for url, client in pages.items():
+    resp = client.get(url)
+    html = resp.get_data(as_text=True)
+    page_nonce = re.search(r"'nonce-([\w-]+)'", resp.headers["Content-Security-Policy"])
+    for tag in re.findall(r"<script\b[^>]*>", html):
+        if "src=" in tag:
+            if "https://" in tag and 'integrity="sha384-' not in tag:
+                problems.append(f"{url}: CDN без integrity: {tag}")
+        elif not page_nonce or f'nonce="{page_nonce.group(1)}"' not in tag:
+            problems.append(f"{url}: встроенный скрипт без nonce: {tag}")
+    for attr in re.findall(r"""<[^>]+\son[a-z]+\s*=\s*["'][^>]*>""", html):
+        problems.append(f"{url}: обработчик в атрибуте: {attr[:80]}")
+    if "javascript:" in html:
+        problems.append(f"{url}: ссылка javascript:")
+check(f"страницы ({len(pages)}): встроенные скрипты с nonce, CDN с integrity, нет onclick и javascript:", not problems, problems[:5])
+
+home = admin.get("/").get_data(as_text=True)
+check("склонение: «52 порта», «48 портов», на странице коммутатора тоже", "52 порта" in home and "48 портов" in home
+      and "52 портов" not in home and "52 порта" in admin.get("/switch/1").get_data(as_text=True))
+
+static_js = "".join(open(os.path.join(ROOT, "static", n), encoding="utf-8").read() for n in ("app.js", "switch_view.js", "events.js"))
+code_only = re.sub(r"//[^\n]*", "", static_js)
+check("скрипты не создают onclick в разметке", not re.search(r"""\son[a-z]+\s*=\s*["'`]""", code_only))
 check("статика кэшируется", "no-store" not in (admin.get("/static/ui.css").headers.get("Cache-Control") or ""))
 r = admin.get("/no-such-page")
 check("404 — страница ошибки", r.status_code == 404 and "Не найдено" in r.get_data(as_text=True))

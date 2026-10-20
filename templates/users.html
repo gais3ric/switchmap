@@ -25,7 +25,7 @@
         <div class="page-sub">Доступ к приложению и роли</div>
     </div>
     <div class="page-actions">
-        <button type="button" class="btn btn-primary" onclick="openUserModal()">{{ icon('plus') }} Добавить пользователя</button>
+        <button type="button" class="btn btn-primary" data-click="openUserModal">{{ icon('plus') }} Добавить пользователя</button>
     </div>
 </div>
 
@@ -51,7 +51,7 @@
     <div class="modal-content is-narrow">
         <div class="modal-header">
             <h2 id="userModalTitle">Новый пользователь</h2>
-            <button type="button" class="modal-close" onclick="closeUserModal()" aria-label="Закрыть">&times;</button>
+            <button type="button" class="modal-close" data-click="closeUserModal" aria-label="Закрыть">&times;</button>
         </div>
         <form class="modal-body" id="userForm" autocomplete="off">
             <div class="field" id="fName">
@@ -69,7 +69,7 @@
             <div class="hint" id="uHint">Сообщите пароль пользователю — он сможет сменить его сам в меню профиля.</div>
         </form>
         <div class="modal-footer">
-            <button type="button" class="btn" onclick="closeUserModal()">Отмена</button>
+            <button type="button" class="btn" data-click="closeUserModal">Отмена</button>
             <button type="submit" form="userForm" class="btn btn-primary" id="uSubmit">Создать</button>
         </div>
     </div>
@@ -77,7 +77,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 const ME = {{ current_user.id|tojson }};
 const ROLES = {{ roles|tojson }};
 const esc = eventsEscape;

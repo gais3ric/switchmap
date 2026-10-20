@@ -43,7 +43,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     check('окно скрыто при загрузке страницы', !(await visible()));
 
     // ── 2. Открытие окна до какого-либо опроса
-    await page.click('button[onclick="openStatsModal()"]');
+    await page.click('button[data-click="openStatsModal"]');
     await sleep(800);
     check('окно открылось', await visible());
     check('надпись «ещё не опрашивался»', (await text('#statsLastPoll')).includes('ещё не опрашивался'), await text('#statsLastPoll'));
@@ -119,14 +119,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     check('после закрытия таймер остановлен', await page.evaluate(() => statsRefreshTimer === null));
     check('после закрытия графики уничтожены', await page.evaluate(() => !Chart.getChart('healthChart') && !Chart.getChart('trafficChart')));
 
-    await page.click('button[onclick="openStatsModal()"]');
+    await page.click('button[data-click="openStatsModal"]');
     await sleep(800);
     check('повторное открытие: графики снова построены', await page.evaluate(() => !!Chart.getChart('healthChart') && !!Chart.getChart('trafficChart')));
     await page.mouse.click(5, 450); // фон окна
     await sleep(200);
     check('клик по фону закрывает окно', !(await visible()));
 
-    await page.click('button[onclick="openStatsModal()"]');
+    await page.click('button[data-click="openStatsModal"]');
     await sleep(500);
     await page.mouse.click(700, 450); // внутри окна
     await sleep(200);
@@ -143,7 +143,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
     // ── 8. Коммутатор без IP: понятная ошибка вместо падения
     await page.goto(base + '/switch/2', { waitUntil: 'load', timeout: 60000 });
-    await page.click('button[onclick="openStatsModal()"]');
+    await page.click('button[data-click="openStatsModal"]');
     await sleep(500);
     await page.click('#refreshStatsBtn');
     await waitIdle();
@@ -155,7 +155,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     // ── 9. Узкий экран (телефон)
     await page.setViewport({ width: 400, height: 800 });
     await page.goto(base + '/switch/1', { waitUntil: 'load', timeout: 60000 });
-    await page.click('button[onclick="openStatsModal()"]').catch(() => page.evaluate(() => openStatsModal()));
+    await page.click('button[data-click="openStatsModal"]').catch(() => page.evaluate(() => openStatsModal()));
     await sleep(800);
     const overflow = await page.$eval('.stats-modal-content', el => el.scrollWidth - el.clientWidth);
     check('на 400px окно без горизонтальной прокрутки', overflow <= 0, overflow);
