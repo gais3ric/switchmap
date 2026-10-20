@@ -120,12 +120,14 @@ jobs:
         shell: pwsh
         run: |
           python -m venv sim; sim\Scripts\pip install -q snmpsim pysmi cryptography
+          $env:PYTHONUNBUFFERED = "1"
           Start-Process sim\Scripts\snmpsim-command-responder.exe -ArgumentList ($env:SNMPSIM_ARGS -split ' ') -WindowStyle Hidden -RedirectStandardOutput sim.log -RedirectStandardError sim.err
           # при первом запуске симулятор строит индекс данных — ждём, пока он начнёт слушать порт
           for ($i = 0; $i -lt 90 -and -not (Select-String -Path sim.log,sim.err -Pattern "Listening at UDP" -Quiet); $i++) { Start-Sleep 1 }
           Start-Sleep 2
-          Get-Content sim.log, sim.err -Tail 5
-          if (-not (Select-String -Path sim.log,sim.err -Pattern "Listening at UDP" -Quiet)) { throw "Симулятор не запустился" }
+          Get-Content sim.log, sim.err -Tail 15
+          Get-NetUDPEndpoint -LocalPort 161 -ErrorAction SilentlyContinue | Format-Table LocalAddress, OwningProcess
+          if (-not (Get-NetUDPEndpoint -LocalPort 161 -ErrorAction SilentlyContinue)) { throw "Симулятор не запустился" }
       - name: Установка
         shell: pwsh
         run: |
@@ -141,6 +143,10 @@ jobs:
           if ($svc.StartMode -ne 'Auto') { throw "Служба не в автозапуске" }
           Get-Content C:\ProgramData\SwitchMap\switchmap.conf
           icacls C:\ProgramData\SwitchMap
+      - name: Диагностика SNMP (программа вне службы)
+        continue-on-error: true
+        shell: pwsh
+        run: python packaging/smoke.py --exe "C:\Program Files\SwitchMap\switchmap.exe" --snmp | Select-String "SNMP|ИТОГО"
       - name: Проверка установленной службы
         run: python packaging/smoke.py --url http://127.0.0.1:5000 --snmp --expect-version ${{ needs.version.outputs.version }}
       - name: Обновление поверх (данные и настройки остаются)
@@ -210,6 +216,16 @@ jobs:
           sudo ls -la /var/lib/switchmap /etc/switchmap
           systemd-analyze verify /usr/lib/systemd/system/switchmap.service
           systemd-analyze security switchmap --no-pager | tail -n 3
+      - name: Диагностика SNMP (симулятор, программа вне службы)
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y -qq snmp >/dev/null
+          echo "== snmpget v2c"; snmpget -v2c -c public -t 3 -r 1 127.0.0.1 1.3.6.1.2.1.1.1.0 || true
+          echo "== программа от runner, вне службы"; python3 packaging/smoke.py --exe /opt/switchmap/switchmap --snmp | grep -E "SNMP|ИТОГО" || true
+          echo "== программа под ограничениями службы (systemd-run)"
+          sudo systemd-run --wait --pipe -p User=switchmap -p ProtectSystem=strict -p RestrictAddressFamilies="AF_INET AF_INET6 AF_UNIX AF_NETLINK" \
+            -p PrivateDevices=true -p SystemCallArchitectures=native -p NoNewPrivileges=true \
+            /usr/bin/snmpget -v2c -c public -t 3 -r 1 127.0.0.1 1.3.6.1.2.1.1.1.0 || true
       - name: Проверка службы
         run: python3 packaging/smoke.py --url http://127.0.0.1:5000 --snmp --expect-version ${{ needs.version.outputs.version }}
       - name: Обновление поверх
