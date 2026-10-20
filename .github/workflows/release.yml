@@ -184,9 +184,15 @@ jobs:
           name: linux
       - name: Симулятор SNMP
         run: |
-          python3 -m venv sim && sim/bin/pip install -q snmpsim pysmi cryptography
-          sudo nohup sim/bin/snmpsim-command-responder $SNMPSIM_ARGS --process-user=nobody --process-group=nogroup > sim.log 2>&1 &
-          sleep 8
+          python3 -m venv /tmp/sim && /tmp/sim/bin/pip install -q snmpsim pysmi cryptography
+          # симулятор работает от nobody — данные кладём туда, где он может их прочитать
+          cp -r tests/snmpsim/data /tmp/snmpdata && chmod -R a+rX /tmp/snmpdata
+          sudo nohup /tmp/sim/bin/snmpsim-command-responder --data-dir=/tmp/snmpdata --agent-udpv4-endpoint=127.0.0.1:161 \
+            --v3-user=simuser --v3-auth-key=authpass123 --v3-auth-proto=SHA --v3-priv-key=privpass123 --v3-priv-proto=AES \
+            --cache-dir=/tmp/snmpcache --process-user=nobody --process-group=nogroup > /tmp/sim.log 2>&1 &
+          sleep 10
+          cat /tmp/sim.log | tail -n 20
+          sudo ss -ulpn | grep ':161 ' || { echo "Симулятор не слушает порт 161"; exit 1; }
       - name: Установка
         run: |
           sudo apt-get install -y ./switchmap_*_amd64.deb
@@ -225,6 +231,7 @@ jobs:
       - name: Журналы
         if: always()
         run: |
+          tail -n 40 /tmp/sim.log || true
           sudo journalctl -u switchmap --no-pager | tail -n 80
           sudo tail -n 80 /var/lib/switchmap/logs/switchmap.log || true
 

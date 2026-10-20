@@ -260,7 +260,9 @@ begin
         + ChosenPort() + ' program="' + ExpandConstant('{app}\switchmap.exe') + '"');
   end;
   { Папка данных: только SYSTEM, администраторы и служба (LocalService) — в ней ключи шифрования }
-  RunHidden(Sys + 'icacls.exe', '"' + DataDir() + '" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-19:(OI)(CI)M /T /C /Q');
+  { Сначала права самой папки (без унаследованных «Пользователи: чтение»), потом всё внутри — наследует их }
+  RunHidden(Sys + 'icacls.exe', '"' + DataDir() + '" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-19:(OI)(CI)M /C /Q');
+  RunHidden(Sys + 'icacls.exe', '"' + DataDir() + '\*" /reset /T /C /Q');
   if not ServiceExists() then
     RunHidden(Svc, 'install');
   { Служба — под ограниченной учётной записью LocalService, а не SYSTEM }
