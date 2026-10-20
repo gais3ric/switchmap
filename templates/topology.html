@@ -7,7 +7,7 @@
 {% block content_class %}is-flush{% endblock %}
 
 {% block head %}
-<script src="{{ cdn_script.d3[0] }}" integrity="{{ cdn_script.d3[1] }}" crossorigin="anonymous"></script>
+<script src="{{ vendor_script.d3[0] }}" integrity="{{ vendor_script.d3[1] }}" crossorigin="anonymous"></script>
 <style>
 .topo { position: relative; height: calc(100vh - var(--topbar-h)); overflow: hidden; }
 #graph {

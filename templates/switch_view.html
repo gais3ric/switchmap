@@ -705,11 +705,11 @@ const SAVED_DEVICES = {
     {% endfor %}
 };
 </script>
-<!-- Chart.js — асинхронно, чтобы медленный CDN не задерживал страницу; pdfmake грузится только при экспорте в PDF -->
-<script async src="{{ cdn_script.chartjs[0] }}" integrity="{{ cdn_script.chartjs[1] }}" crossorigin="anonymous" id="chartjsScript"></script>
+<!-- Chart.js — асинхронно, чтобы не задерживать страницу; pdfmake (2 МБ) грузится только при экспорте в PDF -->
+<script async src="{{ vendor_script.chartjs[0] }}" integrity="{{ vendor_script.chartjs[1] }}" crossorigin="anonymous" id="chartjsScript"></script>
 <script nonce="{{ csp_nonce }}">
-// pdfmake: адреса и контрольные суммы — с сервера (app.CDN_SCRIPTS), чтобы они совпадали с политикой CSP
-const PDFMAKE_SCRIPTS = {{ [cdn_script.pdfmake, cdn_script.pdfmake_fonts]|tojson }};
+// pdfmake: адреса и контрольные суммы — с сервера (app.VENDOR_SCRIPTS)
+const PDFMAKE_SCRIPTS = {{ [vendor_script.pdfmake, vendor_script.pdfmake_fonts]|tojson }};
 </script>
 <script src="/static/switch_view.js"></script>
 {% endblock %}

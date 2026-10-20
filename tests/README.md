@@ -37,7 +37,7 @@ python tests/run_all.py -k e2e_ui --browser --live -v   # один браузе�
 
 ```
 python -m venv tests\.snmpsim
-tests\.snmpsim\Scripts\pip install snmpsim
+tests\.snmpsim\Scripts\pip install snmpsim pysmi cryptography
 ```
 
 Он слушает `127.0.0.1:161` с данными из `snmpsim/data` (community `public` — «Cisco», `edge2` — «D-Link»;

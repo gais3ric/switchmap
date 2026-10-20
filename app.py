@@ -2,11 +2,18 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, s
 import secrets
 import sqlite3
 import json
+import logging
 import os
 import subprocess
 import threading
 import concurrent.futures
 from datetime import datetime, timedelta
+
+import config
+
+# Настройки запуска (файл switchmap.conf) читаются до всего остального: от них зависят пути и cookie
+CONFIG_FILE = config.load()
+DATA_DIR = config.data_dir()
 
 import audit
 import discovery
@@ -16,8 +23,10 @@ import notify
 import security
 from xlsx import Sheet, write_xlsx, write_csv
 
-app = Flask(__name__)
-DB = "switches.db"
+log = logging.getLogger("switchmap")
+app = Flask(__name__, root_path=config.resource_dir())
+APP_VERSION = config.version()
+DB = os.path.join(DATA_DIR, "switches.db")
 
 # Секреты (ключ сессий и ключ шифрования паролей SNMPv3) — в файле switchmap.secret рядом с базой
 _SECRETS = security.load_secrets(DB)
@@ -121,18 +130,20 @@ def access_control():
     return None
 
 
-# Библиотеки с CDN: точные версии и контрольные суммы (SRI) — подменённый файл браузер не выполнит.
-# Шаблоны берут адрес и хэш отсюда (cdn_script), CSP разрешает только эти файлы.
-CDN_SCRIPTS = {
-    "chartjs": ("https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js",
-                "sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g"),
-    "d3": ("https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js",
-           "sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i"),
-    "pdfmake": ("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js",
-                "sha384-VFQrHzqBh5qiJIU0uGU5CIW3+OWpdGGJM9LBnGbuIH2mkICcFZ7lPd/AAtI7SNf7"),
-    "pdfmake_fonts": ("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js",
-                      "sha384-/RlQG9uf0M2vcTw3CX7fbqgbj/h8wKxw7C3zu9/GxcBPRKOEcESxaxufwRXqzq6n"),
+# Сторонние библиотеки лежат в static/vendor (интернет браузеру не нужен): Chart.js 4.4.0, d3 7.9.0,
+# pdfmake 0.2.7. Контрольные суммы (SRI) — те же, что у официальных файлов на CDN: изменённый файл
+# браузер не выполнит. Шаблоны берут адрес и хэш отсюда (vendor_script).
+VENDOR_SCRIPTS = {
+    "chartjs": ("chart.umd.min.js", "sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g"),
+    "d3": ("d3.min.js", "sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i"),
+    "pdfmake": ("pdfmake.min.js", "sha384-VFQrHzqBh5qiJIU0uGU5CIW3+OWpdGGJM9LBnGbuIH2mkICcFZ7lPd/AAtI7SNf7"),
+    "pdfmake_fonts": ("vfs_fonts.js", "sha384-/RlQG9uf0M2vcTw3CX7fbqgbj/h8wKxw7C3zu9/GxcBPRKOEcESxaxufwRXqzq6n"),
 }
+
+
+def vendor_scripts():
+    """{имя: (адрес, integrity)} для шаблонов."""
+    return {k: (url_for("static", filename="vendor/" + f), h) for k, (f, h) in VENDOR_SCRIPTS.items()}
 
 
 def csp_nonce():
@@ -143,7 +154,7 @@ def csp_nonce():
 
 
 def build_csp(nonce=None):
-    sources = ["'self'"] + ([f"'nonce-{nonce}'"] if nonce else []) + [url for url, _ in CDN_SCRIPTS.values()]
+    sources = ["'self'"] + ([f"'nonce-{nonce}'"] if nonce else [])
     return ("default-src 'self'; "
             f"script-src {' '.join(sources)}; "
             # Обработчики в атрибутах (onclick="…") и ссылки javascript: запрещены полностью
@@ -169,7 +180,8 @@ def security_headers(response):
 def inject_user():
     user = current_user()
     return {"current_user": user, "is_admin": bool(user and user["role"] == "admin"),
-            "csrf_token": session.get("csrf", ""), "csp_nonce": csp_nonce(), "cdn_script": CDN_SCRIPTS}
+            "csrf_token": session.get("csrf", ""), "csp_nonce": csp_nonce(), "vendor_script": vendor_scripts(),
+            "app_version": APP_VERSION}
 
 
 @app.template_filter("plural")
@@ -801,10 +813,10 @@ def snmp_walk_ex(ip, auth, oid, timeout=3):
         result = future.result(timeout=timeout * 2 + 5)
         return result, (_humanize_snmp_error(error[0]) if error else None)
     except concurrent.futures.TimeoutError:
-        print(f"SNMP walk timed out for {ip}")
+        log.warning("SNMP %s: нет ответа (%s)", ip, oid)
         return [], _humanize_snmp_error("timeout")
     except Exception as e:
-        print(f"SNMP error: {e}")
+        log.warning("SNMP %s: %s", ip, e)
         return [], _humanize_snmp_error(e)
     finally:
         executor.shutdown(wait=True, cancel_futures=True)
@@ -1228,7 +1240,7 @@ def poll_switch_health(ip, community):
                 if total_mem > 0:
                     health["ram_usage"] = (used_mem / total_mem) * 100
         except Exception as e:
-            print(f"Error parsing memory data: {e}")
+            log.debug("Память коммутатора не разобрана: %s", e)
 
     # Температура
     if temp_data and not isinstance(temp_data, dict):
@@ -1509,7 +1521,7 @@ def scheduled_poll_all_switches():
             try:
                 poll_switch_and_log_events(switch_id)
             except Exception as e:
-                print(f"[periodic poll] Ошибка опроса коммутатора {switch_id}: {e}")
+                log.exception("Периодический опрос: ошибка опроса коммутатора %s: %s", switch_id, e)
     finally:
         _periodic_poll_running.clear()
     # События всех коммутаторов этого опроса — одним сообщением
@@ -1559,7 +1571,7 @@ def _safe_job(fn, *args, **kwargs):
     try:
         fn(*args, **kwargs)
     except Exception as e:
-        print(f"[scheduler] {fn.__name__}: {e}")
+        log.exception("Фоновая задача %s: %s", fn.__name__, e)
 
 
 def apply_scheduler_settings():
@@ -1607,15 +1619,22 @@ def prepare_database():
             stored = 0
         if stored < SCHEMA_VERSION:
             name = maintenance.create_backup(DB, "pre-migrate")
-            print(f"Резервная копия перед обновлением базы: backups/{name}")
+            log.info("Резервная копия перед обновлением базы: %s", os.path.join(maintenance.backups_dir(DB), name))
         migrate_db()
     with sqlite3.connect(DB) as conn:
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('schema_version', ?) "
                      "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(SCHEMA_VERSION),))
         conn.commit()
+    conn = sqlite3.connect(DB)
+    try:
+        mode = maintenance.enable_wal(conn)
+    finally:
+        conn.close()
+    if mode != "wal":
+        log.warning("Режим WAL для базы не включён (%s): при нагрузке возможны задержки", mode)
     encrypted = security.encrypt_plaintext_snmp_keys(DB, SECRET_BOX)
     if encrypted:
-        print(f"Зашифровано паролей SNMPv3: {encrypted}")
+        log.info("Зашифровано паролей SNMPv3: %s", encrypted)
     _safe_job(auto_backup_if_due, "startup")
     # Первое обслуживание — в фоне, чтобы не задерживать запуск (на большой базе это может занять время)
     threading.Thread(target=_safe_job, args=(run_maintenance,), daemon=True).start()
@@ -1628,7 +1647,7 @@ def init_scheduler():
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
     except ImportError:
-        print("APScheduler не установлен. Выполните: pip install apscheduler")
+        log.error("APScheduler не установлен — периодический опрос не работает. Выполните: pip install apscheduler")
         return
     scheduler = BackgroundScheduler(daemon=True)
     scheduler.start()
@@ -1789,7 +1808,7 @@ def collect_topology():
                 sid, result = future.result(timeout=25)
                 lldp_results[sid] = result
             except Exception as e:
-                print(f"LLDP error: {e}")
+                log.warning("LLDP: %s", e)
 
     # De-duplicate physical links. Both sides normally report each other.
     seen_pairs = set()
@@ -2134,7 +2153,7 @@ def api_topology():
     try:
         return jsonify(collect_topology())
     except Exception as e:
-        print(f"Topology error: {e}")
+        log.exception("Топология: %s", e)
         return jsonify({"error": str(e), "nodes": [], "links": []}), 500
 
 
@@ -2950,7 +2969,7 @@ def api_refresh_devices(switch_id):
                 dev_id, online = future.result()
                 results[dev_id] = online
             except Exception as e:
-                print(f"Error pinging device: {e}")
+                log.warning("Ping устройства: %s", e)
 
     # Последовательная запись в БД — один писатель, изолированная транзакция
     with sqlite3.connect(DB, timeout=10, isolation_level='IMMEDIATE') as conn:
@@ -3739,24 +3758,81 @@ def cli_reset_password(username):
     return 0
 
 
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) >= 3 and sys.argv[1] == "reset-password":
-        sys.exit(cli_reset_password(sys.argv[2]))
+USAGE = """SwitchMap {version}
+
+  switchmap                         запустить сервер
+  switchmap reset-password <имя>    задать пароль пользователю (или создать администратора)
+  switchmap --version               версия
+  switchmap --paths                 где лежат база, настройки и журнал
+"""
+
+
+def _stop_on_sigterm():
+    """systemd и службы останавливают процесс сигналом SIGTERM — завершаемся так же, как по Ctrl+C."""
+    import signal
+
+    def handler(_signum, _frame):
+        raise KeyboardInterrupt
+    try:
+        signal.signal(signal.SIGTERM, handler)
+    except (ValueError, OSError, AttributeError):
+        pass
+
+
+def serve_forever():
     # Адрес и порт: SWITCHMAP_HOST (по умолчанию 127.0.0.1 — только этот компьютер;
     # 0.0.0.0 — доступ из сети), SWITCHMAP_PORT (по умолчанию 5000).
     host = os.environ.get("SWITCHMAP_HOST", "127.0.0.1")
     port = int(os.environ.get("SWITCHMAP_PORT", "5000"))
+    threads = max(4, int(os.environ.get("SWITCHMAP_THREADS", "8")))
+    log_file = config.setup_logging(DATA_DIR)
+    log.info("SwitchMap %s, данные: %s, настройки: %s, журнал: %s", APP_VERSION, DATA_DIR,
+             CONFIG_FILE or "нет файла (значения по умолчанию)", log_file or "только консоль")
     prepare_database()
     init_scheduler()
-    print(f"SwitchMap: http://{'localhost' if host in ('127.0.0.1', '0.0.0.0') else host}:{port}")
+    log.info("Адрес: http://%s:%s", "localhost" if host in ("127.0.0.1", "0.0.0.0") else host, port)
     if security.count_users(DB) == 0:
-        print("Первый запуск: откройте адрес выше и создайте администратора.")
+        log.info("Первый запуск: откройте адрес выше и создайте администратора.")
+    _stop_on_sigterm()
     try:
-        from waitress import serve
-    except ImportError:
-        print("waitress не установлен (pip install waitress) — используется встроенный сервер Flask без отладки.")
-        # Отладчик Flask (debug=True) не включаем никогда: он позволяет выполнить код на сервере
-        app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
-    else:
-        serve(app, host=host, port=port, threads=8)
+        try:
+            from waitress import serve
+        except ImportError:
+            log.warning("waitress не установлен (pip install waitress) — используется встроенный сервер Flask без отладки.")
+            # Отладчик Flask (debug=True) не включаем никогда: он позволяет выполнить код на сервере
+            app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
+        else:
+            serve(app, host=host, port=port, threads=threads, ident="SwitchMap")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
+        log.info("SwitchMap остановлен")
+    return 0
+
+
+def main(argv):
+    if argv[:1] in (["--version"], ["-V"]):
+        print(APP_VERSION)
+        return 0
+    if argv[:1] in (["--help"], ["-h"], ["help"]):
+        print(USAGE.format(version=APP_VERSION))
+        return 0
+    if argv[:1] == ["--paths"]:
+        print(f"Данные:    {DATA_DIR}\nБаза:      {DB}\nКлючи:     {security.secrets_path(DB)}\n"
+              f"Копии:     {maintenance.backups_dir(DB)}\n"
+              f"Настройки: {CONFIG_FILE or config.default_config_path() + ' (файла нет)'}\n"
+              f"Журнал:    {os.environ.get('SWITCHMAP_LOG_DIR') or os.path.join(DATA_DIR, 'logs')}")
+        return 0
+    if len(argv) >= 2 and argv[0] == "reset-password":
+        return cli_reset_password(argv[1])
+    if argv:
+        print(USAGE.format(version=APP_VERSION))
+        return 2
+    return serve_forever()
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main(sys.argv[1:]))

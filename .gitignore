@@ -15,7 +15,14 @@ venv/
 __pycache__/
 *.pyc
 *.log
+logs/
 .env
+switchmap.conf
+
+# Сборка установщиков
+build/
+dist/
+*.spec.bak
 
 # Тесты: зависимости и симулятор SNMP ставятся локально
 tests/browser/node_modules/

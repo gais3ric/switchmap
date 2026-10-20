@@ -2,3 +2,5 @@
 * text=auto eol=lf
 *.png binary
 *.ico binary
+# Библиотеки — байт в байт как у авторов: от этого зависят контрольные суммы SRI
+static/vendor/** -text

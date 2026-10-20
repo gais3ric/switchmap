@@ -30,6 +30,7 @@ BACKEND = [
     ("data", "test_data.py", [], False),
     ("security", "test_security.py", [], False),
     ("notify", "test_notify.py", [], False),
+    ("config", "test_config.py", [], False),
     ("live", "test_live.py", [], True),
     ("import", "test_import.py", [], True),
 ]
@@ -91,7 +92,7 @@ def start_snmpsim():
     exe = find_snmpsim()
     if not exe:
         return None, ("snmpsim не найден. Установите его в отдельное окружение:\n"
-                      "    python -m venv tests\\.snmpsim\n    tests\\.snmpsim\\Scripts\\pip install snmpsim\n"
+                      "    python -m venv tests\\.snmpsim\n    tests\\.snmpsim\\Scripts\\pip install snmpsim pysmi cryptography\n"
                       "или укажите путь в переменной SNMPSIM_BIN")
     log = open(os.path.join(tempfile.gettempdir(), "switchmap-snmpsim.log"), "w")
     proc = subprocess.Popen([exe, f"--data-dir={os.path.join(TESTS, 'snmpsim', 'data')}",

@@ -1,0 +1,24 @@
+<!-- Служба Windows «SwitchMap» (обёртка WinSW 2.12). Установщик регистрирует её сам:
+     switchmap-service.exe install | start | stop | restart | status | uninstall -->
+<service>
+  <id>SwitchMap</id>
+  <name>SwitchMap</name>
+  <description>SwitchMap: карта и мониторинг коммутаторов (веб-интерфейс, опрос SNMP)</description>
+  <executable>%BASE%\switchmap.exe</executable>
+  <workingdirectory>%ProgramData%\SwitchMap</workingdirectory>
+  <env name="SWITCHMAP_LOG_CONSOLE" value="0"/>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart/>
+  <!-- Упала — перезапуск через 10 с, потом 30 с, потом каждую минуту; счётчик сбрасывается через час -->
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>20 sec</stoptimeout>
+  <!-- Сюда попадает только то, что программа вывела мимо своего журнала (например, ошибка при запуске) -->
+  <logpath>%ProgramData%\SwitchMap\logs\service</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>1024</sizeThreshold>
+    <keepFiles>3</keepFiles>
+  </log>
+</service>

@@ -1,0 +1,60 @@
+# Пакеты deb и rpm (nfpm, https://nfpm.goreleaser.com). Собираются из packaging/build.py --installer:
+# переменные SWITCHMAP_VERSION и SWITCHMAP_PROGRAM (папка собранной программы) задаёт он.
+name: switchmap
+arch: amd64
+platform: linux
+version: ${SWITCHMAP_VERSION}
+version_schema: semver
+release: "1"
+section: net
+priority: optional
+maintainer: "SwitchMap <187444723+gais3ric@users.noreply.github.com>"
+description: |
+  SwitchMap — карта и мониторинг коммутаторов.
+  Веб-интерфейс: схема портов, опрос по SNMP v2c/v3, трафик, LLDP-топология,
+  уведомления в Telegram и на почту. Работает как служба systemd.
+vendor: SwitchMap
+
+contents:
+  - src: ${SWITCHMAP_PROGRAM}
+    dst: /opt/switchmap
+    type: tree
+  - src: /opt/switchmap/switchmap
+    dst: /usr/bin/switchmap
+    type: symlink
+  - src: packaging/linux/switchmap.service
+    dst: /usr/lib/systemd/system/switchmap.service
+    file_info:
+      mode: 0644
+  - src: packaging/linux/README-linux.txt
+    dst: /opt/switchmap/README-linux.txt
+    file_info:
+      mode: 0644
+  # Настройки: при обновлении пакета не перезаписываются
+  - src: packaging/switchmap.conf.example
+    dst: /etc/switchmap/switchmap.conf
+    type: config|noreplace
+    file_info:
+      mode: 0640
+  - dst: /var/lib/switchmap
+    type: dir
+    file_info:
+      mode: 0750
+
+scripts:
+  preinstall: packaging/linux/preinstall.sh
+  postinstall: packaging/linux/postinstall.sh
+  preremove: packaging/linux/preremove.sh
+  postremove: packaging/linux/postremove.sh
+
+overrides:
+  deb:
+    recommends:
+      - iputils-ping
+  rpm:
+    recommends:
+      - iputils
+
+rpm:
+  group: Applications/System
+  summary: SwitchMap - network switch map and monitoring

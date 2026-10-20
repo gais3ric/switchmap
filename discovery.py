@@ -6,6 +6,7 @@
 """
 import concurrent.futures
 import ipaddress
+import logging
 import re
 import threading
 import uuid
@@ -173,7 +174,7 @@ def _scan(job, ip, probe):
         try:
             r = probe(ip, auth)
         except Exception as e:  # один сбойный адрес не должен ронять весь поиск
-            print(f"[discovery] {ip}: {e}")
+            logging.getLogger("switchmap.discovery").warning("%s: %s", ip, e)
             return None
         if r and r.get("ok"):
             r["cred"] = idx

@@ -1,0 +1,46 @@
+[Unit]
+Description=SwitchMap - network switch map and monitoring
+Documentation=file:///opt/switchmap/README-linux.txt
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=switchmap
+Group=switchmap
+# Настройки — /etc/switchmap/switchmap.conf (программа читает его сама), данные — /var/lib/switchmap
+ExecStart=/opt/switchmap/switchmap
+WorkingDirectory=/var/lib/switchmap
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=20
+UMask=0027
+LimitNOFILE=8192
+
+# ping устройств без прав root
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+
+# Ограничения: служба пишет только в свою папку данных.
+# Если папка данных перенесена (SWITCHMAP_DATA), добавьте её сюда: systemctl edit switchmap
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/switchmap
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,275 @@
+# Сборка установщиков и релиз.
+#   git tag v1.2.0 && git push origin v1.2.0   → сборка, проверка установки, релиз на GitHub
+#   Actions → «Release» → Run workflow         → то же без релиза (файлы — в артефактах запуска)
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Версия для пробной сборки (X.Y.Z)"
+        default: "0.0.0"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONIOENCODING: utf-8
+  PYTHONUTF8: "1"
+  INNO_URL: https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe
+  INNO_SHA256: 9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732
+  NFPM_URL: https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_Linux_x86_64.tar.gz
+  NFPM_SHA256: 0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783
+  SNMPSIM_ARGS: --data-dir=tests/snmpsim/data --agent-udpv4-endpoint=127.0.0.1:161 --v3-user=simuser --v3-auth-key=authpass123 --v3-auth-proto=SHA --v3-priv-key=privpass123 --v3-priv-proto=AES
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then V="${GITHUB_REF_NAME#v}"; else V="${{ inputs.version }}"; fi
+          echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "Версия должна быть X.Y.Z, получено: $V"; exit 1; }
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r packaging/requirements-build.txt
+      - name: Быстрые тесты
+        run: python tests/run_all.py
+
+  build-windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Inno Setup 6.7.3
+        shell: pwsh
+        run: |
+          Invoke-WebRequest $env:INNO_URL -OutFile innosetup.exe
+          if ((Get-FileHash innosetup.exe -Algorithm SHA256).Hash -ne $env:INNO_SHA256) { throw "Контрольная сумма Inno Setup не совпала" }
+          Start-Process innosetup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/DIR=C:\InnoSetup' -Wait
+          "ISCC=C:\InnoSetup\ISCC.exe" >> $env:GITHUB_ENV
+      - run: pip install -r packaging/requirements-build.txt
+      - name: Сборка
+        run: python packaging/build.py --installer --version ${{ needs.version.outputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/SwitchMap-Setup-*.exe
+          if-no-files-found: error
+
+  build-linux:
+    needs: version
+    runs-on: ubuntu-latest
+    # AlmaLinux 9 (glibc 2.34): программа запускается на RHEL 9+, Debian 12+, Ubuntu 22.04+
+    container: almalinux:9
+    steps:
+      - name: Инструменты
+        run: dnf install -y python3.12 python3.12-pip python3.12-devel binutils git tar
+      - uses: actions/checkout@v4
+      - name: nfpm
+        run: |
+          curl -fsSL "$NFPM_URL" -o nfpm.tar.gz
+          echo "$NFPM_SHA256  nfpm.tar.gz" | sha256sum -c -
+          tar -xzf nfpm.tar.gz -C /usr/local/bin nfpm
+      - run: python3.12 -m pip install -r packaging/requirements-build.txt
+      - name: Сборка
+        run: python3.12 packaging/build.py --installer --version ${{ needs.version.outputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            dist/*.deb
+            dist/*.rpm
+          if-no-files-found: error
+
+  test-windows:
+    needs: [version, build-windows]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+      - name: Симулятор SNMP
+        shell: pwsh
+        run: |
+          python -m venv sim; sim\Scripts\pip install -q snmpsim pysmi cryptography
+          Start-Process sim\Scripts\snmpsim-command-responder.exe -ArgumentList ($env:SNMPSIM_ARGS -split ' ') -WindowStyle Hidden
+          Start-Sleep 8
+      - name: Установка
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem SwitchMap-Setup-*.exe).FullName
+          Start-Process $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LOG=install.log' -Wait
+          $svc = Get-CimInstance Win32_Service -Filter "Name='SwitchMap'"
+          $svc | Format-List Name, State, StartMode, StartName, PathName
+          if ($svc.State -ne 'Running') { Get-Content install.log -Tail 40; throw "Служба не запущена" }
+          if ($svc.StartName -notmatch 'LocalService') { throw "Служба работает не под LocalService: $($svc.StartName)" }
+          if ($svc.StartMode -ne 'Auto') { throw "Служба не в автозапуске" }
+          Get-Content C:\ProgramData\SwitchMap\switchmap.conf
+          icacls C:\ProgramData\SwitchMap
+      - name: Проверка установленной службы
+        run: python packaging/smoke.py --url http://127.0.0.1:5000 --snmp --expect-version ${{ needs.version.outputs.version }}
+      - name: Обновление поверх (данные и настройки остаются)
+        shell: pwsh
+        run: |
+          $db = (Get-Item C:\ProgramData\SwitchMap\switches.db).Length
+          Start-Process (Get-ChildItem SwitchMap-Setup-*.exe).FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LOG=upgrade.log' -Wait
+          if ((Get-Service SwitchMap).Status -ne 'Running') { Get-Content upgrade.log -Tail 40; throw "Служба не запустилась после обновления" }
+          if (-not (Test-Path C:\ProgramData\SwitchMap\switchmap.secret)) { throw "Ключи пропали" }
+      - name: Вход после обновления
+        run: python packaging/smoke.py --url http://127.0.0.1:5000 --expect-version ${{ needs.version.outputs.version }}
+      - name: Перезапуск после сбоя
+        shell: pwsh
+        run: |
+          Stop-Process -Name switchmap -Force
+          Start-Sleep 20
+          if ((Get-Service SwitchMap).Status -ne 'Running') { throw "Служба не перезапустилась после сбоя" }
+          python packaging/smoke.py --url http://127.0.0.1:5000
+      - name: Удаление (данные остаются)
+        shell: pwsh
+        run: |
+          Start-Process "C:\Program Files\SwitchMap\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+          Start-Sleep 3
+          if (Get-Service SwitchMap -ErrorAction SilentlyContinue) { throw "Служба осталась" }
+          if (-not (Test-Path C:\ProgramData\SwitchMap\switches.db)) { throw "База удалена вместе с программой" }
+      - name: Журналы
+        if: always()
+        shell: pwsh
+        run: |
+          Get-ChildItem C:\ProgramData\SwitchMap\logs -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { "== $($_.FullName)"; Get-Content $_.FullName -Tail 60 }
+          if (Test-Path install.log) { "== install.log"; Get-Content install.log -Tail 60 }
+
+  test-deb-systemd:
+    needs: [version, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+      - name: Симулятор SNMP
+        run: |
+          python3 -m venv sim && sim/bin/pip install -q snmpsim pysmi cryptography
+          sudo nohup sim/bin/snmpsim-command-responder $SNMPSIM_ARGS --process-user=nobody --process-group=nogroup > sim.log 2>&1 &
+          sleep 8
+      - name: Установка
+        run: |
+          sudo apt-get install -y ./switchmap_*_amd64.deb
+          sleep 5
+          systemctl is-active switchmap
+          systemctl is-enabled switchmap
+          # служба работает от пользователя switchmap, не от root
+          [ "$(ps -o uid= -C switchmap | tr -d ' ' | sort -u)" = "$(id -u switchmap)" ]
+          sudo ls -la /var/lib/switchmap /etc/switchmap
+          systemd-analyze verify /usr/lib/systemd/system/switchmap.service
+          systemd-analyze security switchmap --no-pager | tail -n 3
+      - name: Проверка службы
+        run: python3 packaging/smoke.py --url http://127.0.0.1:5000 --snmp --expect-version ${{ needs.version.outputs.version }}
+      - name: Обновление поверх
+        run: |
+          echo "# своя строка" | sudo tee -a /etc/switchmap/switchmap.conf
+          sudo apt-get install -y --reinstall ./switchmap_*_amd64.deb
+          sleep 5
+          systemctl is-active switchmap
+          grep -q "своя строка" /etc/switchmap/switchmap.conf
+          python3 packaging/smoke.py --url http://127.0.0.1:5000
+      - name: Команда от root работает от имени службы
+        run: |
+          sudo switchmap --paths
+          sudo find /var/lib/switchmap -not -user switchmap | grep . && exit 1 || true
+      - name: Перезапуск после сбоя
+        run: |
+          sudo pkill -KILL -f /opt/switchmap/switchmap
+          sleep 15
+          systemctl is-active switchmap
+      - name: Удаление (данные остаются)
+        run: |
+          sudo apt-get remove -y switchmap
+          ! systemctl is-active switchmap
+          sudo test -f /var/lib/switchmap/switches.db
+      - name: Журналы
+        if: always()
+        run: |
+          sudo journalctl -u switchmap --no-pager | tail -n 80
+          sudo tail -n 80 /var/lib/switchmap/logs/switchmap.log || true
+
+  test-linux-containers:
+    needs: [version, build-linux]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: "almalinux:9", pkg: rpm }
+          - { image: "rockylinux/rockylinux:10", pkg: rpm }
+          - { image: "debian:12", pkg: deb }
+          - { image: "ubuntu:22.04", pkg: deb }
+    container: ${{ matrix.image }}
+    steps:
+      - name: Инструменты
+        run: |
+          if command -v dnf >/dev/null; then dnf install -y python3 procps-ng util-linux; else apt-get update && apt-get install -y python3 procps; fi
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+      - name: Установка пакета
+        run: |
+          if [ "${{ matrix.pkg }}" = rpm ]; then dnf install -y ./switchmap-*.x86_64.rpm; else apt-get install -y ./switchmap_*_amd64.deb; fi
+          id switchmap
+          ls -la /var/lib/switchmap /etc/switchmap /usr/bin/switchmap
+          switchmap --version
+      - name: Запуск от пользователя службы (в контейнере нет systemd)
+        run: |
+          runuser -u switchmap -- /opt/switchmap/switchmap > run.log 2>&1 &
+          python3 packaging/smoke.py --url http://127.0.0.1:5000 --skip-ping --expect-version ${{ needs.version.outputs.version }}
+      - name: Обновление и удаление
+        run: |
+          pkill -f /opt/switchmap/switchmap || true
+          if [ "${{ matrix.pkg }}" = rpm ]; then dnf reinstall -y ./switchmap-*.x86_64.rpm && dnf remove -y switchmap
+          else apt-get install -y --reinstall ./switchmap_*_amd64.deb && apt-get remove -y switchmap; fi
+          test -f /var/lib/switchmap/switches.db
+          test ! -e /opt/switchmap/switchmap
+      - name: Журнал
+        if: always()
+        run: cat run.log || true
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [version, tests, test-windows, test-deb-systemd, test-linux-containers]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Контрольные суммы
+        run: cd out && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Релиз
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" out/* --title "SwitchMap ${{ needs.version.outputs.version }}" \
+            --notes-file packaging/RELEASE_NOTES.md --verify-tag

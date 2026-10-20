@@ -1,0 +1,25 @@
+# Настройки запуска SwitchMap. После изменения перезапустите службу:
+#   Windows:  Restart-Service SwitchMap        (PowerShell от имени администратора)
+#   Linux:    sudo systemctl restart switchmap
+# Формат: КЛЮЧ=значение, строки с # — комментарии.
+
+# Адрес: 127.0.0.1 — только с этого компьютера, 0.0.0.0 — из сети
+SWITCHMAP_HOST=127.0.0.1
+SWITCHMAP_PORT=5000
+
+# Работа за HTTPS-прокси (Caddy, nginx, IIS): cookie входа передаются только по HTTPS
+#SWITCHMAP_HTTPS=1
+
+# Папка данных: база, ключи шифрования, резервные копии, журнал.
+# По умолчанию: C:\ProgramData\SwitchMap (Windows), /var/lib/switchmap (Linux)
+#SWITCHMAP_DATA=
+
+# Журнал: подробность (DEBUG, INFO, WARNING) и папка (по умолчанию logs в папке данных)
+#SWITCHMAP_LOG_LEVEL=INFO
+#SWITCHMAP_LOG_DIR=
+
+# Потоков веб-сервера (одновременных запросов)
+#SWITCHMAP_THREADS=8
+
+# Свой сервер Telegram Bot API (необязательно)
+#SWITCHMAP_TELEGRAM_API=http://bot-api.local:8081

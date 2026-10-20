@@ -296,6 +296,8 @@ def create_backup(db, reason="manual"):
     dst = sqlite3.connect(path)
     try:
         src.backup(dst)
+        # Копия — самостоятельный файл без -wal/-shm: её можно скачать, перенести, открыть только на чтение
+        dst.execute("PRAGMA journal_mode=DELETE")
     finally:
         dst.close()
         src.close()
@@ -373,7 +375,16 @@ def restore_backup(db, path):
     dst = sqlite3.connect(db)
     try:
         src.backup(dst)
+        enable_wal(dst)  # копия могла быть в обычном режиме — рабочей базе возвращаем WAL
     finally:
         dst.close()
         src.close()
     return safety
+
+
+def enable_wal(conn):
+    """Режим WAL: чтение не ждёт записи (страницы открываются, пока идёт опрос). Хранится в самом файле базы."""
+    try:
+        return conn.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+    except sqlite3.Error:
+        return None

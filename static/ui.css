@@ -795,6 +795,7 @@ a.event-item:hover { background: var(--surface-2); color: var(--text); }
 .user-menu .dropdown { top: auto; bottom: 0; right: auto; left: calc(100% + 12px); transform-origin: bottom left; }
 .user-card { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 8px 9px 6px; }
 .user-card b { font-size: 14px; }
+.menu-note { padding: 4px 9px 6px; font-size: 11.5px; color: var(--text-3, var(--muted)); }
 
 /* Наблюдатель не видит действий, доступных только администратору (права проверяет и сервер) */
 .role-viewer .admin-only,

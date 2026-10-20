@@ -1,0 +1,24 @@
+# Быстрые тесты на каждый push и pull request (Linux; полный набор с браузером — локально, см. tests/README.md)
+name: Tests
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "**.txt"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r packaging/requirements-build.txt
+      - run: python tests/run_all.py

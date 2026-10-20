@@ -221,8 +221,18 @@ nonce = re.search(r"'nonce-([\w-]+)'", script_src)
 check("script-src: без 'unsafe-inline' и 'unsafe-eval', с nonce", "unsafe-inline" not in script_src
       and "unsafe-eval" not in script_src and nonce, script_src)
 check("обработчики в атрибутах запрещены (script-src-attr 'none')", "script-src-attr 'none'" in csp)
-check("CDN разрешены только конкретными файлами, без «весь сайт»", "https://cdn.jsdelivr.net " not in script_src + " "
-      and "https://cdnjs.cloudflare.com " not in script_src + " " and "chart.js@4.4.0" in script_src)
+check("скрипты только со своего сервера (никаких CDN в CSP)", "https://" not in csp and "http://" not in csp, csp)
+import hashlib, base64
+bad_sri = []
+for key, (fname, sri) in m.VENDOR_SCRIPTS.items():
+    data = open(os.path.join(ROOT, "static", "vendor", fname), "rb").read()
+    if "sha384-" + base64.b64encode(hashlib.sha384(data).digest()).decode() != sri:
+        bad_sri.append(fname)
+check("библиотеки в static/vendor совпадают с контрольными суммами", not bad_sri, bad_sri)
+with m.app.test_request_context():
+    d3_url = m.vendor_scripts()["d3"][0]
+r_vendor = admin.get(d3_url)
+check("библиотека отдаётся сервером", r_vendor.status_code == 200 and len(r_vendor.data) > 100000)
 nonce2 = re.search(r"'nonce-([\w-]+)'", admin.get("/").headers["Content-Security-Policy"])
 check("nonce новый на каждый ответ", nonce2 and nonce2.group(1) != nonce.group(1))
 check("JSON-ответы без nonce", "nonce-" not in admin.get("/api/settings").headers["Content-Security-Policy"])
@@ -237,15 +247,20 @@ for url, client in pages.items():
     page_nonce = re.search(r"'nonce-([\w-]+)'", resp.headers["Content-Security-Policy"])
     for tag in re.findall(r"<script\b[^>]*>", html):
         if "src=" in tag:
-            if "https://" in tag and 'integrity="sha384-' not in tag:
-                problems.append(f"{url}: CDN без integrity: {tag}")
+            if "https://" in tag or "http://" in tag:
+                problems.append(f"{url}: скрипт со стороннего сервера: {tag}")
+            if "/vendor/" in tag and 'integrity="sha384-' not in tag:
+                problems.append(f"{url}: библиотека без integrity: {tag}")
         elif not page_nonce or f'nonce="{page_nonce.group(1)}"' not in tag:
             problems.append(f"{url}: встроенный скрипт без nonce: {tag}")
     for attr in re.findall(r"""<[^>]+\son[a-z]+\s*=\s*["'][^>]*>""", html):
         problems.append(f"{url}: обработчик в атрибуте: {attr[:80]}")
     if "javascript:" in html:
         problems.append(f"{url}: ссылка javascript:")
-check(f"страницы ({len(pages)}): встроенные скрипты с nonce, CDN с integrity, нет onclick и javascript:", not problems, problems[:5])
+check(f"страницы ({len(pages)}): встроенные скрипты с nonce, библиотеки свои и с integrity, нет onclick и javascript:", not problems, problems[:5])
+check("на страницах нет ссылок на CDN (шрифты, стили, скрипты)", not any(
+    re.search(r"""<(script|link|img|iframe)\b[^>]*\s(src|href)=["']https?://""", c.get(u).get_data(as_text=True))
+    for u, c in pages.items()))
 
 home = admin.get("/").get_data(as_text=True)
 check("склонение: «52 порта», «48 портов», на странице коммутатора тоже", "52 порта" in home and "48 портов" in home

@@ -55,6 +55,8 @@
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <button type="submit" role="menuitem" id="logoutBtn">{{ icon('open') }} Выйти</button>
                     </form>
+                    <hr>
+                    <div class="menu-note" id="appVersion">SwitchMap {{ app_version }}</div>
                 </div>
             </div>
             {% endif %}
