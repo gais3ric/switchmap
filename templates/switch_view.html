@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_help.html" import tip, help_link %}
 {% set active_nav = 'switches' %}
+{% set help_slug = 'port-map' %}
 
 {% block title %}{{ switch['name'] }}{% endblock %}
 
 {% block crumbs %}
-<a href="/">Коммутаторы</a><span class="sep">/</span><span class="current">{{ switch['name'] }}</span>
+<a href="/">{{ _('Коммутаторы') }}</a><span class="sep">/</span><span class="current">{{ switch['name'] }}</span>
 {% endblock %}
 
 {% block head %}
@@ -348,92 +350,92 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
     <div>
         <div class="page-title">
             <h1>{{ switch['name'] }}</h1>
-            <span class="edit-badge" id="editIndicator">Режим редактирования</span>
+            <span class="edit-badge" id="editIndicator">{{ _('Режим редактирования') }}</span>
         </div>
         <div class="page-sub">
-            <span class="status-pill"><span id="switchStatusDot" class="status-indicator unknown"></span><span id="switchStatusText">Нет IP</span></span>
-            <span class="mono">{{ switch['ip_address'] or 'IP не задан' }}</span>
+            <span class="status-pill"><span id="switchStatusDot" class="status-indicator unknown"></span><span id="switchStatusText">{{ _('Нет IP') }}</span></span>
+            <span class="mono">{{ switch['ip_address'] or _('IP не задан') }}</span>
             <span class="meta-sep">·</span>
             <span class="badge {{ 'badge-accent' if switch['snmp_version'] == '3' else 'badge-outline' }}">SNMP {{ 'v3' if switch['snmp_version'] == '3' else 'v2c' }}</span>
             <span class="meta-sep">·</span>
-            <span class="num">{{ switch['ports']|plural('порт', 'порта', 'портов') }}</span>
+            <span class="num">{{ _n(switch['ports'], '{n} порт', '{n} порта', '{n} портов') }}</span>
             {% if switch['model'] %}<span class="meta-sep">·</span><span id="switchModel">{{ switch['model'] }}</span>{% endif %}
             <span class="meta-sep">·</span>
-            <span>опрос: {{ switch['last_poll_time'] or 'ещё не было' }}</span>
+            <span>{{ _('опрос: {time}', time=switch['last_poll_time'] or _('ещё не было')) }}</span>
             {% if netbox_link %}<span class="meta-sep">·</span><a href="{{ netbox_link }}" target="_blank" rel="noopener" id="netboxLink">{{ icon('open') }} NetBox</a>{% endif %}
         </div>
     </div>
     <div class="page-actions">
-        <button type="button" class="btn" data-click="pollSNMP" id="snmpBtn">{{ icon('refresh') }} <span class="btn-text">Опросить по SNMP</span></button>
-        <button type="button" class="btn" data-click="openStatsModal">{{ icon('chart') }} Статистика</button>
+        <button type="button" class="btn" data-click="pollSNMP" id="snmpBtn">{{ icon('refresh') }} <span class="btn-text">{{ _('Опросить по SNMP') }}</span></button>
+        <button type="button" class="btn" data-click="openStatsModal">{{ icon('chart') }} {{ _('Статистика') }}</button>
         <div class="menu-wrap">
-            <button type="button" class="btn" data-menu-toggle aria-haspopup="true" title="Экспорт и история">{{ icon('download') }} Экспорт {{ icon('chevron') }}</button>
+            <button type="button" class="btn" data-menu-toggle aria-haspopup="true" title="{{ _('Экспорт и история') }}">{{ icon('download') }} {{ _('Экспорт') }} {{ icon('chevron') }}</button>
             <div class="dropdown" role="menu">
-                <div class="dropdown-title">Документы</div>
-                <a href="/export/switch/{{ switch['id'] }}.xlsx" role="menuitem">{{ icon('sheet') }} Excel <small>порты, подключения, панели, устройства</small></a>
-                <button type="button" data-click="exportToPDF" role="menuitem">{{ icon('file') }} PDF-паспорт</button>
+                <div class="dropdown-title">{{ _('Документы') }}</div>
+                <a href="/export/switch/{{ switch['id'] }}.xlsx" role="menuitem">{{ icon('sheet') }} Excel <small>{{ _('порты, подключения, панели, устройства') }}</small></a>
+                <button type="button" data-click="exportToPDF" role="menuitem">{{ icon('file') }} {{ _('PDF-паспорт') }}</button>
                 <hr>
                 <div class="dropdown-title">CSV</div>
-                <a href="/export/switch/{{ switch['id'] }}/ports.csv" role="menuitem">{{ icon('plug') }} Порты</a>
-                <a href="/export/switch/{{ switch['id'] }}/connections.csv" role="menuitem">{{ icon('link') }} Подключения</a>
-                <a href="/export/switch/{{ switch['id'] }}/devices.csv" role="menuitem">{{ icon('server') }} Устройства и MAC</a>
+                <a href="/export/switch/{{ switch['id'] }}/ports.csv" role="menuitem">{{ icon('plug') }} {{ _('Порты') }}</a>
+                <a href="/export/switch/{{ switch['id'] }}/connections.csv" role="menuitem">{{ icon('link') }} {{ _('Подключения') }}</a>
+                <a href="/export/switch/{{ switch['id'] }}/devices.csv" role="menuitem">{{ icon('server') }} {{ _('Устройства и MAC') }}</a>
                 <hr>
-                <a href="/audit?switch={{ switch['id'] }}" role="menuitem">{{ icon('history') }} История изменений</a>
+                <a href="/audit?switch={{ switch['id'] }}" role="menuitem">{{ icon('history') }} {{ _('История изменений') }}</a>
             </div>
         </div>
-        <button type="button" class="btn menu-toggle" data-click="toggleMenu" title="Параметры коммутатора">{{ icon('sliders') }} Параметры</button>
-        <button type="button" class="btn btn-primary admin-only" data-click="toggleEdit" id="editBtn">{{ icon('pencil') }} Редактировать</button>
-        <button type="button" class="btn" data-click="cancelEdit" id="cancelBtn" hidden>Отмена</button>
-        <button type="button" class="btn btn-primary save" data-click="saveChanges" id="saveBtn" hidden>{{ icon('check') }} Сохранить</button>
+        <button type="button" class="btn menu-toggle" data-click="toggleMenu" title="{{ _('Параметры коммутатора') }}">{{ icon('sliders') }} {{ _('Параметры') }}</button>
+        <button type="button" class="btn btn-primary admin-only" data-click="toggleEdit" id="editBtn">{{ icon('pencil') }} {{ _('Редактировать') }}</button>
+        <button type="button" class="btn" data-click="cancelEdit" id="cancelBtn" hidden>{{ _('Отмена') }}</button>
+        <button type="button" class="btn btn-primary save" data-click="saveChanges" id="saveBtn" hidden>{{ icon('check') }} {{ _('Сохранить') }}</button>
     </div>
 </div>
 
 <div class="card schema-card rise">
     <div class="card-header">
-        <div class="card-title">{{ icon('panel') }} Схема стойки</div>
+        <div class="card-title">{{ icon('panel') }} {{ _('Схема стойки') }}{{ tip(_('Яркий порт — линк есть, бледный — нет. Цветная полоска внизу порта — загрузка, красная обводка — выше порога. Правый клик по порту — тип порта (RJ-45/SFP) и транк. Чтобы нарисовать подключение, нажмите «Редактировать», затем порт коммутатора и порт патч-панели.'), 'port-map') }}</div>
         <div class="schema-toolbar">
             <label class="check load-toggle">
                 <input type="checkbox" id="loadToggle" checked data-change="onLoadToggle">
-                Загрузка портов
+                {{ _('Загрузка портов') }}
             </label>
             <div class="load-legend" id="loadLegend">
                 <span><i style="background:var(--load-1)"></i>&lt;30%</span>
                 <span><i style="background:var(--load-2)"></i>&lt;60%</span>
                 <span><i style="background:var(--load-3)"></i><span>&lt;<b id="loadLegendThreshold">80</b>%</span></span>
-                <span><i style="background:var(--load-4)"></i>выше порога</span>
+                <span><i style="background:var(--load-4)"></i>{{ _('выше порога') }}</span>
                 <span id="loadLegendTime" class="load-legend-time"></span>
             </div>
         </div>
     </div>
     <div class="schema-hint">
-        Клик по порту коммутатора, затем по порту патч-панели — подключение. Правый клик по порту — тип порта, транк, прямое назначение.
+        {{ _('Клик по порту коммутатора, затем по порту патч-панели — подключение. Правый клик по порту — тип порта, транк, прямое назначение.') }}
     </div>
     <div class="rack" id="rackContainer"></div>
 </div>
 
 <div class="card ports-card rise">
     <div class="card-header">
-        <div class="card-title">{{ icon('plug') }} Порты <span class="badge" id="portsCount">0</span></div>
-        <div class="segmented" id="portsFilter" role="tablist" aria-label="Фильтр портов">
-            <button type="button" class="is-active" data-filter="all">Все</button>
-            <button type="button" data-filter="up">Активные</button>
-            <button type="button" data-filter="down">Без линка</button>
-            <button type="button" data-filter="alerts">С оповещениями</button>
+        <div class="card-title">{{ icon('plug') }} {{ _('Порты') }} <span class="badge" id="portsCount">0</span>{{ tip(_('Данные последнего SNMP-опроса: состояние, скорость, загрузка, ошибки и VLAN каждого порта. Клик по строке — показать порт на схеме.'), 'monitoring') }}</div>
+        <div class="segmented" id="portsFilter" role="tablist" aria-label="{{ _('Фильтр портов') }}">
+            <button type="button" class="is-active" data-filter="all">{{ _('Все') }}</button>
+            <button type="button" data-filter="up">{{ _('Активные') }}</button>
+            <button type="button" data-filter="down">{{ _('Без линка') }}</button>
+            <button type="button" data-filter="alerts">{{ _('С оповещениями') }}</button>
         </div>
     </div>
     <div class="table-wrap">
         <table class="table table-compact" id="portsTable">
             <thead>
                 <tr>
-                    <th class="num">Порт</th>
-                    <th>Интерфейс</th>
-                    <th>Описание / подключение</th>
-                    <th>Статус</th>
-                    <th class="col-optional">Скорость</th>
-                    <th>Загрузка</th>
-                    <th class="col-optional">↓ Вход</th>
-                    <th class="col-optional">↑ Выход</th>
-                    <th class="col-optional">Ошибки</th>
+                    <th class="num">{{ _('Порт') }}</th>
+                    <th>{{ _('Интерфейс') }}</th>
+                    <th>{{ _('Описание / подключение') }}</th>
+                    <th>{{ _('Статус') }}</th>
+                    <th class="col-optional">{{ _('Скорость') }}</th>
+                    <th>{{ _('Загрузка') }}</th>
+                    <th class="col-optional">{{ _('↓ Вход') }}</th>
+                    <th class="col-optional">{{ _('↑ Выход') }}</th>
+                    <th class="col-optional">{{ _('Ошибки') }}</th>
                     <th class="col-optional">VLAN</th>
                 </tr>
             </thead>
@@ -442,69 +444,69 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
     </div>
     <div class="empty" id="portsEmpty">
         {{ icon('activity') }}
-        <h3>Нет данных о портах</h3>
-        <p>Нажмите «Опросить по SNMP» или включите периодический опрос в настройках.</p>
+        <h3>{{ _('Нет данных о портах') }}</h3>
+        <p>{{ _('Нажмите «Опросить по SNMP» или включите периодический опрос в настройках.') }}</p>
     </div>
 </div>
 
 <!-- Параметры коммутатора -->
-<aside class="drawer sidebar" id="sidebar" aria-label="Параметры коммутатора">
+<aside class="drawer sidebar" id="sidebar" aria-label="{{ _('Параметры коммутатора') }}">
     <div class="drawer-header">
-        <h2 style="font-size:15px">Параметры</h2>
-        <button type="button" class="modal-close" data-click="toggleMenu" aria-label="Закрыть">&times;</button>
+        <h2 style="font-size:15px">{{ _('Параметры') }}</h2>
+        <button type="button" class="modal-close" data-click="toggleMenu" aria-label="{{ _('Закрыть') }}">&times;</button>
     </div>
     <div class="drawer-body sidebar-content">
         <div class="field-name">
-            <label class="label" for="nameInput" style="margin-top:0">Название</label>
+            <label class="label" for="nameInput" style="margin-top:0">{{ _('Название') }}</label>
             <input type="text" name="name" id="nameInput" value="{{ switch['name'] }}" readonly>
         </div>
 
         <div class="section">
             <div class="section-header" data-click="toggleSection" data-args='["switch"]'>
-                <span class="section-title">{{ icon('server') }} Коммутатор</span>
+                <span class="section-title">{{ icon('server') }} {{ _('Коммутатор') }}</span>
                 <span class="section-arrow" id="arrow-switch">▼</span>
             </div>
             <div class="section-content" id="content-switch">
-                <label class="label" for="portCountInput">Количество портов</label>
+                <label class="label" for="portCountInput">{{ _('Количество портов') }}</label>
                 <input type="number" name="port_count" id="portCountInput" value="{{ switch['ports'] }}" min="1" max="96" readonly>
 
-                <label class="label" for="layoutSelect">Расположение портов</label>
+                <label class="label" for="layoutSelect">{{ _('Расположение портов') }}</label>
                 <select id="layoutSelect" disabled>
-                    <option value="single">1 строка</option>
-                    <option value="double">2 строки (шахматно)</option>
+                    <option value="single">{{ _('1 строка') }}</option>
+                    <option value="double">{{ _('2 строки (шахматно)') }}</option>
                 </select>
 
-                <label class="label">Подключения портов</label>
+                <label class="label">{{ _('Подключения портов') }}</label>
                 <div id="connectionsList"></div>
             </div>
         </div>
 
         <div class="section">
             <div class="section-header" data-click="toggleSection" data-args='["patch"]'>
-                <span class="section-title">{{ icon('panel') }} Патч-панели</span>
+                <span class="section-title">{{ icon('panel') }} {{ _('Патч-панели') }}</span>
                 <span class="section-arrow" id="arrow-patch">▼</span>
             </div>
             <div class="section-content" id="content-patch">
                 <div id="patchPanelsList"></div>
                 <button type="button" data-click="addPatchPanel" id="addPatchPanelBtn" class="btn btn-sm btn-block" style="margin-top:8px" disabled>
-                    {{ icon('plus') }} Добавить патч-панель
+                    {{ icon('plus') }} {{ _('Добавить патч-панель') }}
                 </button>
             </div>
         </div>
 
         <div class="section">
             <div class="section-header" data-click="toggleSection" data-args='["monitor"]'>
-                <span class="section-title">{{ icon('activity') }} Мониторинг и SNMP</span>
+                <span class="section-title">{{ icon('activity') }} {{ _('Мониторинг и SNMP') }}{{ tip(_('IP-адрес и учётные данные SNMP этого коммутатора. «Проверить SNMP» читает имя и описание устройства — так удобно убедиться, что настройки верны.'), 'snmp-basics') }}</span>
                 <span class="section-arrow" id="arrow-monitor">▼</span>
             </div>
             <div class="section-content" id="content-monitor">
-                <label class="label" for="ipInput">IP-адрес</label>
+                <label class="label" for="ipInput">{{ _('IP-адрес') }}</label>
                 <input type="text" id="ipInput" value="{{ switch['ip_address'] or '' }}" placeholder="192.168.1.1" readonly>
 
-                <label class="label" for="snmpVersionSelect">Версия SNMP</label>
+                <label class="label" for="snmpVersionSelect">{{ _('Версия SNMP') }}</label>
                 <select id="snmpVersionSelect" disabled data-change="updateSnmpFieldsVisibility">
                     <option value="2c">v2c (community)</option>
-                    <option value="3">v3 (пользователь и пароли)</option>
+                    <option value="3">{{ _('v3 (пользователь и пароли)') }}</option>
                 </select>
 
                 <div id="snmpV2Fields">
@@ -513,35 +515,35 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
                 </div>
 
                 <div id="snmpV3Fields" hidden>
-                    <label class="label" for="snmpV3User">Пользователь</label>
+                    <label class="label" for="snmpV3User">{{ _('Пользователь') }}</label>
                     <input type="text" id="snmpV3User" value="{{ switch['snmp_v3_user'] or '' }}" readonly autocomplete="off">
 
-                    <label class="label" for="snmpV3AuthProto">Аутентификация</label>
+                    <label class="label" for="snmpV3AuthProto">{{ _('Аутентификация') }}</label>
                     <select id="snmpV3AuthProto" disabled>
                         {% for p in ['none', 'MD5', 'SHA', 'SHA224', 'SHA256', 'SHA384', 'SHA512'] %}
-                        <option value="{{ p }}">{{ 'нет' if p == 'none' else p }}</option>
+                        <option value="{{ p }}">{{ _('нет') if p == 'none' else p }}</option>
                         {% endfor %}
                     </select>
                     <input type="password" id="snmpV3AuthKey" readonly autocomplete="new-password" style="margin-top:6px"
-                           placeholder="{{ 'сохранён — оставьте пустым' if switch['snmp_v3_auth_key'] else 'пароль, не менее 8 символов' }}">
+                           placeholder="{{ _('сохранён — оставьте пустым') if switch['snmp_v3_auth_key'] else _('пароль, не менее 8 символов') }}">
 
-                    <label class="label" for="snmpV3PrivProto">Шифрование</label>
+                    <label class="label" for="snmpV3PrivProto">{{ _('Шифрование') }}</label>
                     <select id="snmpV3PrivProto" disabled>
                         {% for p in ['none', 'DES', '3DES', 'AES128', 'AES192', 'AES256'] %}
-                        <option value="{{ p }}">{{ 'нет' if p == 'none' else p }}</option>
+                        <option value="{{ p }}">{{ _('нет') if p == 'none' else p }}</option>
                         {% endfor %}
                     </select>
                     <input type="password" id="snmpV3PrivKey" readonly autocomplete="new-password" style="margin-top:6px"
-                           placeholder="{{ 'сохранён — оставьте пустым' if switch['snmp_v3_priv_key'] else 'пароль, не менее 8 символов' }}">
+                           placeholder="{{ _('сохранён — оставьте пустым') if switch['snmp_v3_priv_key'] else _('пароль, не менее 8 символов') }}">
 
-                    <label class="label" for="snmpV3Context">Контекст <span class="muted">(обычно пусто)</span></label>
+                    <label class="label" for="snmpV3Context">{{ _('Контекст') }} <span class="muted">{{ _('(обычно пусто)') }}</span></label>
                     <input type="text" id="snmpV3Context" value="{{ switch['snmp_v3_context'] or '' }}" readonly
-                           placeholder="например, vlan-10 для Cisco">
+                           placeholder="{{ _('например, vlan-10 для Cisco') }}">
                 </div>
 
                 <div class="stack-btns">
-                    <button type="button" class="btn btn-sm btn-block" data-click="checkSwitchStatus" id="pingBtn">{{ icon('activity') }} Проверить доступность</button>
-                    <button type="button" class="btn btn-sm btn-block" data-click="testSNMP" id="snmpTestBtn">{{ icon('plug') }} Проверить SNMP</button>
+                    <button type="button" class="btn btn-sm btn-block" data-click="checkSwitchStatus" id="pingBtn">{{ icon('activity') }} {{ _('Проверить доступность') }}</button>
+                    <button type="button" class="btn btn-sm btn-block" data-click="testSNMP" id="snmpTestBtn">{{ icon('plug') }} {{ _('Проверить SNMP') }}</button>
                     <div id="snmpTestResult" class="snmp-test-result" hidden></div>
                 </div>
             </div>
@@ -549,18 +551,18 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
 
         <div class="section">
             <div class="section-header" data-click="toggleSection" data-args='["vlan"]'>
-                <span class="section-title">{{ icon('tag') }} VLAN</span>
+                <span class="section-title">{{ icon('tag') }} VLAN{{ tip(_('VLAN каждого порта приходят из SNMP-опроса (Q-BRIDGE-MIB). Назначьте VLAN цвет — порты на схеме будут подсвечены им.'), 'port-map', 'vlan') }}</span>
                 <span class="section-arrow" id="arrow-vlan">▼</span>
             </div>
             <div class="section-content" id="content-vlan">
-                <label class="label" for="vlanFilterSelect">Показать на схеме</label>
+                <label class="label" for="vlanFilterSelect">{{ _('Показать на схеме') }}</label>
                 <select id="vlanFilterSelect" data-change="onVlanFilterChange">
-                    <option value="">Все порты</option>
+                    <option value="">{{ _('Все порты') }}</option>
                 </select>
 
-                <label class="label">Обнаруженные VLAN</label>
-                <div id="vlanList"><div class="empty-note">Нет данных. Опросите коммутатор по SNMP.</div></div>
-                <div class="subtle-note">Клик по цветному квадрату — назначить цвет VLAN.</div>
+                <label class="label">{{ _('Обнаруженные VLAN') }}</label>
+                <div id="vlanList"><div class="empty-note">{{ _('Нет данных. Опросите коммутатор по SNMP.') }}</div></div>
+                <div class="subtle-note">{{ _('Клик по цветному квадрату — назначить цвет VLAN.') }}</div>
             </div>
         </div>
     </div>
@@ -577,21 +579,21 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
 <div id="statsModal" role="dialog" aria-modal="true" aria-labelledby="statsTitle">
     <div class="stats-modal-content">
         <div class="stats-modal-header">
-            <h2 id="statsTitle">{{ icon('chart') }} Статистика · {{ switch['name'] }}</h2>
-            <button type="button" class="stats-modal-close" data-click="closeStatsModal" title="Закрыть" aria-label="Закрыть">&times;</button>
+            <h2 id="statsTitle">{{ icon('chart') }} {{ _('Статистика') }} · {{ switch['name'] }}</h2>
+            <button type="button" class="stats-modal-close" data-click="closeStatsModal" title="{{ _('Закрыть') }}" aria-label="{{ _('Закрыть') }}">&times;</button>
         </div>
         <div class="stats-modal-body">
             <div class="stats-toolbar">
-                <button type="button" class="btn btn-primary btn-sm refresh-stats-btn" data-click="refreshStatsData" id="refreshStatsBtn" title="Выполнить SNMP-опрос коммутатора">{{ icon('refresh') }} Обновить данные</button>
+                <button type="button" class="btn btn-primary btn-sm refresh-stats-btn" data-click="refreshStatsData" id="refreshStatsBtn" title="{{ _('Выполнить SNMP-опрос коммутатора') }}">{{ icon('refresh') }} {{ _('Обновить данные') }}</button>
                 <span class="stats-last-poll" id="statsLastPoll"></span>
                 <span class="grow"></span>
-                <div class="segmented" id="statsPeriod" role="tablist" aria-label="Период графиков">
-                    <button type="button" data-period="1h">1 ч</button>
-                    <button type="button" data-period="6h">6 ч</button>
-                    <button type="button" data-period="24h">24 ч</button>
-                    <button type="button" data-period="7d">7 д</button>
-                    <button type="button" data-period="30d">30 д</button>
-                    <button type="button" data-period="1y">1 г</button>
+                <div class="segmented" id="statsPeriod" role="tablist" aria-label="{{ _('Период графиков') }}">
+                    <button type="button" data-period="1h">{{ _('1 ч') }}</button>
+                    <button type="button" data-period="6h">{{ _('6 ч') }}</button>
+                    <button type="button" data-period="24h">{{ _('24 ч') }}</button>
+                    <button type="button" data-period="7d">{{ _('7 д') }}</button>
+                    <button type="button" data-period="30d">{{ _('30 д') }}</button>
+                    <button type="button" data-period="1y">{{ _('1 г') }}</button>
                 </div>
             </div>
 
@@ -599,43 +601,43 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
                 <div class="stat-card">
                     <h3>{{ icon('cpu') }} CPU</h3>
                     <div class="stat-value" id="cpuValue">—</div>
-                    <div class="stat-label">Загрузка процессора</div>
+                    <div class="stat-label">{{ _('Загрузка процессора') }}</div>
                 </div>
                 <div class="stat-card">
                     <h3>{{ icon('memory') }} RAM</h3>
                     <div class="stat-value" id="ramValue">—</div>
-                    <div class="stat-label">Использование памяти</div>
+                    <div class="stat-label">{{ _('Использование памяти') }}</div>
                 </div>
                 <div class="stat-card">
-                    <h3>{{ icon('thermo') }} Температура</h3>
+                    <h3>{{ icon('thermo') }} {{ _('Температура') }}</h3>
                     <div class="stat-value" id="tempValue">—</div>
-                    <div class="stat-label">Датчики устройства</div>
+                    <div class="stat-label">{{ _('Датчики устройства') }}</div>
                 </div>
             </div>
 
             <div id="duplicateAlert" style="display:none;" class="alert-box">
-                <h4>Обнаружены дублирующиеся MAC-адреса — возможна петля в сети</h4>
+                <h4>{{ _('Обнаружены дублирующиеся MAC-адреса — возможна петля в сети') }}</h4>
                 <div id="duplicateList"></div>
             </div>
 
             <div class="chart-container">
-                <h3>{{ icon('activity') }} Состояние коммутатора</h3>
+                <h3>{{ icon('activity') }} {{ _('Состояние коммутатора') }}</h3>
                 <div class="chart-wrapper">
                     <canvas id="healthChart"></canvas>
-                    <div class="stats-empty" id="healthEmpty" hidden>Истории пока нет — нажмите «Обновить данные», чтобы опросить коммутатор.</div>
+                    <div class="stats-empty" id="healthEmpty" hidden>{{ _('Истории пока нет — нажмите «Обновить данные», чтобы опросить коммутатор.') }}</div>
                 </div>
             </div>
 
             <div class="chart-container">
-                <h3>{{ icon('chart') }} Скорость трафика порта</h3>
+                <h3>{{ icon('chart') }} {{ _('Скорость трафика порта') }}</h3>
                 <div class="port-selector">
                     <select id="portSelectStats" data-change="loadPortTraffic">
-                        <option value="">Выберите порт...</option>
+                        <option value="">{{ _('Выберите порт...') }}</option>
                     </select>
                 </div>
                 <div class="chart-wrapper">
                     <canvas id="trafficChart"></canvas>
-                    <div class="stats-empty" id="trafficEmpty">Выберите порт, чтобы увидеть скорость трафика.</div>
+                    <div class="stats-empty" id="trafficEmpty">{{ _('Выберите порт, чтобы увидеть скорость трафика.') }}</div>
                 </div>
                 <div class="stats-last-poll traffic-summary" id="trafficSummary"></div>
             </div>
@@ -649,25 +651,25 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
 </div>
 
 <!-- Результаты SNMP-опроса -->
-<div id="snmpPanel" aria-label="Результаты SNMP-опроса">
+<div id="snmpPanel" aria-label="{{ _('Результаты SNMP-опроса') }}">
     <div class="snmp-header">
-        <h3>Порты и устройства (SNMP)</h3>
-        <button type="button" class="modal-close" data-click="hideById" data-args='["snmpPanel"]' aria-label="Закрыть">&times;</button>
+        <h3>{{ _('Порты и устройства (SNMP)') }}</h3>
+        <button type="button" class="modal-close" data-click="hideById" data-args='["snmpPanel"]' aria-label="{{ _('Закрыть') }}">&times;</button>
     </div>
     <div id="snmpContent">
-        <div class="snmp-message">Нажмите «Опросить по SNMP»</div>
+        <div class="snmp-message">{{ _('Нажмите «Опросить по SNMP»') }}</div>
     </div>
 </div>
 
 <!-- Контекстное меню порта -->
 <div id="portTypeMenu">
-    <div class="menu-title">Тип порта</div>
-    <button type="button" id="menuRJ45" data-click="setPortType" data-args='["rj45"]'>RJ-45 (медь)</button>
-    <button type="button" id="menuSFP" data-click="setPortType" data-args='["sfp"]'>SFP (оптика)</button>
+    <div class="menu-title">{{ _('Тип порта') }}</div>
+    <button type="button" id="menuRJ45" data-click="setPortType" data-args='["rj45"]'>{{ _('RJ-45 (медь)') }}</button>
+    <button type="button" id="menuSFP" data-click="setPortType" data-args='["sfp"]'>{{ _('SFP (оптика)') }}</button>
     <hr>
-    <button type="button" id="menuTrunk" data-click="toggleTrunk">Назначить транк</button>
+    <button type="button" id="menuTrunk" data-click="toggleTrunk">{{ _('Назначить транк') }}</button>
     <hr>
-    <button type="button" id="menuAssignDirect" data-click="assignDirectPort">Назначить напрямую…</button>
+    <button type="button" id="menuAssignDirect" data-click="assignDirectPort">{{ _('Назначить напрямую…') }}</button>
 </div>
 
 <div id="tooltip" class="tooltip"></div>

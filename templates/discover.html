@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% from "_snmp.html" import snmp_fields %}
+{% from "_help.html" import tip, help_link %}
 {% set active_nav = 'discover' %}
+{% set help_slug = 'add-switch' %}
 
-{% block title %}Поиск и импорт{% endblock %}
-{% block crumbs %}<a href="/">Коммутаторы</a><span class="sep">/</span><span class="current">Поиск и импорт</span>{% endblock %}
+{% block title %}{{ _('Поиск и импорт') }}{% endblock %}
+{% block crumbs %}<a href="/">{{ _('Коммутаторы') }}</a><span class="sep">/</span><span class="current">{{ _('Поиск и импорт') }}</span>{% endblock %}
 
 {% block head %}
 <style>
@@ -46,37 +48,37 @@
 {% block content %}
 <div class="page-header">
     <div>
-        <h1>Поиск и импорт коммутаторов</h1>
-        <div class="page-sub">Найдите коммутаторы в сети по SNMP или загрузите их из NetBox — и добавьте нужные в один клик.</div>
+        <h1>{{ _('Поиск и импорт коммутаторов') }}</h1>
+        <div class="page-sub">{{ _('Найдите коммутаторы в сети по SNMP или загрузите их из NetBox — и добавьте нужные в один клик.') }}</div>
     </div>
 </div>
 
 <div class="segmented tabs-bar" role="tablist">
-    <button type="button" role="tab" data-tab="scan" class="is-active">{{ icon('radar') }} Поиск в сети</button>
+    <button type="button" role="tab" data-tab="scan" class="is-active">{{ icon('radar') }} {{ _('Поиск в сети') }}</button>
     <button type="button" role="tab" data-tab="netbox">{{ icon('database') }} NetBox</button>
 </div>
 
 <!-- ═════════════ Поиск в сети ═════════════ -->
 <section id="tab-scan">
     <form class="card rise" id="scanForm" autocomplete="off">
-        <div class="card-header"><div class="card-title">{{ icon('radar') }} Где и как искать</div></div>
+        <div class="card-header"><div class="card-title">{{ icon('radar') }} {{ _('Где и как искать') }}</div></div>
         <div class="card-body">
             <div class="disc-grid">
                 <div class="field">
-                    <label for="ranges">Сети и адреса</label>
+                    <label for="ranges">{{ _('Сети и адреса') }}{{ tip(_('Через запятую или с новой строки: сеть 192.168.1.0/24, диапазон 10.0.0.1-10.0.0.50, короткий диапазон 10.0.0.1-50 или отдельные адреса. За один раз — до 4096 адресов.'), 'add-switch', 'discovery') }}</label>
                     <textarea id="ranges" spellcheck="false" placeholder="192.168.1.0/24&#10;10.0.0.1-10.0.0.50&#10;10.0.5.7"></textarea>
-                    <div class="hint">Сеть (<code>192.168.1.0/24</code>), диапазон (<code>10.0.0.1-50</code>) или отдельные адреса — по одному в строке. До 4096 адресов за раз.</div>
+                    <div class="hint">{{ _('Сеть (') }}<code>192.168.1.0/24</code>{{ _('), диапазон (') }}<code>10.0.0.1-50</code>{{ _(') или отдельные адреса — по одному в строке. До 4096 адресов за раз.') }}</div>
                 </div>
                 <div>
                     {{ snmp_fields('scan', multi=True) }}
-                    <label class="check" style="margin:2px 0 6px"><input type="checkbox" id="followLldp" checked> Идти по соседям LLDP</label>
-                    <div class="hint" style="margin:0 0 14px 28px">Найденные коммутаторы сообщают адреса соседей — их тоже проверим, даже если они вне указанных сетей.</div>
+                    <label class="check" style="margin:2px 0 6px"><input type="checkbox" id="followLldp" checked> {{ _('Идти по соседям LLDP') }}{{ tip(_('Найденные коммутаторы сообщают адреса своих соседей по LLDP — они тоже будут проверены, даже если не входят в указанные сети.'), 'topology') }}</label>
+                    <div class="hint" style="margin:0 0 14px 28px">{{ _('Найденные коммутаторы сообщают адреса соседей — их тоже проверим, даже если они вне указанных сетей.') }}</div>
                 </div>
             </div>
             <div class="card-actions">
-                <button type="submit" class="btn btn-primary" id="scanStart">{{ icon('search') }} Начать поиск</button>
-                <button type="button" class="btn" id="scanStop" hidden>{{ icon('x') }} Остановить</button>
-                <span class="hint" style="margin:0">Каждый адрес опрашивается по SNMP; недоступные отсеиваются за 1–2 секунды, проверяется до 32 адресов одновременно.</span>
+                <button type="submit" class="btn btn-primary" id="scanStart">{{ icon('search') }} {{ _('Начать поиск') }}</button>
+                <button type="button" class="btn" id="scanStop" hidden>{{ icon('x') }} {{ _('Остановить') }}</button>
+                <span class="hint" style="margin:0">{{ _('Каждый адрес опрашивается по SNMP; недоступные отсеиваются за 1–2 секунды, проверяется до 32 адресов одновременно.') }}</span>
             </div>
         </div>
     </form>
@@ -90,31 +92,31 @@
 
     <div class="card rise" id="scanResultsCard" hidden>
         <div class="card-header">
-            <div class="card-title">{{ icon('server') }} Найдено <span class="badge" id="foundCount">0</span></div>
+            <div class="card-title">{{ icon('server') }} {{ _('Найдено') }} <span class="badge" id="foundCount">0</span></div>
             <div class="toolbar">
                 <div class="segmented" id="scanFilter">
-                    <button type="button" data-filter="switch" class="is-active">Коммутаторы</button>
-                    <button type="button" data-filter="all">Все устройства</button>
+                    <button type="button" data-filter="switch" class="is-active">{{ _('Коммутаторы') }}</button>
+                    <button type="button" data-filter="all">{{ _('Все устройства') }}</button>
                 </div>
             </div>
         </div>
         <div class="table-wrap">
             <table class="table res-table">
                 <thead><tr>
-                    <th class="col-check"><input type="checkbox" id="scanAll" aria-label="Выбрать все"></th>
-                    <th>Адрес</th><th>Название</th><th>Устройство</th><th>Портов</th><th>SNMP</th><th>В SwitchMap</th>
+                    <th class="col-check"><input type="checkbox" id="scanAll" aria-label="{{ _('Выбрать все') }}"></th>
+                    <th>{{ _('Адрес') }}</th><th>{{ _('Название') }}</th><th>{{ _('Устройство') }}</th><th>{{ _('Портов') }}</th><th>SNMP</th><th>{{ _('В SwitchMap') }}</th>
                 </tr></thead>
                 <tbody id="scanBody"></tbody>
             </table>
         </div>
         <div class="empty compact" id="scanEmpty" hidden>
             {{ icon('radar') }}
-            <h3 id="scanEmptyTitle">Пока ничего не найдено</h3>
-            <p id="scanEmptyText">Устройства появятся здесь по мере поиска.</p>
+            <h3 id="scanEmptyTitle">{{ _('Пока ничего не найдено') }}</h3>
+            <p id="scanEmptyText">{{ _('Устройства появятся здесь по мере поиска.') }}</p>
         </div>
         <div class="import-bar">
-            <div class="hint" style="margin:0">Название и число портов можно поправить прямо в таблице. Коммутаторы добавятся с учётными данными SNMP, которые подошли при поиске.</div>
-            <button type="button" class="btn btn-primary" id="scanAdd" disabled>{{ icon('plus') }} Добавить выбранные</button>
+            <div class="hint" style="margin:0">{{ _('Название и число портов можно поправить прямо в таблице. Коммутаторы добавятся с учётными данными SNMP, которые подошли при поиске.') }}</div>
+            <button type="button" class="btn btn-primary" id="scanAdd" disabled>{{ icon('plus') }} {{ _('Добавить выбранные') }}</button>
         </div>
     </div>
 </section>
@@ -123,75 +125,75 @@
 <section id="tab-netbox" hidden>
     <form class="card rise" id="nbForm" autocomplete="off">
         <div class="card-header">
-            <div class="card-title">{{ icon('link') }} Подключение к NetBox</div>
+            <div class="card-title">{{ icon('link') }} {{ _('Подключение к NetBox') }}</div>
             <div class="nb-status" id="nbStatus"></div>
         </div>
         <div class="card-body">
             <div class="disc-grid">
                 <div class="field">
-                    <label for="nbUrl">Адрес NetBox</label>
+                    <label for="nbUrl">{{ _('Адрес NetBox') }}</label>
                     <input type="text" id="nbUrl" placeholder="https://netbox.company.local" spellcheck="false">
                 </div>
                 <div class="field">
-                    <label for="nbToken">API-токен</label>
+                    <label for="nbToken">{{ _('API-токен') }}{{ tip(_('Создаётся в NetBox: профиль пользователя → API Tokens. Достаточно токена только для чтения. Хранится на сервере SwitchMap в зашифрованном виде.'), 'netbox', 'token') }}</label>
                     <input type="password" id="nbToken" autocomplete="new-password" spellcheck="false">
-                    <div class="hint" id="nbTokenHint">В NetBox: меню пользователя → API Tokens → Add a token. Достаточно токена только для чтения.</div>
+                    <div class="hint" id="nbTokenHint">{{ _('В NetBox: меню пользователя → API Tokens → Add a token. Достаточно токена только для чтения.') }}</div>
                 </div>
             </div>
-            <label class="check" style="margin-bottom:14px"><input type="checkbox" id="nbVerify" checked> Проверять сертификат сервера</label>
+            <label class="check" style="margin-bottom:14px"><input type="checkbox" id="nbVerify" checked> {{ _('Проверять сертификат сервера') }}</label>
             <div class="card-actions">
-                <button type="submit" class="btn btn-primary" id="nbTest">{{ icon('plug') }} Проверить и сохранить</button>
+                <button type="submit" class="btn btn-primary" id="nbTest">{{ icon('plug') }} {{ _('Проверить и сохранить') }}</button>
             </div>
         </div>
     </form>
 
     <div class="card rise" id="nbImportCard" hidden>
-        <div class="card-header"><div class="card-title">{{ icon('download') }} Импорт устройств</div></div>
+        <div class="card-header"><div class="card-title">{{ icon('download') }} {{ _('Импорт устройств') }}</div></div>
         <div class="card-body" style="padding-bottom:4px">
             <div class="nb-filters">
-                <div class="field"><label for="nbSite">Сайт</label><select id="nbSite"><option value="">Все сайты</option></select></div>
-                <div class="field"><label for="nbRole">Роль</label><select id="nbRole"><option value="">Все роли</option></select></div>
-                <div class="field"><label for="nbTag">Тег</label><select id="nbTag"><option value="">Любой</option></select></div>
+                <div class="field"><label for="nbSite">{{ _('Сайт') }}</label><select id="nbSite"><option value="">{{ _('Все сайты') }}</option></select></div>
+                <div class="field"><label for="nbRole">{{ _('Роль') }}</label><select id="nbRole"><option value="">{{ _('Все роли') }}</option></select></div>
+                <div class="field"><label for="nbTag">{{ _('Тег') }}</label><select id="nbTag"><option value="">{{ _('Любой') }}</option></select></div>
             </div>
             <div class="card-actions" style="margin-bottom:14px">
-                <label class="check"><input type="checkbox" id="nbActive" checked> Только в статусе «Active»</label>
+                <label class="check"><input type="checkbox" id="nbActive" checked> {{ _('Только в статусе «Active»') }}</label>
                 <span class="toolbar-spacer"></span>
-                <button type="button" class="btn" id="nbLoad">{{ icon('refresh') }} Показать устройства</button>
+                <button type="button" class="btn" id="nbLoad">{{ icon('refresh') }} {{ _('Показать устройства') }}</button>
             </div>
         </div>
         <div class="table-wrap" id="nbTableWrap" hidden>
             <table class="table res-table">
                 <thead><tr>
-                    <th class="col-check"><input type="checkbox" id="nbAll" aria-label="Выбрать все"></th>
-                    <th>Устройство</th><th>IP</th><th>Сайт · роль</th><th>Модель</th><th>Интерфейсов</th><th>В SwitchMap</th>
+                    <th class="col-check"><input type="checkbox" id="nbAll" aria-label="{{ _('Выбрать все') }}"></th>
+                    <th>{{ _('Устройство') }}</th><th>IP</th><th>{{ _('Сайт · роль') }}</th><th>{{ _('Модель') }}</th><th>{{ _('Интерфейсов') }}</th><th>{{ _('В SwitchMap') }}</th>
                 </tr></thead>
                 <tbody id="nbBody"></tbody>
             </table>
         </div>
         <div class="empty compact" id="nbEmpty" hidden>
             {{ icon('database') }}
-            <h3>Устройств не найдено</h3>
-            <p>Измените фильтры: сайт, роль или тег.</p>
+            <h3>{{ _('Устройств не найдено') }}</h3>
+            <p>{{ _('Измените фильтры: сайт, роль или тег.') }}</p>
         </div>
         <div class="import-bar" id="nbImportBar" hidden>
             <div>
-                <div class="modal-section-title" style="margin-top:0">SNMP для новых коммутаторов</div>
+                <div class="modal-section-title" style="margin-top:0">{{ _('SNMP для новых коммутаторов') }}</div>
                 {{ snmp_fields('nb') }}
-                <label class="check"><input type="checkbox" id="nbUpdate" checked> У уже добавленных — обновить название и IP из NetBox</label>
+                <label class="check"><input type="checkbox" id="nbUpdate" checked> {{ _('У уже добавленных — обновить название и IP из NetBox') }}{{ tip(_('Коммутатор, уже добавленный в SwitchMap, сопоставляется с устройством NetBox по связи, IP-адресу или названию. Схема портов и подключения не меняются.'), 'netbox', 'matching') }}</label>
             </div>
-            <button type="button" class="btn btn-primary" id="nbImport" disabled>{{ icon('download') }} Импортировать выбранные</button>
+            <button type="button" class="btn btn-primary" id="nbImport" disabled>{{ icon('download') }} {{ _('Импортировать выбранные') }}</button>
         </div>
     </div>
 
     <div class="card rise" id="nbSyncCard" hidden>
-        <div class="card-header"><div class="card-title">{{ icon('refresh') }} Связанные коммутаторы</div></div>
+        <div class="card-header"><div class="card-title">{{ icon('refresh') }} {{ _('Связанные коммутаторы') }}</div></div>
         <div class="card-body">
             <p style="margin:0 0 12px;color:var(--text-2);font-size:13px" id="nbLinked"></p>
             <div class="card-actions">
-                <button type="button" class="btn" id="nbSync">{{ icon('refresh') }} Синхронизировать сейчас</button>
-                <label class="check"><input type="checkbox" id="nbAuto"> Автоматически раз в час</label>
+                <button type="button" class="btn" id="nbSync">{{ icon('refresh') }} {{ _('Синхронизировать сейчас') }}</button>
+                <label class="check"><input type="checkbox" id="nbAuto"> {{ _('Автоматически раз в час') }}{{ tip(_('Раз в час названия и IP-адреса связанных коммутаторов обновляются из NetBox. Новые устройства автоматически не добавляются.'), 'netbox', 'sync') }}</label>
             </div>
-            <div class="hint">Синхронизация обновляет названия и IP-адреса связанных коммутаторов по данным NetBox. NetBox при этом не изменяется. Все правки видны в журнале и откатываются.</div>
+            <div class="hint">{{ _('Синхронизация обновляет названия и IP-адреса связанных коммутаторов по данным NetBox. NetBox при этом не изменяется. Все правки видны в журнале и откатываются.') }}</div>
         </div>
     </div>
 </section>
@@ -202,7 +204,6 @@
 const esc = eventsEscape;
 const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
     .then(async r => ({ status: r.status, data: await r.json() }));
-const plural = (n, a, b, c) => (n % 10 === 1 && n % 100 !== 11) ? a : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? b : c;
 
 // ───────── Вкладки ─────────
 function showTab(name) {
@@ -231,11 +232,11 @@ function renderJob() {
     bar.classList.toggle('is-running', running);
     bar.firstElementChild.style.width = pct + '%';
     const switches = job.found.filter(f => f.is_switch).length;
-    const state = { running: 'Идёт поиск…', done: 'Поиск завершён', cancelled: 'Поиск остановлен', error: 'Ошибка поиска: ' + (job.error || '') }[job.status];
+    const state = { running: t('Идёт поиск…'), done: t('Поиск завершён'), cancelled: t('Поиск остановлен'), error: t('Ошибка поиска: ') + (job.error || '') }[job.status];
     document.getElementById('scanProgress').innerHTML = `<span><b>${esc(state)}</b></span>
-        <span>проверено <b>${job.done}</b> из <b>${job.total}</b></span>
-        <span>отвечают по SNMP: <b>${job.found.length}</b>, из них коммутаторов: <b>${switches}</b></span>
-        ${job.follow_lldp ? '<span>с соседями LLDP</span>' : ''}`;
+        <span>${t('проверено <b>{done}</b> из <b>{total}</b>', { done: job.done, total: job.total })}</span>
+        <span>${t('отвечают по SNMP: <b>{found}</b>, из них коммутаторов: <b>{switches}</b>', { found: job.found.length, switches })}</span>
+        ${job.follow_lldp ? `<span>${t('с соседями LLDP')}</span>` : ''}`;
     renderFound();
 }
 
@@ -249,25 +250,25 @@ function renderFound() {
         const vendorInModel = f.vendor && f.model && f.model.toLowerCase().includes(f.vendor.split(' ')[0].toLowerCase());
         const device = (vendorInModel ? [f.model] : [f.vendor, f.model]).filter(Boolean);
         return `<tr data-ip="${esc(f.ip)}" class="${blocked ? 'is-muted' : ''}">
-            <td class="col-check"><input type="checkbox" data-pick ${e.checked && !blocked ? 'checked' : ''} ${blocked ? 'disabled' : ''} aria-label="Выбрать ${esc(f.ip)}"></td>
-            <td class="ip">${esc(f.ip)}${f.via ? `<span class="via">сосед ${esc(f.via)}</span>` : ''}</td>
-            <td><input type="text" data-name value="${esc(e.name)}" ${blocked ? 'disabled' : ''} aria-label="Название"></td>
+            <td class="col-check"><input type="checkbox" data-pick ${e.checked && !blocked ? 'checked' : ''} ${blocked ? 'disabled' : ''} aria-label="${esc(t('Выбрать {name}', { name: f.ip }))}"></td>
+            <td class="ip">${esc(f.ip)}${f.via ? `<span class="via">${esc(t('сосед {ip}', { ip: f.via }))}</span>` : ''}</td>
+            <td><input type="text" data-name value="${esc(e.name)}" ${blocked ? 'disabled' : ''} aria-label="${esc(t('Название'))}"></td>
             <td class="model">${device.length ? `<b>${esc(device[0])}</b>${device[1] ? ' · ' + esc(device[1]) : ''}` : '—'}
                 ${f.location ? `<div class="muted">${esc(f.location)}</div>` : ''}
-                ${f.is_switch ? '' : '<div><span class="badge badge-outline">не коммутатор?</span></div>'}</td>
-            <td><input type="number" data-ports min="1" max="96" value="${e.ports}" ${blocked ? 'disabled' : ''} aria-label="Портов"></td>
+                ${f.is_switch ? '' : `<div><span class="badge badge-outline">${t('не коммутатор?')}</span></div>`}</td>
+            <td><input type="number" data-ports min="1" max="96" value="${e.ports}" ${blocked ? 'disabled' : ''} aria-label="${esc(t('Портов'))}"></td>
             <td><span class="badge badge-outline">${esc(f.cred_label)}</span></td>
-            <td>${e.added ? `<a class="badge badge-success" href="/switch/${e.added}">добавлен</a>`
-                : f.existing ? `<a href="/switch/${f.existing.id}">уже есть: ${esc(f.existing.name)}</a>` : '<span class="badge badge-accent">новый</span>'}</td>
+            <td>${e.added ? `<a class="badge badge-success" href="/switch/${e.added}">${t('добавлен')}</a>`
+                : f.existing ? `<a href="/switch/${f.existing.id}">${esc(t('уже есть: {name}', { name: f.existing.name }))}</a>` : `<span class="badge badge-accent">${t('новый')}</span>`}</td>
         </tr>`;
     }).join('');
     const empty = rows.length === 0;
     document.getElementById('scanEmpty').hidden = !empty;
     if (empty && job.status !== 'running') {
-        document.getElementById('scanEmptyTitle').textContent = job.found.length ? 'Коммутаторов не найдено' : 'Ничего не найдено';
+        document.getElementById('scanEmptyTitle').textContent = job.found.length ? t('Коммутаторов не найдено') : t('Ничего не найдено');
         document.getElementById('scanEmptyText').textContent = job.found.length
-            ? `Отвечают по SNMP: ${job.found.length}, но ни одно устройство не похоже на коммутатор. Переключитесь на «Все устройства».`
-            : 'Ни один адрес не ответил по SNMP. Проверьте диапазон, community или учётную запись v3 и что UDP 161 доступен с этого сервера.';
+            ? t('Отвечают по SNMP: {found}, но ни одно устройство не похоже на коммутатор. Переключитесь на «Все устройства».', { found: job.found.length })
+            : t('Ни один адрес не ответил по SNMP. Проверьте диапазон, community или учётную запись v3 и что UDP 161 доступен с этого сервера.');
     }
     updateScanButton();
 }
@@ -277,7 +278,7 @@ function updateScanButton() {
         && (scanFilter === 'all' || f.is_switch))).length;
     const btn = document.getElementById('scanAdd');
     btn.disabled = n === 0;
-    btn.lastChild.textContent = n ? ` Добавить выбранные (${n})` : ' Добавить выбранные';
+    btn.lastChild.textContent = n ? t(' Добавить выбранные ({n})', { n }) : t(' Добавить выбранные');
 }
 
 document.getElementById('scanBody').addEventListener('input', e => {
@@ -308,7 +309,7 @@ async function pollJob() {
     job = await r.json();
     renderJob();
     if (job.status === 'running') pollTimer = setTimeout(pollJob, 1000);
-    else if (wasRunning && job.status === 'done') notify(`Поиск завершён: отвечают по SNMP ${job.found.length}`, 'success');
+    else if (wasRunning && job.status === 'done') notify(t('Поиск завершён: отвечают по SNMP {found}', { found: job.found.length }), 'success');
 }
 
 document.getElementById('scanForm').addEventListener('submit', async e => {
@@ -340,14 +341,14 @@ document.getElementById('scanAdd').addEventListener('click', async e => {
     const btn = e.currentTarget;
     const items = job.found.filter(f => !f.existing && edits[f.ip] && edits[f.ip].checked && !edits[f.ip].added
         && (scanFilter === 'all' || f.is_switch)).map(f => ({ ip: f.ip, name: edits[f.ip].name.trim(), ports: edits[f.ip].ports }));
-    if (items.some(i => !i.name)) { notify('У каждого коммутатора должно быть название', 'error'); return; }
+    if (items.some(i => !i.name)) { notify(t('У каждого коммутатора должно быть название'), 'error'); return; }
     btn.classList.add('is-loading');
     try {
         const { status, data } = await post(`/api/discovery/${job.id}/add`, { items });
         if (status !== 200) { notify(data.error, 'error'); return; }
         data.added.forEach(a => { edits[a.ip].added = a.id; edits[a.ip].checked = false; });
-        if (data.added.length) notify(`Добавлено ${data.added.length} ${plural(data.added.length, 'коммутатор', 'коммутатора', 'коммутаторов')}`, 'success');
-        if (data.skipped.length) notify('Пропущены: ' + data.skipped.join('; '), 'warning', 8000);
+        if (data.added.length) notify(tn(data.added.length, 'Добавлен {n} коммутатор', 'Добавлено {n} коммутатора', 'Добавлено {n} коммутаторов'), 'success');
+        if (data.skipped.length) notify(t('Пропущены: ') + data.skipped.join('; '), 'warning', 8000);
         await pollJob();
     } finally {
         btn.classList.remove('is-loading');
@@ -388,10 +389,10 @@ function nbRenderState(payload) {
     document.getElementById('nbUpdate').checked = c.update_existing;
     document.getElementById('nbAuto').checked = c.auto_sync;
     document.getElementById('nbToken').value = '';
-    document.getElementById('nbToken').placeholder = c.has_token ? 'Токен сохранён — введите новый, чтобы заменить' : '';
+    document.getElementById('nbToken').placeholder = c.has_token ? t('Токен сохранён — введите новый, чтобы заменить') : '';
     document.getElementById('nbSyncCard').hidden = !(c.url && c.has_token);
-    document.getElementById('nbLinked').innerHTML = `Связано с NetBox: <b>${payload.linked}</b> ${plural(payload.linked, 'коммутатор', 'коммутатора', 'коммутаторов')}.`
-        + (c.last_sync ? ` Последняя синхронизация: ${esc(c.last_sync)} — ${esc(c.last_sync_result)}.` : '');
+    document.getElementById('nbLinked').innerHTML = tn(payload.linked, 'Связан с NetBox <b>{n}</b> коммутатор.', 'Связано с NetBox <b>{n}</b> коммутатора.', 'Связано с NetBox <b>{n}</b> коммутаторов.')
+        + (c.last_sync ? t(' Последняя синхронизация: {last_sync} — {last_sync_result}.', { last_sync: esc(c.last_sync), last_sync_result: esc(c.last_sync_result) }) : '');
 }
 
 function fillSelect(id, items, current, emptyLabel) {
@@ -402,10 +403,10 @@ function fillSelect(id, items, current, emptyLabel) {
 
 function nbShowConnected(r) {
     nbReady = true;
-    document.getElementById('nbStatus').innerHTML = `<span class="dot online"></span> NetBox ${esc(r.version)} · устройств: ${r.devices}`;
-    fillSelect('nbSite', r.options.sites, nb.config.site, 'Все сайты');
-    fillSelect('nbRole', r.options.roles, nb.config.role, 'Все роли');
-    fillSelect('nbTag', r.options.tags, nb.config.tag, 'Любой');
+    document.getElementById('nbStatus').innerHTML = t('<span class="dot online"></span> NetBox {version} · устройств: {devices}', { version: esc(r.version), devices: r.devices });
+    fillSelect('nbSite', r.options.sites, nb.config.site, t('Все сайты'));
+    fillSelect('nbRole', r.options.roles, nb.config.role, t('Все роли'));
+    fillSelect('nbTag', r.options.tags, nb.config.tag, t('Любой'));
     document.getElementById('nbImportCard').hidden = false;
 }
 
@@ -416,7 +417,7 @@ async function nbConnect(save) {
         const cfg = nbFormConfig();
         const { data: r } = await post('/api/netbox/test', { config: cfg });
         if (!r.ok) {
-            document.getElementById('nbStatus').innerHTML = `<span class="dot offline"></span> нет подключения`;
+            document.getElementById('nbStatus').innerHTML = t('<span class="dot offline"></span> нет подключения');
             notify(r.error, 'error', 10000);
             return false;
         }
@@ -424,12 +425,12 @@ async function nbConnect(save) {
             const { status, data } = await post('/api/netbox', cfg);
             if (status !== 200) { notify(data.error, 'error'); return false; }
             nbRenderState(data);
-            notify('Подключение к NetBox работает, настройки сохранены', 'success');
+            notify(t('Подключение к NetBox работает, настройки сохранены'), 'success');
         }
         nbShowConnected(r);
         return true;
     } catch (err) {
-        notify('Не удалось связаться с сервером', 'error');
+        notify(t('Не удалось связаться с сервером'), 'error');
         return false;
     } finally {
         btn.classList.remove('is-loading');
@@ -441,24 +442,24 @@ async function nbInit() {
     nbInitDone = true;
     nbRenderState(await (await fetch('/api/netbox')).json());
     if (nb.config.url && nb.config.has_token) nbConnect(false);
-    else document.getElementById('nbStatus').innerHTML = '<span class="dot unknown"></span> не настроено';
+    else document.getElementById('nbStatus').innerHTML = t('<span class="dot unknown"></span> не настроено');
 }
 
 document.getElementById('nbForm').addEventListener('submit', e => { e.preventDefault(); nbConnect(true); });
 
-const MATCH_LABEL = { netbox: 'связан', ip: 'совпал по IP', name: 'совпал по названию' };
+const MATCH_LABEL = { netbox: t('связан'), ip: t('совпал по IP'), name: t('совпал по названию') };
 
 function nbRenderDevices() {
     document.getElementById('nbBody').innerHTML = nbDevices.map(d => {
         const m = d.match;
         const state = m
             ? `<a href="/switch/${m.switch_id}">${esc(MATCH_LABEL[m.by])}: ${esc(m.switch_name)}</a>
-               ${m.changes.length ? `<div class="match-changes">будет обновлено: ${m.changes.map(c => `${esc(c.field.toLowerCase())} ${esc(c.before)} → ${esc(c.after)}`).join('; ')}</div>` : ''}`
-            : '<span class="badge badge-accent">новый</span>';
+               ${m.changes.length ? `<div class="match-changes">${t('будет обновлено:')} ${m.changes.map(c => `${esc(c.field.toLowerCase())} ${esc(c.before)} → ${esc(c.after)}`).join('; ')}</div>` : ''}`
+            : t('<span class="badge badge-accent">новый</span>');
         return `<tr data-id="${d.id}">
-            <td class="col-check"><input type="checkbox" data-pick ${nbPicked.has(d.id) ? 'checked' : ''} aria-label="Выбрать ${esc(d.name)}"></td>
+            <td class="col-check"><input type="checkbox" data-pick ${nbPicked.has(d.id) ? 'checked' : ''} aria-label="${esc(t('Выбрать {name}', { name: d.name }))}"></td>
             <td><a href="${esc(d.url)}" target="_blank" rel="noopener"><b>${esc(d.name)}</b></a>${d.status ? `<div class="muted" style="font-size:12px">${esc(d.status)}</div>` : ''}</td>
-            <td class="ip">${d.ip ? esc(d.ip) : '<span class="muted">нет IP</span>'}</td>
+            <td class="ip">${d.ip ? esc(d.ip) : `<span class="muted">${t('нет IP')}</span>`}</td>
             <td style="font-size:12px">${esc(d.site || '—')}${d.role ? ` · ${esc(d.role)}` : ''}</td>
             <td class="model">${d.manufacturer ? `<b>${esc(d.manufacturer)}</b> · ` : ''}${esc(d.model || '—')}</td>
             <td class="num">${d.interfaces ?? '—'}</td>
@@ -467,7 +468,7 @@ function nbRenderDevices() {
     }).join('');
     const btn = document.getElementById('nbImport');
     btn.disabled = nbPicked.size === 0;
-    btn.lastChild.textContent = nbPicked.size ? ` Импортировать выбранные (${nbPicked.size})` : ' Импортировать выбранные';
+    btn.lastChild.textContent = nbPicked.size ? t(' Импортировать выбранные ({size})', { size: nbPicked.size }) : t(' Импортировать выбранные');
     document.getElementById('nbAll').checked = nbDevices.length > 0 && nbDevices.every(d => nbPicked.has(d.id));
 }
 
@@ -512,10 +513,10 @@ document.getElementById('nbImport').addEventListener('click', async e => {
             update_existing: document.getElementById('nbUpdate').checked });
         if (!r.ok) { notify(r.error, 'error', 8000); return; }
         const parts = [];
-        if (r.created.length) parts.push(`добавлено ${r.created.length}`);
-        if (r.updated.length) parts.push(`обновлено ${r.updated.length}`);
-        if (r.linked.length) parts.push(`связано ${r.linked.length}`);
-        notify('Импорт из NetBox: ' + (parts.join(', ') || 'без изменений'), 'success', 6000);
+        if (r.created.length) parts.push(t('добавлено {created}', { created: r.created.length }));
+        if (r.updated.length) parts.push(t('обновлено {updated}', { updated: r.updated.length }));
+        if (r.linked.length) parts.push(t('связано {linked}', { linked: r.linked.length }));
+        notify(t('Импорт из NetBox: ') + (parts.join(', ') || t('без изменений')), 'success', 6000);
         nbRenderState(await (await fetch('/api/netbox')).json());
         await nbLoadDevices();
     } finally {
@@ -530,8 +531,8 @@ document.getElementById('nbSync').addEventListener('click', async e => {
         const { data: r } = await post('/api/netbox/sync');
         if (!r.ok) { notify(r.error, 'error', 8000); return; }
         nbRenderState(r);
-        let msg = `Проверено ${r.checked}, обновлено ${r.updated.length}`;
-        if (r.missing.length) msg += `. Нет в NetBox: ${r.missing.map(m => m.name).join(', ')}`;
+        let msg = t('Проверено {checked}, обновлено {updated}', { checked: r.checked, updated: r.updated.length });
+        if (r.missing.length) msg += t('. Нет в NetBox: {v}', { v: r.missing.map(m => m.name).join(', ') });
         notify(msg, r.missing.length ? 'warning' : 'success', 8000);
         if (nbDevices.length) nbLoadDevices();
     } finally {
@@ -541,7 +542,7 @@ document.getElementById('nbSync').addEventListener('click', async e => {
 
 document.getElementById('nbAuto').addEventListener('change', async e => {
     const { status, data } = await post('/api/netbox', { auto_sync: e.target.checked });
-    if (status === 200) { nbRenderState(data); notify(e.target.checked ? 'Синхронизация раз в час включена' : 'Автосинхронизация выключена', 'success'); }
+    if (status === 200) { nbRenderState(data); notify(e.target.checked ? t('Синхронизация раз в час включена') : t('Автосинхронизация выключена'), 'success'); }
 });
 
 if (location.hash === '#netbox') showTab('netbox');

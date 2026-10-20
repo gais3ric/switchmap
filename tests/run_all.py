@@ -51,6 +51,8 @@ BROWSER_SUITES = [
 def env():
     e = dict(os.environ)
     e["PYTHONIOENCODING"] = "utf-8"
+    # Тесты проверяют русские тексты: язык сервера — русский (браузер в тестах тоже запускается с --lang=ru-RU)
+    e.setdefault("SWITCHMAP_LANG", "ru")
     return e
 
 

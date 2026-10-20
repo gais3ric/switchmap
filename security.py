@@ -15,9 +15,11 @@ from datetime import datetime
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from i18n import N_, _
+
 TS = "%Y-%m-%d %H:%M:%S"
 ENC_PREFIX = "enc:v1:"
-ROLES = {"admin": "Администратор", "viewer": "Наблюдатель"}
+ROLES = {"admin": N_("Администратор"), "viewer": N_("Наблюдатель")}
 MIN_PASSWORD = 8
 
 
@@ -109,24 +111,28 @@ def ensure_table(c):
             session_version INTEGER DEFAULT 0
         )""")
     # Версия сессий растёт при каждой смене пароля — все выданные ранее сессии становятся недействительными
-    if "session_version" not in [c[1] for c in c.execute("PRAGMA table_info(users)")]:
+    cols = [c[1] for c in c.execute("PRAGMA table_info(users)")]
+    if "session_version" not in cols:
         c.execute("ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 0")
+    # Язык интерфейса пользователя; NULL — как в системе (язык браузера)
+    if "language" not in cols:
+        c.execute("ALTER TABLE users ADD COLUMN language TEXT")
 
 
 def validate_username(name):
     name = (name or "").strip()
     if not (2 <= len(name) <= 64):
-        return None, "Имя пользователя — от 2 до 64 символов"
+        return None, _("Имя пользователя — от 2 до 64 символов")
     if any(ch.isspace() for ch in name):
-        return None, "Имя пользователя не должно содержать пробелов"
+        return None, _("Имя пользователя не должно содержать пробелов")
     return name, None
 
 
 def validate_password(password, username=None):
     if not password or len(password) < MIN_PASSWORD:
-        return f"Пароль должен быть не короче {MIN_PASSWORD} символов"
+        return _("Пароль должен быть не короче {MIN_PASSWORD} символов", MIN_PASSWORD=MIN_PASSWORD)
     if username and password.lower() == username.lower():
-        return "Пароль не должен совпадать с именем пользователя"
+        return _("Пароль не должен совпадать с именем пользователя")
     return None
 
 
@@ -139,12 +145,24 @@ def count_users(db, admins_only=False):
             return 0
 
 
-_COLS = "id, username, role, disabled, created, last_login, password_changed, session_version"
+_COLS = "id, username, role, disabled, created, last_login, password_changed, session_version, language"
+_NCOLS = 9
 
 
 def _row(r):
-    return {"id": r[0], "username": r[1], "role": r[2], "role_label": ROLES.get(r[2], r[2]), "disabled": bool(r[3]),
-            "created": r[4], "last_login": r[5], "password_changed": r[6], "session_version": r[7] or 0}
+    return {"id": r[0], "username": r[1], "role": r[2], "role_label": _(ROLES.get(r[2], r[2])), "disabled": bool(r[3]),
+            "created": r[4], "last_login": r[5], "password_changed": r[6], "session_version": r[7] or 0,
+            "language": r[8] or ""}
+
+
+def set_language(db, user_id, language):
+    """Язык интерфейса пользователя: код из i18n.LANGUAGES или "" — как в системе."""
+    from i18n import LANGUAGES
+    value = language if language in LANGUAGES else None
+    with sqlite3.connect(db) as conn:
+        conn.execute("UPDATE users SET language = ? WHERE id = ?", (value, user_id))
+        conn.commit()
+    return value or ""
 
 
 def public(user):
@@ -173,7 +191,7 @@ def create_user(db, username, password, role="viewer"):
     if err:
         return None, err
     if role not in ROLES:
-        return None, "Неизвестная роль"
+        return None, _("Неизвестная роль")
     now = datetime.now().strftime(TS)
     try:
         with sqlite3.connect(db) as conn:
@@ -182,13 +200,13 @@ def create_user(db, username, password, role="viewer"):
             conn.commit()
             return cur.lastrowid, None
     except sqlite3.IntegrityError:
-        return None, "Пользователь с таким именем уже есть"
+        return None, _("Пользователь с таким именем уже есть")
 
 
 def set_password(db, user_id, password):
     user = get_user(db, user_id)
     if not user:
-        return "Пользователь не найден"
+        return _("Пользователь не найден")
     err = validate_password(password, user["username"])
     if err:
         return err
@@ -204,14 +222,14 @@ def update_user(db, user_id, role=None, disabled=None):
     """Меняет роль/блокировку. Последнего активного администратора понизить или заблокировать нельзя."""
     user = get_user(db, user_id)
     if not user:
-        return "Пользователь не найден"
+        return _("Пользователь не найден")
     new_role = role if role is not None else user["role"]
     new_disabled = bool(disabled) if disabled is not None else user["disabled"]
     if new_role not in ROLES:
-        return "Неизвестная роль"
+        return _("Неизвестная роль")
     losing_admin = user["role"] == "admin" and not user["disabled"] and (new_role != "admin" or new_disabled)
     if losing_admin and count_users(db, admins_only=True) <= 1:
-        return "Нельзя понизить или заблокировать последнего администратора"
+        return _("Нельзя понизить или заблокировать последнего администратора")
     with sqlite3.connect(db) as conn:
         conn.execute("UPDATE users SET role = ?, disabled = ? WHERE id = ?", (new_role, int(new_disabled), user_id))
         conn.commit()
@@ -221,9 +239,9 @@ def update_user(db, user_id, role=None, disabled=None):
 def delete_user(db, user_id):
     user = get_user(db, user_id)
     if not user:
-        return "Пользователь не найден"
+        return _("Пользователь не найден")
     if user["role"] == "admin" and not user["disabled"] and count_users(db, admins_only=True) <= 1:
-        return "Нельзя удалить последнего администратора"
+        return _("Нельзя удалить последнего администратора")
     with sqlite3.connect(db) as conn:
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
@@ -242,12 +260,12 @@ def authenticate(db, username, password):
     if not r:
         check_password_hash(_DUMMY_HASH, password or "")
         return None
-    if not check_password_hash(r[8], password or "") or r[3]:
+    if not check_password_hash(r[_NCOLS], password or "") or r[3]:
         return None
     with sqlite3.connect(db) as conn:
         conn.execute("UPDATE users SET last_login = ? WHERE id = ?", (datetime.now().strftime(TS), r[0]))
         conn.commit()
-    return _row(r[:8])
+    return _row(r[:_NCOLS])
 
 
 # ─────────────────────────────────────────

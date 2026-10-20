@@ -1,9 +1,9 @@
 {% from "_icons.html" import icon %}<!DOCTYPE html>
-<html lang="ru" data-theme="dark">
+<html lang="{{ html_lang }}" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ 'Первый запуск' if setup else 'Вход' }} · SwitchMap</title>
+<title>{{ _('Первый запуск') if setup else _('Вход') }} · SwitchMap</title>
 <script nonce="{{ csp_nonce }}">
 (function () {
     var t = null;
@@ -34,6 +34,9 @@
 }
 .auth-error .ic { width: 16px; height: 16px; margin-top: 1px; }
 .auth-foot { margin-top: 18px; font-size: 12px; color: var(--text-3); text-align: center; }
+.auth-lang { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 16px; color: var(--text-3); }
+.auth-lang .ic { width: 14px; height: 14px; }
+.auth-lang select { width: auto; height: 28px; font-size: 12px; padding: 0 26px 0 8px; }
 </style>
 </head>
 <body>
@@ -42,15 +45,15 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="auth-brand">
             <span class="rail-logo">{{ icon('logo') }}</span>
-            <div><b>SwitchMap</b><span>Карта и мониторинг коммутаторов</span></div>
+            <div><b>SwitchMap</b><span>{{ _('Карта и мониторинг коммутаторов') }}</span></div>
         </div>
 
         {% if setup %}
-            <h1>Первый запуск</h1>
-            <div class="page-sub">Создайте учётную запись администратора. Других пользователей можно будет добавить потом.</div>
+            <h1>{{ _('Первый запуск') }}</h1>
+            <div class="page-sub">{{ _('Создайте учётную запись администратора. Других пользователей можно будет добавить потом.') }}</div>
         {% else %}
-            <h1>Вход</h1>
-            <div class="page-sub">Войдите, чтобы продолжить</div>
+            <h1>{{ _('Вход') }}</h1>
+            <div class="page-sub">{{ _('Войдите, чтобы продолжить') }}</div>
         {% endif %}
 
         {% if error %}
@@ -58,32 +61,44 @@
         {% endif %}
 
         <div class="field">
-            <label for="username">Имя пользователя</label>
+            <label for="username">{{ _('Имя пользователя') }}</label>
             <input id="username" name="username" value="{{ username }}" required autocomplete="username"
                    autocapitalize="off" spellcheck="false" {{ '' if username else 'autofocus' }}>
         </div>
         <div class="field">
-            <label for="password">Пароль{% if setup %} <span class="muted">(не короче 8 символов)</span>{% endif %}</label>
+            <label for="password">{{ _('Пароль') }}{% if setup %} <span class="muted">{{ _('(не короче 8 символов)') }}</span>{% endif %}</label>
             <input id="password" type="password" name="password" required minlength="{{ 8 if setup else 1 }}"
                    autocomplete="{{ 'new-password' if setup else 'current-password' }}" {{ 'autofocus' if username }}>
         </div>
         {% if setup %}
         <div class="field">
-            <label for="password2">Повторите пароль</label>
+            <label for="password2">{{ _('Повторите пароль') }}</label>
             <input id="password2" type="password" name="password2" required minlength="8" autocomplete="new-password">
         </div>
         {% else %}
         <label class="check" style="margin:-2px 0 18px">
-            <input type="checkbox" name="remember" value="1"> Запомнить меня на 30 дней
+            <input type="checkbox" name="remember" value="1"> {{ _('Запомнить меня на 30 дней') }}
         </label>
         <input type="hidden" name="next" value="{{ next }}">
         {% endif %}
 
-        <button type="submit" class="btn btn-primary btn-lg btn-block">{{ 'Создать администратора' if setup else 'Войти' }}</button>
+        <button type="submit" class="btn btn-primary btn-lg btn-block">{{ _('Создать администратора') if setup else _('Войти') }}</button>
         {% if not setup %}
-        <div class="auth-foot">Забыли пароль? Попросите администратора задать новый.</div>
+        <div class="auth-foot">{{ _('Забыли пароль? Попросите администратора задать новый.') }}</div>
         {% endif %}
+        <div class="auth-lang">
+            {{ icon('globe') }}
+            <select id="langSelect" aria-label="{{ _('Язык') }}">
+                {% for code, name in languages.items() %}<option value="{{ code }}" {{ 'selected' if code == lang }}>{{ name }}</option>{% endfor %}
+            </select>
+        </div>
     </form>
 </main>
+<script nonce="{{ csp_nonce }}">
+document.getElementById('langSelect').addEventListener('change', e => {
+    fetch('/api/language', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '{{ csrf_token }}' },
+        body: JSON.stringify({ language: e.target.value }) }).then(() => location.reload());
+});
+</script>
 </body>
 </html>

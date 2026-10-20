@@ -10,6 +10,8 @@ import re
 import zipfile
 from xml.sax.saxutils import escape
 
+from i18n import _
+
 _ILLEGAL_XML = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _BAD_SHEET_CHARS = re.compile(r"[\[\]:*?/\\]")
 
@@ -36,7 +38,7 @@ def _cell(ref, value, style=0):
     if value is None or value == "":
         return f'<c r="{ref}"{s}/>'
     if isinstance(value, bool):
-        value = "да" if value else "нет"
+        value = _("да") if value else _("нет")
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return f'<c r="{ref}"{s}><v>{value}</v></c>'
     text = escape(_ILLEGAL_XML.sub("", str(value)))
@@ -72,7 +74,7 @@ def _sheet_xml(sheet):
 
 
 def _safe_title(title, used):
-    title = _BAD_SHEET_CHARS.sub(" ", str(title)).strip()[:31] or "Лист"
+    title = _BAD_SHEET_CHARS.sub(" ", str(title)).strip()[:31] or _("Лист")
     base, n = title, 2
     while title.lower() in used:
         suffix = f" ({n})"
@@ -142,5 +144,5 @@ def write_csv(headers, rows):
     writer = csv.writer(out, delimiter=";", lineterminator="\r\n")
     writer.writerow(headers)
     for row in rows:
-        writer.writerow(["" if v is None else ("да" if v is True else "нет" if v is False else v) for v in row])
+        writer.writerow(["" if v is None else (_("да") if v is True else _("нет") if v is False else v) for v in row])
     return ("﻿" + out.getvalue()).encode("utf-8")

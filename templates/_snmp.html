@@ -1,59 +1,60 @@
 {#- Поля учётных данных SNMP (v2c / v3) для форм. Поведение — initSnmpFields() в app.js.
     Имена полей совпадают с колонками switches: snmp_version, snmp_community, snmp_v3_*. -#}
+{% from "_help.html" import tip, help_link %}
 {% macro snmp_fields(prefix, multi=False) -%}
 <div class="snmp-fields" data-snmp>
     <div class="snmp-row">
         <div class="field">
-            <label for="{{ prefix }}-snmp-version">Версия SNMP</label>
+            <label for="{{ prefix }}-snmp-version">{{ _('Версия SNMP') }}{{ tip(_('v2c — простой вариант: доступ по слову-паролю (community), данные идут открытым текстом. v3 — с пользователем, паролем и шифрованием; выбирайте его, если коммутатор доступен не только из защищённой сети.'), 'snmp-basics', 'v2c-or-v3') }}</label>
             <select id="{{ prefix }}-snmp-version" name="snmp_version" data-snmp-version>
                 <option value="2c">v2c (community)</option>
-                <option value="3">v3 (пользователь и пароли)</option>
+                <option value="3">{{ _('v3 (пользователь и пароли)') }}</option>
             </select>
         </div>
         <div class="field" data-snmp-v2>
-            <label for="{{ prefix }}-snmp-community">Community{% if multi %} <span class="muted">(можно несколько через запятую)</span>{% endif %}</label>
+            <label for="{{ prefix }}-snmp-community">Community{{ tip(_('Слово-пароль для чтения по SNMP v2c. Задаётся в настройках коммутатора; по умолчанию часто public. Достаточно доступа только на чтение (read-only).'), 'snmp-vendors') }}{% if multi %} <span class="muted">{{ _('(можно несколько через запятую)') }}</span>{% endif %}</label>
             <input type="text" id="{{ prefix }}-snmp-community" name="snmp_community" value="public" placeholder="public"
                    autocomplete="off" spellcheck="false">
         </div>
         <div class="field" data-snmp-v3 hidden>
-            <label for="{{ prefix }}-snmp-user">Пользователь</label>
+            <label for="{{ prefix }}-snmp-user">{{ _('Пользователь') }}{{ tip(_('Имя пользователя SNMPv3, созданного на коммутаторе (не учётная запись для входа по SSH).'), 'snmp-vendors') }}</label>
             <input type="text" id="{{ prefix }}-snmp-user" name="snmp_v3_user" autocomplete="off" spellcheck="false">
         </div>
     </div>
     <div data-snmp-v3 hidden>
         <div class="snmp-row">
             <div class="field">
-                <label for="{{ prefix }}-snmp-auth-proto">Аутентификация</label>
+                <label for="{{ prefix }}-snmp-auth-proto">{{ _('Аутентификация') }}{{ tip(_('Алгоритм и пароль, которыми коммутатор проверяет, что запрос пришёл от вас. Должны совпадать с настройками пользователя на коммутаторе. Обычно SHA.'), 'snmp-basics', 'snmpv3') }}</label>
                 <select id="{{ prefix }}-snmp-auth-proto" name="snmp_v3_auth_proto" data-snmp-auth>
                     {% for p in ['SHA', 'SHA256', 'SHA512', 'SHA224', 'SHA384', 'MD5', 'none'] %}
-                    <option value="{{ p }}">{{ 'нет' if p == 'none' else p }}</option>
+                    <option value="{{ p }}">{{ _('нет') if p == 'none' else p }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="field">
-                <label for="{{ prefix }}-snmp-auth-key">Пароль аутентификации</label>
+                <label for="{{ prefix }}-snmp-auth-key">{{ _('Пароль аутентификации') }}</label>
                 <input type="password" id="{{ prefix }}-snmp-auth-key" name="snmp_v3_auth_key" autocomplete="new-password"
-                       placeholder="не короче 8 символов">
+                       placeholder="{{ _('не короче 8 символов') }}">
             </div>
         </div>
         <div class="snmp-row">
             <div class="field">
-                <label for="{{ prefix }}-snmp-priv-proto">Шифрование</label>
+                <label for="{{ prefix }}-snmp-priv-proto">{{ _('Шифрование') }}{{ tip(_('Шифрует данные опроса. Обычно AES128. Работает только вместе с аутентификацией. «нет» — данные идут открытым текстом.'), 'snmp-basics', 'snmpv3') }}</label>
                 <select id="{{ prefix }}-snmp-priv-proto" name="snmp_v3_priv_proto" data-snmp-priv>
                     {% for p in ['AES128', 'AES192', 'AES256', 'DES', '3DES', 'none'] %}
-                    <option value="{{ p }}">{{ 'нет' if p == 'none' else p }}</option>
+                    <option value="{{ p }}">{{ _('нет') if p == 'none' else p }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="field">
-                <label for="{{ prefix }}-snmp-priv-key">Пароль шифрования</label>
+                <label for="{{ prefix }}-snmp-priv-key">{{ _('Пароль шифрования') }}</label>
                 <input type="password" id="{{ prefix }}-snmp-priv-key" name="snmp_v3_priv_key" autocomplete="new-password"
-                       placeholder="не короче 8 символов">
+                       placeholder="{{ _('не короче 8 символов') }}">
             </div>
         </div>
         <div class="field">
-            <label for="{{ prefix }}-snmp-context">Контекст <span class="muted">(обычно пусто)</span></label>
-            <input type="text" id="{{ prefix }}-snmp-context" name="snmp_v3_context" placeholder="например, vlan-10 для Cisco"
+            <label for="{{ prefix }}-snmp-context">{{ _('Контекст') }} <span class="muted">{{ _('(обычно пусто)') }}</span>{{ tip(_('Нужен редко: например, на Cisco таблицы MAC-адресов отдельных VLAN читаются через контекст vlan-N. Если не уверены — оставьте пустым.'), 'snmp-basics', 'snmpv3') }}</label>
+            <input type="text" id="{{ prefix }}-snmp-context" name="snmp_v3_context" placeholder="{{ _('например, vlan-10 для Cisco') }}"
                    autocomplete="off" spellcheck="false">
         </div>
     </div>

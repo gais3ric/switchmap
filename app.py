@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file, Response, session, abort, g
+from flask import has_request_context
 import secrets
 import sqlite3
 import json
@@ -15,8 +16,11 @@ import config
 CONFIG_FILE = config.load()
 DATA_DIR = config.data_dir()
 
+import i18n
+from i18n import N_, _, _n, _ns, _s
 import audit
 import discovery
+import helpdocs
 import maintenance
 import netbox
 import notify
@@ -43,12 +47,19 @@ app.config.update(
 )
 SESSION_IDLE_HOURS = 12  # без «запомнить меня» сессия истекает через 12 часов бездействия
 
+# За обратным прокси (Caddy, nginx, IIS) все запросы приходят с 127.0.0.1. SWITCHMAP_PROXY=1 — брать адрес
+# клиента и схему из заголовков X-Forwarded-For/-Proto (для журнала и защиты от подбора пароля).
+# Включайте, только если SwitchMap доступен лишь через прокси (SWITCHMAP_HOST=127.0.0.1): иначе адрес подделывается.
+if os.environ.get("SWITCHMAP_PROXY") == "1":
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 
 # ─────────────────────────────────────────
 # ДОСТУП: вход, роли, CSRF, защитные заголовки
 # ─────────────────────────────────────────
 
-PUBLIC_PATHS = {"/login", "/setup", "/favicon.ico"}
+PUBLIC_PATHS = {"/login", "/setup", "/favicon.ico", "/api/language"}
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 # Что можно наблюдателю из изменяющих запросов: опрос и проверки, отметка событий, свой пароль, выход
 VIEWER_WRITE_PREFIXES = ("/logout", "/api/port_events/mark_read", "/api/poll_snmp/", "/api/snmp_test/",
@@ -68,7 +79,7 @@ def current_actor():
     """Для журнала: «имя · IP» (или только IP, если вход не выполнен)."""
     from flask import has_request_context
     if not has_request_context():
-        return "система"
+        return _s("система")
     user, ip = current_user(), request.remote_addr
     return f"{user['username']} · {ip}" if user else ip
 
@@ -83,6 +94,21 @@ def _deny(code, message):
     return render_template("error.html", code=code, message=message), code
 
 
+LANG_COOKIE = "switchmap_lang"
+
+
+def request_language():
+    """Язык до входа: выбранный ранее (cookie) → язык браузера, то есть системы → английский
+    (браузер не сообщил язык вовсе — язык сервера). После входа его перекрывает язык из профиля, если он выбран."""
+    chosen = i18n.normalize(request.cookies.get(LANG_COOKIE))
+    if chosen:
+        return chosen
+    header = request.headers.get("Accept-Language")
+    if not header:
+        return i18n.server_language()
+    return i18n.negotiate(header) or i18n.FALLBACK
+
+
 @app.before_request
 def access_control():
     from flask import g
@@ -91,6 +117,7 @@ def access_control():
     path = request.path
     if path.startswith("/static/"):
         return None
+    g.lang = request_language()
     if "csrf" not in session:
         session["csrf"] = security.new_csrf_token()
 
@@ -105,28 +132,30 @@ def access_control():
                 session.pop(k, None)
         else:
             g.user = user
+            if user.get("language"):
+                g.lang = user["language"]
             if now - session.get("seen", 0) > 60:
                 session["seen"] = now
 
     if request.method in MUTATING:
         token = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
         if not security.csrf_matches(session.get("csrf"), token):
-            return _deny(400, "Сессия устарела — обновите страницу и повторите действие")
+            return _deny(400, _("Сессия устарела — обновите страницу и повторите действие"))
 
     if path in PUBLIC_PATHS:
         return None
     if not g.user:
         if security.count_users(DB) == 0:
-            return _deny(401, "Требуется настройка") if _wants_json() else redirect(url_for("setup"))
+            return _deny(401, _("Требуется настройка")) if _wants_json() else redirect(url_for("setup"))
         if _wants_json():
-            return jsonify({"ok": False, "error": "Требуется вход"}), 401
+            return jsonify({"ok": False, "error": _("Требуется вход")}), 401
         nxt = request.full_path if request.query_string else path
         return redirect(url_for("login", next=nxt))
     if g.user["role"] != "admin":
         if request.method in MUTATING and not path.startswith(VIEWER_WRITE_PREFIXES):
-            return _deny(403, "Недостаточно прав: действие доступно только администратору")
+            return _deny(403, _("Недостаточно прав: действие доступно только администратору"))
         if request.method == "GET" and path.startswith(ADMIN_GET_PREFIXES):
-            return _deny(403, "Недостаточно прав: раздел доступен только администратору")
+            return _deny(403, _("Недостаточно прав: раздел доступен только администратору"))
     return None
 
 
@@ -179,9 +208,38 @@ def security_headers(response):
 @app.context_processor
 def inject_user():
     user = current_user()
+    lang = i18n.current_language()
     return {"current_user": user, "is_admin": bool(user and user["role"] == "admin"),
             "csrf_token": session.get("csrf", ""), "csp_nonce": csp_nonce(), "vendor_script": vendor_scripts(),
-            "app_version": APP_VERSION}
+            "app_version": APP_VERSION, "lang": lang, "html_lang": i18n.HTML_LANG.get(lang, lang),
+            "languages": i18n.LANGUAGES, "user_language": (user or {}).get("language", ""),
+            "browser_lang": (i18n.negotiate(request.headers.get("Accept-Language")) or i18n.FALLBACK)
+                            if has_request_context() else i18n.FALLBACK,
+            "server_system_lang": i18n.system_language(),
+            "js_i18n": {"lang": lang, "messages": i18n.js_catalog(lang, _JS_KEYS)}}
+
+
+_JS_KEYS = i18n.js_keys()  # строки t("…") из скриптов: их переводы передаются на страницу
+app.jinja_env.globals.update(_=_, _n=_n)
+
+
+@app.route("/api/language", methods=["POST"])
+def api_language():
+    """Выбор языка: у вошедшего — в профиле, до входа — в cookie. "" — как в системе."""
+    data = request.get_json(silent=True) or {}
+    lang = data.get("language") or ""
+    if lang and lang not in i18n.LANGUAGES:
+        return jsonify({"ok": False, "error": _("Неизвестный язык")}), 400
+    user = current_user()
+    if user:
+        security.set_language(DB, user["id"], lang)
+    resp = jsonify({"ok": True, "language": lang})
+    if lang:
+        resp.set_cookie(LANG_COOKIE, lang, max_age=365 * 86400, samesite="Lax", httponly=True,
+                        secure=app.config["SESSION_COOKIE_SECURE"])
+    else:
+        resp.delete_cookie(LANG_COOKIE)
+    return resp
 
 
 @app.template_filter("plural")
@@ -224,7 +282,7 @@ def login():
         ip = request.remote_addr
         wait = login_throttle.locked_for(ip, username)
         if wait:
-            error = f"Слишком много неудачных попыток. Повторите через {wait // 60 + 1} мин."
+            error = _("Слишком много неудачных попыток. Повторите через {wait} мин.", wait=wait // 60 + 1)
         else:
             user = security.authenticate(DB, username, request.form.get("password"))
             if user:
@@ -232,9 +290,9 @@ def login():
                 _start_session(user, request.form.get("remember"))
                 return redirect(_safe_next(request.form.get("next")))
             locked = login_throttle.fail(ip, username)
-            audit.log(DB, "login_failed", actor=ip, summary=f"Пользователь «{username[:64]}»"
-                      + (" — вход заблокирован на 5 минут" if locked else ""))
-            error = "Неверное имя пользователя или пароль" + (". Вход временно заблокирован на 5 минут." if locked else "")
+            audit.log(DB, "login_failed", actor=ip, summary=_s("Пользователь «{username}»", username=username[:64])
+                      + (_s(" — вход заблокирован на 5 минут") if locked else ""))
+            error = _("Неверное имя пользователя или пароль") + (_(". Вход временно заблокирован на 5 минут.") if locked else "")
     return render_template("login.html", error=error, username=username,
                            next=request.values.get("next", "")), (401 if error else 200)
 
@@ -253,21 +311,21 @@ def setup():
     error, username = None, request.form.get("username", "admin")
     if request.method == "POST":
         if request.form.get("password") != request.form.get("password2"):
-            error = "Пароли не совпадают"
+            error = _("Пароли не совпадают")
         else:
             uid, error = security.create_user(DB, username, request.form.get("password"), "admin")
             if uid:
                 user = security.get_user(DB, uid)
                 _start_session(user, False)
                 audit.log(DB, "user_create", actor=current_actor() or request.remote_addr,
-                          summary=f"Первый администратор «{user['username']}»")
+                          summary=_s("Первый администратор «{username}»", username=user['username']))
                 return redirect(url_for("index"))
     return render_template("login.html", setup=True, error=error, username=username), (400 if error else 200)
 
 
 @app.route("/users")
 def users_view():
-    return render_template("users.html", roles=security.ROLES)
+    return render_template("users.html", roles={k: _(v) for k, v in security.ROLES.items()})
 
 
 @app.route("/api/users")
@@ -282,7 +340,7 @@ def api_user_create():
     if error:
         return jsonify({"ok": False, "error": error}), 400
     user = security.get_user(DB, uid)
-    audit.log(DB, "user_create", actor=current_actor(), summary=f"«{user['username']}», роль: {user['role_label']}")
+    audit.log(DB, "user_create", actor=current_actor(), summary=_s("«{username}», роль: {role_label}", username=user['username'], role_label=user['role_label']))
     return jsonify({"ok": True, "user": security.public(user)})
 
 
@@ -291,7 +349,7 @@ def api_user_update(user_id):
     data = request.json or {}
     me = current_user()
     if user_id == me["id"] and (data.get("disabled") or data.get("role", "admin") != "admin"):
-        return jsonify({"ok": False, "error": "Нельзя понизить или заблокировать самого себя"}), 400
+        return jsonify({"ok": False, "error": _("Нельзя понизить или заблокировать самого себя")}), 400
     before = security.get_user(DB, user_id)
     error = security.update_user(DB, user_id, role=data.get("role"), disabled=data.get("disabled"))
     if error:
@@ -299,10 +357,11 @@ def api_user_update(user_id):
     after = security.get_user(DB, user_id)
     changes = []
     if before["role"] != after["role"]:
-        changes.append({"field": "Роль", "before": before["role_label"], "after": after["role_label"]})
+        changes.append({"field": _s("Роль"), "before": _s(security.ROLES[before["role"]]),
+                        "after": _s(security.ROLES[after["role"]])})
     if before["disabled"] != after["disabled"]:
-        changes.append({"field": "Доступ", "before": "заблокирован" if before["disabled"] else "активен",
-                        "after": "заблокирован" if after["disabled"] else "активен"})
+        changes.append({"field": _s("Доступ"), "before": _s("заблокирован") if before["disabled"] else _s("активен"),
+                        "after": _s("заблокирован") if after["disabled"] else _s("активен")})
     if changes:
         audit.log(DB, "user_update", actor=current_actor(), summary=f"«{after['username']}»: " + audit.summarize(changes),
                   changes=changes)
@@ -312,7 +371,7 @@ def api_user_update(user_id):
 @app.route("/api/users/<int:user_id>", methods=["DELETE"])
 def api_user_delete(user_id):
     if user_id == current_user()["id"]:
-        return jsonify({"ok": False, "error": "Нельзя удалить самого себя"}), 400
+        return jsonify({"ok": False, "error": _("Нельзя удалить самого себя")}), 400
     user = security.get_user(DB, user_id)
     error = security.delete_user(DB, user_id)
     if error:
@@ -330,7 +389,7 @@ def api_user_password(user_id):
     user = security.get_user(DB, user_id)
     if user_id == current_user()["id"]:
         session["pv"] = user["session_version"]
-    audit.log(DB, "password_change", actor=current_actor(), summary=f"Пароль пользователя «{user['username']}» задан администратором")
+    audit.log(DB, "password_change", actor=current_actor(), summary=_s("Пароль пользователя «{username}» задан администратором", username=user['username']))
     return jsonify({"ok": True})
 
 
@@ -340,12 +399,12 @@ def api_account_password():
     data = request.json or {}
     me = current_user()
     if not security.authenticate(DB, me["username"], data.get("current")):
-        return jsonify({"ok": False, "error": "Текущий пароль указан неверно"}), 400
+        return jsonify({"ok": False, "error": _("Текущий пароль указан неверно")}), 400
     error = security.set_password(DB, me["id"], data.get("password"))
     if error:
         return jsonify({"ok": False, "error": error}), 400
     session["pv"] = security.get_user(DB, me["id"])["session_version"]
-    audit.log(DB, "password_change", actor=current_actor(), summary=f"«{me['username']}» сменил свой пароль")
+    audit.log(DB, "password_change", actor=current_actor(), summary=_s("«{username}» сменил свой пароль", username=me['username']))
     return jsonify({"ok": True})
 
 
@@ -702,13 +761,13 @@ class SnmpAuth:
         if self.version != "3":
             return None
         if not self.user:
-            return "SNMPv3: не указано имя пользователя"
+            return _("SNMPv3: не указано имя пользователя")
         if self.auth_proto == "none" and self.priv_proto != "none":
-            return "SNMPv3: шифрование нельзя включить без аутентификации"
+            return _("SNMPv3: шифрование нельзя включить без аутентификации")
         if self.auth_proto != "none" and len(self.auth_key) < 8:
-            return "SNMPv3: пароль аутентификации должен быть не короче 8 символов"
+            return _("SNMPv3: пароль аутентификации должен быть не короче 8 символов")
         if self.priv_proto != "none" and len(self.priv_key) < 8:
-            return "SNMPv3: пароль шифрования должен быть не короче 8 символов"
+            return _("SNMPv3: пароль шифрования должен быть не короче 8 символов")
         return None
 
     def to_pysnmp(self):
@@ -739,17 +798,17 @@ def _as_snmp_auth(auth):
 
 # Понятные сообщения для частых ошибок pysnmp
 _SNMP_ERROR_HINTS = (
-    ("timeout", "коммутатор не ответил (проверьте IP, доступность UDP 161, версию SNMP и community/пользователя)"),
-    ("before timeout", "коммутатор не ответил (проверьте IP, доступность UDP 161, версию SNMP и community/пользователя)"),
-    ("unknown usm user", "неизвестный пользователь SNMPv3"),
-    ("unknownusername", "неизвестный пользователь SNMPv3"),
-    ("pdu digest", "неверный пароль аутентификации SNMPv3 или протокол аутентификации"),
-    ("wrongdigest", "неверный пароль аутентификации SNMPv3 или протокол аутентификации"),
-    ("ciphertext is broken", "неверный пароль шифрования SNMPv3 или протокол шифрования"),
-    ("decryption", "неверный пароль шифрования SNMPv3 или протокол шифрования"),
-    ("ciphering services not available", "для SNMPv3 с шифрованием установите пакет cryptography: pip install cryptography"),
-    ("unsupported security level", "уровень безопасности SNMPv3 не поддерживается коммутатором для этого пользователя"),
-    ("unsupportedseclevel", "уровень безопасности SNMPv3 не поддерживается коммутатором для этого пользователя"),
+    ("timeout", N_("коммутатор не ответил (проверьте IP, доступность UDP 161, версию SNMP и community/пользователя)")),
+    ("before timeout", N_("коммутатор не ответил (проверьте IP, доступность UDP 161, версию SNMP и community/пользователя)")),
+    ("unknown usm user", N_("неизвестный пользователь SNMPv3")),
+    ("unknownusername", N_("неизвестный пользователь SNMPv3")),
+    ("pdu digest", N_("неверный пароль аутентификации SNMPv3 или протокол аутентификации")),
+    ("wrongdigest", N_("неверный пароль аутентификации SNMPv3 или протокол аутентификации")),
+    ("ciphertext is broken", N_("неверный пароль шифрования SNMPv3 или протокол шифрования")),
+    ("decryption", N_("неверный пароль шифрования SNMPv3 или протокол шифрования")),
+    ("ciphering services not available", N_("для SNMPv3 с шифрованием установите пакет cryptography: pip install cryptography")),
+    ("unsupported security level", N_("уровень безопасности SNMPv3 не поддерживается коммутатором для этого пользователя")),
+    ("unsupportedseclevel", N_("уровень безопасности SNMPv3 не поддерживается коммутатором для этого пользователя")),
 )
 
 
@@ -757,7 +816,7 @@ def _humanize_snmp_error(text):
     low = str(text).lower()
     for needle, hint in _SNMP_ERROR_HINTS:
         if needle in low:
-            return f"{hint} ({text})"
+            return f"{_(hint)} ({text})"
     return str(text)
 
 
@@ -770,7 +829,7 @@ def snmp_walk_ex(ip, auth, oid, timeout=3):
         from pysnmp.hlapi.v3arch.asyncio import (
             SnmpEngine, UdpTransportTarget, ContextData, ObjectType, ObjectIdentity, walk_cmd)
     except ImportError:
-        return [], "pysnmp не установлен. Выполните: pip install pysnmp"
+        return [], _("pysnmp не установлен. Выполните: pip install pysnmp")
 
     auth = _as_snmp_auth(auth)
     error = []
@@ -924,7 +983,7 @@ def poll_switch_snmp(ip, community, port_count=None):
     # Базовая информация о портах. По первому запросу понимаем, отвечает ли коммутатор.
     ifdescr_data, first_error = snmp_walk_ex(ip, community, "1.3.6.1.2.1.2.2.1.2")  # ifDescr
     if not ifdescr_data:
-        return {"error": f"SNMP: {first_error or 'коммутатор не вернул список интерфейсов'}"}
+        return {"error": "SNMP: " + (first_error or _("коммутатор не вернул список интерфейсов"))}
     ifstatus_data = snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.8")  # ifOperStatus
     ifspeed_data = snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.5")   # ifSpeed, бит/с (до 4.2 Гбит/с)
     iftype_data = snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.3")    # ifType
@@ -1347,10 +1406,10 @@ def _fmt_mbps(v):
     if v is None:
         return "—"
     if v >= 1000:
-        return f"{v / 1000:.2f} Гбит/с"
+        return _("{v:.2f} Гбит/с", v=v / 1000)
     if v >= 1:
-        return f"{v:.1f} Мбит/с"
-    return f"{v * 1000:.0f} Кбит/с"
+        return _("{v:.1f} Мбит/с", v=v)
+    return _("{v:.0f} Кбит/с", v=v * 1000)
 
 
 def evaluate_port_alerts(port, prev_alerts, settings, now):
@@ -1368,10 +1427,10 @@ def evaluate_port_alerts(port, prev_alerts, settings, now):
         if not alerts.get("util") and util >= limit:
             alerts["util"] = True
             events.append({**base, "event_type": "util_high", "details":
-                           f"Загрузка {util:.0f}% (↓ {_fmt_mbps(port.get('in_mbps'))}, ↑ {_fmt_mbps(port.get('out_mbps'))}), порог {limit}%"})
+                           _s("Загрузка {util:.0f}% (↓ {in_mbps}, ↑ {out_mbps}), порог {limit}%", util=util, in_mbps=_fmt_mbps(port.get('in_mbps')), out_mbps=_fmt_mbps(port.get('out_mbps')), limit=limit)})
         elif alerts.get("util") and util < max(limit - 10, limit * 0.9):
             alerts["util"] = False
-            events.append({**base, "event_type": "util_ok", "details": f"Загрузка снизилась до {util:.0f}%"})
+            events.append({**base, "event_type": "util_ok", "details": _s("Загрузка снизилась до {util:.0f}%", util=util)})
     elif alerts.get("util") and (not limit or not port.get("up")):
         alerts["util"] = False  # порог выключили или порт упал — тихо сбрасываем
 
@@ -1381,10 +1440,10 @@ def evaluate_port_alerts(port, prev_alerts, settings, now):
         if not alerts.get("errors") and errs >= limit:
             alerts["errors"] = True
             events.append({**base, "event_type": "errors_high", "details":
-                           f"{errs} ошибок с прошлого опроса, порог {limit}"})
+                           _s("{errs} ошибок с прошлого опроса, порог {limit}", errs=errs, limit=limit)})
         elif alerts.get("errors") and errs < limit:
             alerts["errors"] = False
-            events.append({**base, "event_type": "errors_ok", "details": f"Ошибок с прошлого опроса: {errs}"})
+            events.append({**base, "event_type": "errors_ok", "details": _s("Ошибок с прошлого опроса: {errs}", errs=errs)})
     elif alerts.get("errors") and not limit:
         alerts["errors"] = False
     return {k: v for k, v in alerts.items() if v}, events
@@ -1396,7 +1455,7 @@ def evaluate_health_alerts(health, prev_state, settings, now):
     events = []
     checks = (
         ("cpu", "alert_cpu_percent", health.get("cpu_usage"), "CPU", "%", 10),
-        ("temp", "alert_temp_c", health.get("temperature"), "Температура", "°C", 5),
+        ("temp", "alert_temp_c", health.get("temperature"), _s("Температура"), "°C", 5),
     )
     for key, setting, value, label, unit, hysteresis in checks:
         limit = settings[setting]
@@ -1407,10 +1466,10 @@ def evaluate_health_alerts(health, prev_state, settings, now):
         base = {"ifindex": None, "port_name": label, "port_number": None, "event_time": now}
         if not state.get(key) and value >= limit:
             state[key] = True
-            events.append({**base, "event_type": f"{key}_high", "details": f"{label}: {value:.0f}{unit}, порог {limit}{unit}"})
+            events.append({**base, "event_type": f"{key}_high", "details": _s("{label}: {value:.0f}{unit}, порог {limit}{unit}", label=label, value=value, unit=unit, limit=limit)})
         elif state.get(key) and value < limit - hysteresis:
             state.pop(key, None)
-            events.append({**base, "event_type": f"{key}_ok", "details": f"{label} вернулась в норму: {value:.0f}{unit}"})
+            events.append({**base, "event_type": f"{key}_ok", "details": _s("{label} вернулась в норму: {value:.0f}{unit}", label=label, value=value, unit=unit)})
     return state, events
 
 
@@ -1487,6 +1546,9 @@ def get_settings():
     settings = {"poll_enabled": rows.get("poll_enabled", "0") == "1"}
     for key, default, lo, hi in INT_SETTINGS:
         settings[key] = _int_setting(rows.get(key, default), default, lo, hi)
+    # Язык сервера: журнал, события, уведомления, экспорт по расписанию. "" — язык системы сервера
+    lang = rows.get("server_language", "")
+    settings["server_language"] = lang if lang in i18n.LANGUAGES else ""
     return settings
 
 
@@ -1498,6 +1560,10 @@ def save_settings(updates):
     for key, default, lo, hi in INT_SETTINGS:
         if key in updates:
             values.append((key, str(_int_setting(updates[key], default, lo, hi))))
+    if "server_language" in updates:
+        lang = updates["server_language"] if updates["server_language"] in i18n.LANGUAGES else ""
+        values.append(("server_language", lang))
+        i18n.set_server_language(lang)
     with sqlite3.connect(DB) as conn:
         c = conn.cursor()
         c.executemany(
@@ -1534,7 +1600,7 @@ _periodic_poll_running = threading.Event()
 def dispatch_notifications(force=False):
     """Пока идёт плановый опрос, ежеминутная рассылка ждёт его конца — чтобы не разрывать пачку событий."""
     if _periodic_poll_running.is_set() and not force:
-        return {"skipped": "идёт плановый опрос"}
+        return {"skipped": _("идёт плановый опрос")}
     return notify.dispatch(DB, SECRET_BOX)
 
 
@@ -1544,7 +1610,7 @@ _maintenance_lock = threading.Lock()
 def run_maintenance(vacuum=False):
     """Свёртка истории и очистка по срокам хранения из настроек. Не запускается параллельно сама с собой."""
     if not _maintenance_lock.acquire(blocking=False):
-        return {"skipped": "обслуживание уже выполняется"}
+        return {"skipped": _("обслуживание уже выполняется")}
     try:
         s = get_settings()
         return maintenance.rollup_and_prune(
@@ -1632,6 +1698,7 @@ def prepare_database():
         conn.close()
     if mode != "wal":
         log.warning("Режим WAL для базы не включён (%s): при нагрузке возможны задержки", mode)
+    i18n.set_server_language(get_settings()["server_language"])
     encrypted = security.encrypt_plaintext_snmp_keys(DB, SECRET_BOX)
     if encrypted:
         log.info("Зашифровано паролей SNMPv3: %s", encrypted)
@@ -1851,7 +1918,7 @@ def collect_topology():
                     unknown_nodes[target_id] = {
                         "id": target_id,
                         "type": "unknown",
-                        "name": remote_name or "Неизвестный LLDP-узел",
+                        "name": remote_name or _("Неизвестный LLDP-узел"),
                         "chassis": remote_chassis,
                         "status": "unknown"
                     }
@@ -1966,7 +2033,7 @@ def create_switch_record(name, ports, ip_address, auth, layout="single", patch_p
                            list(cols.values()))
         new_id = cur.lastrowid
         conn.commit()
-    ports_label = f"{ports} {notify._plural(ports, 'порт', 'порта', 'портов')}"
+    ports_label = _ns(ports, "{n} порт", "{n} порта", "{n} портов")
     summary = ", ".join(x for x in (source, model, ports_label,f"IP {ip_address}" if ip_address else "",
                                     auth.describe() if auth.version == "3" else "") if x)
     audit.log(DB, "create", actor=current_actor(), switch_id=new_id, switch_name=name, summary=summary)
@@ -1989,7 +2056,7 @@ def add_switch():
         ip_address = request.form.get("ip_address", "").strip()
         auth, error = snmp_auth_from_form(request.form)
         if not name or error:
-            return _deny(400, error or "Укажите название коммутатора")
+            return _deny(400, error or _("Укажите название коммутатора"))
 
         patch_panels_data = request.form.get("patch_panels_data")
         has_patch = request.form.get("has_patch_panel", "1")
@@ -2070,7 +2137,7 @@ def update_switch(switch_id):
             f.get("snmp_v3_context", "").strip())
         error = auth.validate()
         if error:
-            return f"Настройки не сохранены: {error}. <a href='/switch/{switch_id}'>Вернуться</a>", 400
+            return _("Настройки не сохранены: {error}. <a href='/switch/{switch_id}'>Вернуться</a>", error=error, switch_id=switch_id), 400
 
         def stored_key(new_value, current_value, proto):
             # Неизменённый пароль оставляем как есть (тот же шифротекст — журнал не увидит «изменения»)
@@ -2134,7 +2201,7 @@ def delete_switch(switch_id):
     if row:
         # Снимок для восстановления: настройки, подключения, патч-панели, привязанные устройства
         audit.log(DB, "delete", actor=current_actor(), switch_id=switch_id, switch_name=row["name"],
-                  summary=f"{row['ports']} портов" + (f", IP {row['ip_address']}" if row["ip_address"] else ""),
+                  summary=_s("{ports} портов", ports=row['ports']) + (f", IP {row['ip_address']}" if row["ip_address"] else ""),
                   revert={"switch": row, "devices": [dict(zip(dev_cols, d)) for d in devices]})
     return redirect(url_for("index"))
 
@@ -2146,6 +2213,32 @@ def delete_switch(switch_id):
 @app.route("/topology")
 def topology_view():
     return render_template("topology.html")
+
+
+# ─────────────────────────────────────────
+# СПРАВКА
+# ─────────────────────────────────────────
+
+def _help_nav(lang):
+    items = helpdocs.articles(lang)
+    return [{"key": key, "label": _(label), "articles": [a for a in items if a["category"] == key]}
+            for key, label in helpdocs.CATEGORIES if any(a["category"] == key for a in items)]
+
+
+@app.route("/help")
+@app.route("/help/<slug>")
+def help_page(slug=None):
+    lang = i18n.current_language()
+    items = helpdocs.articles(lang)
+    if not items:
+        abort(404)
+    article = helpdocs.get(lang, slug or "getting-started") or items[0]
+    if slug and article["slug"] != slug:
+        abort(404)
+    body, toc = helpdocs.render(article["body"])
+    return render_template("help.html", article=article, body=body, toc=toc, nav=_help_nav(lang),
+                           search_index=helpdocs.search_index(lang),
+                           other_lang=article["lang"] != lang and i18n.LANGUAGES.get(article["lang"]))
 
 
 @app.route("/api/topology")
@@ -2164,7 +2257,7 @@ def api_status(switch_id):
         c.execute("SELECT ip_address FROM switches WHERE id=?", (switch_id,))
         row = c.fetchone()
     if not row or not row[0]:
-        return jsonify({"status": "unknown", "message": "IP не задан"})
+        return jsonify({"status": "unknown", "message": _("IP не задан")})
     ip = row[0]
     online = ping_host(ip)
     return jsonify({"status": "online" if online else "offline", "ip": ip})
@@ -2216,15 +2309,15 @@ def track_reachability(switch_id, row, ip, auth, result, now):
     if failed and not state.get("unreachable"):
         state["unreachable"] = now
         reason = str(result["error"]).removeprefix("SNMP: ")
-        event = {"event_type": "switch_down", "details": f"Нет ответа по SNMP ({reason}). " + (
-            "По ping отвечает — проверьте настройки SNMP на коммутаторе." if ping_host(ip)
-            else "По ping тоже не отвечает.")}
+        event = {"event_type": "switch_down", "details": _s("Нет ответа по SNMP ({reason}). ", reason=reason) + (
+            _s("По ping отвечает — проверьте настройки SNMP на коммутаторе.") if ping_host(ip)
+            else _s("По ping тоже не отвечает."))}
     elif not failed and state.get("unreachable"):
         since = datetime.strptime(state.pop("unreachable"), "%Y-%m-%d %H:%M:%S")
         minutes = (datetime.strptime(now, "%Y-%m-%d %H:%M:%S") - since).total_seconds() / 60
-        event = {"event_type": "switch_up", "details": f"Был недоступен {notify._duration(minutes)}"}
+        event = {"event_type": "switch_up", "details": _s("Был недоступен {minutes}", minutes=notify._duration(minutes))}
     if event:
-        insert_port_events(switch_id, [{**event, "ifindex": None, "port_name": "Коммутатор",
+        insert_port_events(switch_id, [{**event, "ifindex": None, "port_name": _s("Коммутатор"),
                                         "port_number": None, "event_time": now}])
         with sqlite3.connect(DB) as conn:
             conn.execute("UPDATE switches SET alert_state=? WHERE id=?", (json.dumps(state), switch_id))
@@ -2252,7 +2345,7 @@ def poll_switch_and_log_events(switch_id):
         """, (switch_id,))}
 
     if not row or not row["ip_address"]:
-        return {"error": "IP адрес коммутатора не задан"}
+        return {"error": _("IP адрес коммутатора не задан")}
 
     ip, snapshot_raw = row["ip_address"], row["port_status_snapshot"]
     auth = SnmpAuth.from_row(row)
@@ -2377,16 +2470,16 @@ def api_snmp_test(switch_id):
         conn.row_factory = sqlite3.Row
         row = conn.execute("SELECT * FROM switches WHERE id=?", (switch_id,)).fetchone()
     if not row:
-        return jsonify({"ok": False, "error": "Коммутатор не найден"}), 404
+        return jsonify({"ok": False, "error": _("Коммутатор не найден")}), 404
     if not row["ip_address"]:
-        return jsonify({"ok": False, "error": "IP адрес коммутатора не задан"})
+        return jsonify({"ok": False, "error": _("IP адрес коммутатора не задан")})
     auth = SnmpAuth.from_row(row)
     error = auth.validate()
     if error:
         return jsonify({"ok": False, "error": error, "auth": auth.describe()})
     name, error = snmp_walk_ex(row["ip_address"], auth, "1.3.6.1.2.1.1.5")
     if not name:
-        return jsonify({"ok": False, "error": error or "коммутатор не вернул sysName", "auth": auth.describe()})
+        return jsonify({"ok": False, "error": error or _("коммутатор не вернул sysName"), "auth": auth.describe()})
     descr = snmp_walk(row["ip_address"], auth, "1.3.6.1.2.1.1.1")
     return jsonify({"ok": True, "auth": auth.describe(), "sys_name": snmp_value_text(name[0][1]),
                     "sys_descr": snmp_value_text(descr[0][1]) if descr else ""})
@@ -2397,7 +2490,7 @@ def probe_switch(ip, auth, timeout=2, details=True):
     Сначала один короткий запрос (sysDescr) — недоступные адреса отсеиваются быстро."""
     descr, error = snmp_walk_ex(ip, auth, "1.3.6.1.2.1.1.1", timeout)
     if not descr:
-        return {"ok": False, "error": error or "нет ответа по SNMP"}
+        return {"ok": False, "error": error or _("нет ответа по SNMP")}
 
     def scalar(oid):
         rows = snmp_walk(ip, auth, oid, timeout)
@@ -2441,7 +2534,7 @@ def api_snmp_probe():
     data = request.get_json(silent=True) or {}
     ip = (data.get("ip_address") or "").strip()
     if not ip:
-        return jsonify({"ok": False, "error": "Укажите IP-адрес"})
+        return jsonify({"ok": False, "error": _("Укажите IP-адрес")})
     auth, error = snmp_auth_from_form(data)
     if error:
         return jsonify({"ok": False, "error": error})
@@ -2506,7 +2599,7 @@ def api_discovery_current():
 def api_discovery_status(job_id):
     job = discovery.get_job(job_id)
     if not job:
-        return jsonify({"error": "Поиск не найден — возможно, сервер перезапускался. Запустите поиск заново"}), 404
+        return jsonify({"error": _("Поиск не найден — возможно, сервер перезапускался. Запустите поиск заново")}), 404
     return jsonify(job.public(_existing_by_ip()))
 
 
@@ -2523,7 +2616,7 @@ def api_discovery_add(job_id):
     """Добавить выбранные найденные устройства. body: {items: [{ip, name, ports}]}"""
     job = discovery.get_job(job_id)
     if not job:
-        return jsonify({"error": "Поиск не найден — запустите его заново"}), 404
+        return jsonify({"error": _("Поиск не найден — запустите его заново")}), 404
     found = {f["ip"]: f for f in job.found}
     existing = _existing_by_ip()
     added, skipped = [], []
@@ -2533,13 +2626,13 @@ def api_discovery_add(job_id):
         if not f:
             continue
         if ip in existing:
-            skipped.append(f"{ip}: уже есть («{existing[ip][1]}»)")
+            skipped.append(_("{ip}: уже есть («{ip2}»)", ip=ip, ip2=existing[ip][1]))
             continue
         name = (str(item.get("name") or "").strip() or f.get("sys_name") or ip)[:100]
         ports = _clamp_ports(item.get("ports") or f.get("ports"))
         new_id = create_switch_record(name, ports, ip, job.creds[f["cred"]], "double" if ports >= 24 else "single",
                                       model=_model_label(f.get("vendor"), f.get("model")) or None,
-                                      source="Автообнаружение")
+                                      source=_s("Автообнаружение"))
         existing[ip] = (new_id, name)
         added.append({"id": new_id, "name": name, "ip": ip})
     return jsonify({"added": added, "skipped": skipped})
@@ -2571,19 +2664,19 @@ def api_netbox_get():
 @app.route("/api/netbox", methods=["POST"])
 def api_netbox_save():
     before = netbox.load_config(DB)
-    _, cfg, error = _netbox_form_config()
+    _nb, cfg, error = _netbox_form_config()
     if error:
         return jsonify({"error": error}), 400
     netbox.save_config(DB, cfg)
     changes = []
-    yn = lambda v: "да" if v else "нет"
-    for key, label, fmt in (("url", "Адрес NetBox", str), ("verify", "Проверять сертификат", yn),
-                            ("auto_sync", "Синхронизация раз в час", yn)):
+    yn = lambda v: _("да") if v else _("нет")
+    for key, label, fmt in (("url", _("Адрес NetBox"), str), ("verify", _("Проверять сертификат"), yn),
+                            ("auto_sync", _("Синхронизация раз в час"), yn)):
         if before[key] != cfg[key]:
             changes.append({"field": label, "before": fmt(before[key]) or "—", "after": fmt(cfg[key]) or "—"})
     if before["token"] != cfg["token"]:
-        changes.append({"field": "Токен NetBox", "before": "•••" if before["token"] else "—",
-                        "after": "изменён" if cfg["token"] else "удалён"})
+        changes.append({"field": _s("Токен NetBox"), "before": "•••" if before["token"] else "—",
+                        "after": _s("изменён") if cfg["token"] else _s("удалён")})
     if changes:
         audit.log(DB, "netbox_settings", actor=current_actor(), summary=audit.summarize(changes), changes=changes)
     return jsonify(_netbox_payload())
@@ -2591,7 +2684,7 @@ def api_netbox_save():
 
 @app.route("/api/netbox/test", methods=["POST"])
 def api_netbox_test():
-    _, cfg, error = _netbox_form_config()
+    _nb, cfg, error = _netbox_form_config()
     if error:
         return jsonify({"ok": False, "error": error})
     try:
@@ -2610,7 +2703,7 @@ def _switch_rows():
 
 @app.route("/api/netbox/preview", methods=["POST"])
 def api_netbox_preview():
-    _, cfg, error = _netbox_form_config()
+    _nb, cfg, error = _netbox_form_config()
     if error:
         return jsonify({"ok": False, "error": error})
     try:
@@ -2638,7 +2731,7 @@ def _apply_netbox_changes(switch_id, device, actor_note):
     changes, revert = audit.diff_switch(before, after)
     if changes:
         audit.log(DB, "update", actor=actor_note, switch_id=switch_id, switch_name=after["name"],
-                  summary="Из NetBox: " + audit.summarize(changes), changes=changes,
+                  summary=_s("Из NetBox: ") + audit.summarize(changes), changes=changes,
                   revert={"fields": revert} if revert else None)
     return changes
 
@@ -2650,7 +2743,7 @@ def api_netbox_import():
     cfg = netbox.load_config(DB)
     ids = [int(i) for i in data.get("ids") or [] if str(i).isdigit()][:1000]
     if not ids:
-        return jsonify({"ok": False, "error": "Не выбрано ни одного устройства"})
+        return jsonify({"ok": False, "error": _("Не выбрано ни одного устройства")})
     auth, error = snmp_auth_from_form(data.get("snmp") or {})
     if error:
         return jsonify({"ok": False, "error": error})
@@ -2679,12 +2772,12 @@ def api_netbox_import():
         ports = _clamp_ports(ports)
         new_id = create_switch_record(p["name"][:100], ports, p["ip"], auth, "double" if ports >= 24 else "single",
                                       model=_model_label(p["manufacturer"], p["model"]) or None, netbox_id=dev_id,
-                                      source="Импорт из NetBox")
+                                      source=_s("Импорт из NetBox"))
         created.append({"id": new_id, "name": p["name"]})
     return jsonify({"ok": True, "created": created, "linked": linked, "updated": updated})
 
 
-def netbox_sync(actor="NetBox (синхронизация)"):
+def netbox_sync(actor=_("NetBox (синхронизация)")):
     """Обновляет имена и IP связанных коммутаторов. Возвращает итог для отображения."""
     cfg = netbox.load_config(DB)
     with sqlite3.connect(DB) as conn:
@@ -2703,8 +2796,8 @@ def netbox_sync(actor="NetBox (синхронизация)"):
     result = {"checked": len(rows), "updated": updated, "missing": missing}
     saved = netbox.load_config(DB)
     saved["last_sync"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    saved["last_sync_result"] = (f"проверено {len(rows)}, обновлено {len(updated)}" +
-                                 (f", нет в NetBox: {len(missing)}" if missing else ""))
+    saved["last_sync_result"] = (_("проверено {rows}, обновлено {updated}", rows=len(rows), updated=len(updated)) +
+                                 (_(", нет в NetBox: {missing}", missing=len(missing)) if missing else ""))
     netbox.save_config(DB, saved)
     return result
 
@@ -2717,7 +2810,7 @@ def scheduled_netbox_sync():
         except netbox.NetBoxError as e:
             saved = netbox.load_config(DB)
             saved["last_sync"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            saved["last_sync_result"] = f"ошибка: {e}"
+            saved["last_sync_result"] = _("ошибка: {e}", e=e)
             netbox.save_config(DB, saved)
 
 
@@ -2744,7 +2837,7 @@ def api_port_load(switch_id):
     Ключ — номер физического порта на схеме."""
     snapshot = load_port_snapshot(switch_id)
     if snapshot is None:
-        return jsonify({"error": "Коммутатор не найден"}), 404
+        return jsonify({"error": _("Коммутатор не найден")}), 404
     ports = {}
     for ifindex, info in snapshot.items():
         if not isinstance(info, dict) or not info.get("port"):
@@ -2837,7 +2930,7 @@ def search_network(q, limit=50):
                 if isinstance(info, dict) and info.get("port") and needle in (info.get("alias") or "").lower():
                     results.append({"kind": "port", "switch_id": sw["id"], "switch_name": sw["name"],
                                     "port": info["port"], "port_name": info.get("name"), "label": info["alias"],
-                                    "source": "описание на коммутаторе", "uplink": False})
+                                    "source": _("описание на коммутаторе"), "uplink": False})
             try:
                 connections = json.loads(sw["connections"] or "{}")
             except (ValueError, TypeError):
@@ -2847,7 +2940,7 @@ def search_network(q, limit=50):
                 if name and needle in name.lower():
                     results.append({"kind": "port", "switch_id": sw["id"], "switch_name": sw["name"],
                                     "port": int(port) if str(port).isdigit() else port, "label": name,
-                                    "source": "подключение в приложении", "uplink": False})
+                                    "source": _("подключение в приложении"), "uplink": False})
 
     # Сначала конечные порты, потом uplink; внутри группы — самые свежие (сортировка устойчивая)
     results.sort(key=lambda r: r.get("last_seen") or "", reverse=True)
@@ -2866,7 +2959,7 @@ def api_set_vlan_color(switch_id):
     vlan_id = str(data.get("vlan_id", "")).strip()
     color = (data.get("color") or "").strip()
     if not vlan_id:
-        return jsonify({"error": "Не указан VLAN ID"}), 400
+        return jsonify({"error": _("Не указан VLAN ID")}), 400
 
     with sqlite3.connect(DB) as conn:
         c = conn.cursor()
@@ -2888,7 +2981,7 @@ def api_set_vlan_color(switch_id):
 
     sw = fetch_switch(switch_id) or {}
     audit.log(DB, "vlan_color", actor=current_actor(), switch_id=switch_id, switch_name=sw.get("name"),
-              summary=f"VLAN {vlan_id}: {color or 'цвет сброшен'}")
+              summary=f"VLAN {vlan_id}: {color or _s('цвет сброшен')}")
     return jsonify({"success": True, "vlan_colors": colors})
 
 
@@ -2901,7 +2994,7 @@ def api_assign_device(switch_id):
     hostname = data.get("hostname", "")
     notes = data.get("notes", "")
     if not port_number:
-        return jsonify({"error": "Не указан номер порта"}), 400
+        return jsonify({"error": _("Не указан номер порта")}), 400
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     is_online = 1 if ping_host(ip) else 0
@@ -2922,7 +3015,7 @@ def api_assign_device(switch_id):
         conn.commit()
     sw = fetch_switch(switch_id) or {}
     audit.log(DB, "device_assign", actor=current_actor(), switch_id=switch_id, switch_name=sw.get("name"),
-              summary=f"Порт {port_number}: " + (" · ".join(x for x in (hostname, ip, mac) if x) or "устройство"))
+              summary=_s("Порт {port_number}: ", port_number=port_number) + (" · ".join(x for x in (hostname, ip, mac) if x) or _s("устройство")))
     return jsonify({"success": True, "is_online": bool(is_online)})
 
 
@@ -2938,7 +3031,7 @@ def api_remove_device(switch_id, port_number):
     if dev:
         sw = fetch_switch(switch_id) or {}
         audit.log(DB, "device_remove", actor=current_actor(), switch_id=switch_id, switch_name=sw.get("name"),
-                  summary=f"Порт {port_number}: " + (" · ".join(x for x in (dev[2], dev[0], dev[1]) if x) or "устройство"))
+                  summary=_s("Порт {port_number}: ", port_number=port_number) + (" · ".join(x for x in (dev[2], dev[0], dev[1]) if x) or _s("устройство")))
     return jsonify({"success": True})
 
 
@@ -3046,11 +3139,11 @@ def api_port_events_mark_read():
         else:
             # Валидация: ids должен быть списком целых чисел
             if not isinstance(ids, list):
-                return jsonify({"error": "ids должен быть массивом"}), 400
+                return jsonify({"error": _("ids должен быть массивом")}), 400
             try:
                 validated_ids = [int(x) for x in ids]
             except (ValueError, TypeError):
-                return jsonify({"error": "ids должен содержать только числа"}), 400
+                return jsonify({"error": _("ids должен содержать только числа")}), 400
 
             if validated_ids:
                 placeholders = ",".join("?" for _ in validated_ids)
@@ -3066,11 +3159,12 @@ def api_get_settings():
 
 
 SETTING_LABELS = {
-    "poll_enabled": "Периодический опрос", "poll_interval_minutes": "Интервал опроса, мин",
-    "alert_util_percent": "Порог загрузки порта, %", "alert_errors_per_poll": "Порог ошибок",
-    "alert_cpu_percent": "Порог CPU, %", "alert_temp_c": "Порог температуры, °C",
-    "retention_raw_days": "Хранить сырые данные, дней", "retention_hourly_days": "Хранить почасовые данные, дней",
-    "retention_events_days": "Хранить события, дней", "backup_auto": "Автокопия базы", "backup_keep": "Хранить копий",
+    "poll_enabled": N_("Периодический опрос"), "poll_interval_minutes": N_("Интервал опроса, мин"),
+    "alert_util_percent": N_("Порог загрузки порта, %"), "alert_errors_per_poll": N_("Порог ошибок"),
+    "alert_cpu_percent": N_("Порог CPU, %"), "alert_temp_c": N_("Порог температуры, °C"),
+    "retention_raw_days": N_("Хранить сырые данные, дней"), "retention_hourly_days": N_("Хранить почасовые данные, дней"),
+    "retention_events_days": N_("Хранить события, дней"), "backup_auto": N_("Автокопия базы"), "backup_keep": N_("Хранить копий"),
+    "server_language": N_("Язык журнала и уведомлений"),
 }
 
 
@@ -3079,13 +3173,18 @@ def api_save_settings():
     """Частичное обновление: меняются только переданные ключи."""
     data = request.json or {}
     before = get_settings()
-    known = {"poll_enabled"} | {k for k, *_ in INT_SETTINGS}
+    known = {"poll_enabled", "server_language"} | {k for k, *_rest in INT_SETTINGS}
     save_settings({k: v for k, v in data.items() if k in known})
     after = get_settings()
     apply_scheduler_settings()
 
-    fmt = lambda v: ("да" if v else "нет") if isinstance(v, bool) else str(v)
-    changes = [{"field": SETTING_LABELS.get(k, k), "before": fmt(before[k]), "after": fmt(after[k])}
+    def fmt(k, v):
+        if isinstance(v, bool):
+            return _s("да") if v else _s("нет")
+        if k == "server_language":
+            return i18n.LANGUAGES.get(v) or _s("как в системе")
+        return str(v)
+    changes = [{"field": _s(SETTING_LABELS[k]) if k in SETTING_LABELS else k, "before": fmt(k, before[k]), "after": fmt(k, after[k])}
                for k in after if before.get(k) != after.get(k)]
     if changes:
         audit.log(DB, "settings", actor=current_actor(), summary=audit.summarize(changes), changes=changes)
@@ -3098,7 +3197,7 @@ def api_save_settings():
 
 @app.route("/notifications")
 def notifications_page():
-    return render_template("notifications.html", groups=notify.GROUP_LABELS)
+    return render_template("notifications.html", groups={k: _(v) for k, v in notify.GROUP_LABELS.items()})
 
 
 def _notify_payload():
@@ -3139,21 +3238,21 @@ def api_notify_test():
     data, (cfg, error) = _notify_form_config()
     channel = data.get("channel")
     if channel not in notify.CHANNELS:
-        return jsonify({"error": "Неизвестный канал"}), 400
+        return jsonify({"error": _("Неизвестный канал")}), 400
     if error:
         return jsonify({"ok": False, "error": error})
     try:
-        result, warning, _ = notify.send(channel, cfg[channel], SECRET_BOX, notify.test_message(cfg["base_url"]))
+        result, warning, _retry = notify.send(channel, cfg[channel], SECRET_BOX, notify.test_message(cfg["base_url"]))
     except notify.NotifyError as e:
-        notify.write_log(DB, channel, False, 0, "Проверка уведомлений", str(e))
+        notify.write_log(DB, channel, False, 0, _("Проверка уведомлений"), str(e))
         return jsonify({"ok": False, "error": str(e)})
-    notify.write_log(DB, channel, True, 0, "Проверка уведомлений", warning)
+    notify.write_log(DB, channel, True, 0, _("Проверка уведомлений"), warning)
     return jsonify({"ok": True, "result": result, "warning": warning})
 
 
 @app.route("/api/notify/telegram/chats", methods=["POST"])
 def api_notify_telegram_chats():
-    _, (cfg, error) = _notify_form_config()
+    _cfg_all, (cfg, error) = _notify_form_config()
     if error:
         return jsonify({"ok": False, "error": error})
     tg = cfg["telegram"]
@@ -3238,7 +3337,7 @@ def api_port_traffic(switch_id, ifindex):
     period = request.args.get("period")
     if period:
         if period not in maintenance.PERIODS:
-            return jsonify({"error": "Неизвестный период"}), 400
+            return jsonify({"error": _("Неизвестный период")}), 400
         return jsonify(maintenance.traffic_series(DB, switch_id, ifindex, period))
     try:
         limit = int(request.args.get("limit", 100))
@@ -3285,7 +3384,7 @@ def api_switch_health(switch_id):
         row = c.fetchone()
 
     if not row:
-        return jsonify({"error": "Коммутатор не найден"}), 404
+        return jsonify({"error": _("Коммутатор не найден")}), 404
 
     return jsonify({
         "cpu_usage": row[0] or 0,
@@ -3301,7 +3400,7 @@ def api_switch_health_history(switch_id):
     period = request.args.get("period")
     if period:
         if period not in maintenance.PERIODS:
-            return jsonify({"error": "Неизвестный период"}), 400
+            return jsonify({"error": _("Неизвестный период")}), 400
         return jsonify(maintenance.health_series(DB, switch_id, period))
     try:
         limit = int(request.args.get("limit", 100))
@@ -3361,7 +3460,7 @@ def api_stats_ports(switch_id):
     """Список портов из последнего SNMP-опроса (для выбора порта в окне статистики)"""
     snapshot = load_port_snapshot(switch_id)
     if snapshot is None:
-        return jsonify({"error": "Коммутатор не найден"}), 404
+        return jsonify({"error": _("Коммутатор не найден")}), 404
 
     ports = [{"ifindex": idx, "name": info.get("name") or f"Port {idx}",
               "port": info.get("port"), "alias": info.get("alias") or ""}
@@ -3375,7 +3474,7 @@ def api_poe_status(switch_id):
     """Получить статус PoE для всех портов коммутатора из последнего SNMP-опроса"""
     snapshot = load_port_snapshot(switch_id)
     if snapshot is None:
-        return jsonify({"error": "Коммутатор не найден"}), 404
+        return jsonify({"error": _("Коммутатор не найден")}), 404
 
     poe_data = {}
     for ifindex, info in sorted(snapshot.items(), key=lambda kv: _ifindex_sort_key(kv[0])):
@@ -3396,7 +3495,7 @@ def api_poe_status(switch_id):
 def audit_view():
     with sqlite3.connect(DB) as conn:
         switches = conn.execute("SELECT id, name FROM switches ORDER BY name COLLATE NOCASE").fetchall()
-    return render_template("audit.html", switches=switches, actions=audit.ACTIONS)
+    return render_template("audit.html", switches=switches, actions={k: _(v) for k, v in audit.ACTIONS.items()})
 
 
 @app.route("/api/audit")
@@ -3422,18 +3521,18 @@ def api_audit_revert(entry_id):
     """Откат изменения коммутатора или восстановление удалённого."""
     info = audit.get_revert(DB, entry_id)
     if not info:
-        return jsonify({"ok": False, "error": "Запись журнала не найдена"}), 404
+        return jsonify({"ok": False, "error": _("Запись журнала не найдена")}), 404
     if info["reverted_by"]:
-        return jsonify({"ok": False, "error": "Это изменение уже отменено"}), 409
+        return jsonify({"ok": False, "error": _("Это изменение уже отменено")}), 409
     data, actor = info["revert"], request.remote_addr
 
     if info["action"] in ("update", "revert"):
         fields = {k: v for k, v in (data.get("fields") or {}).items() if k in _switch_columns() and k != "id"}
         before = fetch_switch(info["switch_id"])
         if not before:
-            return jsonify({"ok": False, "error": "Коммутатор уже удалён — сначала восстановите его"}), 409
+            return jsonify({"ok": False, "error": _("Коммутатор уже удалён — сначала восстановите его")}), 409
         if not fields:
-            return jsonify({"ok": False, "error": "Нечего откатывать"}), 400
+            return jsonify({"ok": False, "error": _("Нечего откатывать")}), 400
         with sqlite3.connect(DB) as conn:
             conn.execute(f"UPDATE switches SET {', '.join(f'{k}=?' for k in fields)} WHERE id=?",
                          list(fields.values()) + [info["switch_id"]])
@@ -3441,7 +3540,7 @@ def api_audit_revert(entry_id):
         after = fetch_switch(info["switch_id"])
         changes, revert_fields = audit.diff_switch(before, after)
         new_id = audit.log(DB, "revert", actor=actor, switch_id=info["switch_id"], switch_name=after["name"],
-                           summary=f"Отмена записи №{entry_id}: " + audit.summarize(changes), changes=changes,
+                           summary=_s("Отмена записи №{entry_id}: ", entry_id=entry_id) + audit.summarize(changes), changes=changes,
                            revert={"fields": revert_fields} if revert_fields else None)
         audit.mark_reverted(DB, entry_id, new_id)
         return jsonify({"ok": True, "switch_id": info["switch_id"], "entry_id": new_id})
@@ -3450,7 +3549,7 @@ def api_audit_revert(entry_id):
         snap = data.get("switch") or {}
         cols = [c for c in _switch_columns() if c in snap]
         if not snap or "name" not in snap:
-            return jsonify({"ok": False, "error": "В записи нет данных для восстановления"}), 400
+            return jsonify({"ok": False, "error": _("В записи нет данных для восстановления")}), 400
         with sqlite3.connect(DB) as conn:
             if conn.execute("SELECT 1 FROM switches WHERE id=?", (snap.get("id"),)).fetchone():
                 cols = [c for c in cols if c != "id"]  # id уже занят — получим новый
@@ -3465,11 +3564,11 @@ def api_audit_revert(entry_id):
                              [d[c] for c in use])
             conn.commit()
         new_id = audit.log(DB, "restore_switch", actor=actor, switch_id=new_switch_id, switch_name=snap["name"],
-                           summary=f"Из записи №{entry_id}: настройки, подключения, патч-панели, устройства")
+                           summary=_s("Из записи №{entry_id}: настройки, подключения, патч-панели, устройства", entry_id=entry_id))
         audit.mark_reverted(DB, entry_id, new_id)
         return jsonify({"ok": True, "switch_id": new_switch_id, "entry_id": new_id})
 
-    return jsonify({"ok": False, "error": "Это действие нельзя отменить"}), 400
+    return jsonify({"ok": False, "error": _("Это действие нельзя отменить")}), 400
 
 
 # ─────────────────────────────────────────
@@ -3506,7 +3605,7 @@ def api_backup_create():
 def api_backup_download(name):
     path = maintenance.backup_path(DB, name)
     if not path:
-        return "Копия не найдена", 404
+        return _("Копия не найдена"), 404
     return send_file(path, as_attachment=True, download_name=name, mimetype="application/octet-stream")
 
 
@@ -3514,7 +3613,7 @@ def api_backup_download(name):
 def api_backup_delete(name):
     path = maintenance.backup_path(DB, name)
     if not path:
-        return jsonify({"ok": False, "error": "Копия не найдена"}), 404
+        return jsonify({"ok": False, "error": _("Копия не найдена")}), 404
     os.remove(path)
     return jsonify({"ok": True, "backups": maintenance.list_backups(DB)})
 
@@ -3540,7 +3639,7 @@ def _restore_from(path, source_label):
     security.encrypt_plaintext_snmp_keys(DB, SECRET_BOX)
     apply_scheduler_settings()
     audit.log(DB, "db_restore", actor=current_actor(),
-              summary=f"Из {source_label}. Текущая база перед этим сохранена: {safety}")
+              summary=_s("Из {source_label}. Текущая база перед этим сохранена: {safety}", source_label=source_label, safety=safety))
     return jsonify({"ok": True, "safety_backup": safety})
 
 
@@ -3548,8 +3647,8 @@ def _restore_from(path, source_label):
 def api_backup_restore(name):
     path = maintenance.backup_path(DB, name)
     if not path:
-        return jsonify({"ok": False, "error": "Копия не найдена"}), 404
-    return _restore_from(path, f"копии {name}")
+        return jsonify({"ok": False, "error": _("Копия не найдена")}), 404
+    return _restore_from(path, _("копии {name}", name=name))
 
 
 @app.route("/api/backups/upload", methods=["POST"])
@@ -3557,11 +3656,11 @@ def api_backup_upload():
     """Восстановление из загруженного файла .db."""
     f = request.files.get("file")
     if not f or not f.filename:
-        return jsonify({"ok": False, "error": "Файл не выбран"}), 400
+        return jsonify({"ok": False, "error": _("Файл не выбран")}), 400
     tmp = os.path.join(maintenance.backups_dir(DB), f"upload-{datetime.now():%Y%m%d-%H%M%S}.tmp")
     f.save(tmp)
     try:
-        return _restore_from(tmp, f"файла {f.filename}")
+        return _restore_from(tmp, _("файла {filename}", filename=f.filename))
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
@@ -3599,8 +3698,8 @@ def switch_export_tables(switch_id):
 
     def where(c):
         if c.get("patchPanel") is None:
-            return "напрямую"
-        return f"{panel_names.get(str(c.get('patchPanel')), 'панель ' + str(c.get('patchPanel')))}, порт {c.get('patch')}"
+            return _("напрямую")
+        return _("{patchPanel}, порт {patch}", patchPanel=panel_names.get(str(c.get('patchPanel')), _('панель {id}', id=c.get('patchPanel'))), patch=c.get('patch'))
 
     ports = []
     for n in range(1, (sw.get("ports") or 0) + 1):
@@ -3613,25 +3712,25 @@ def switch_export_tables(switch_id):
                       v.get("id"), v.get("name"), poe.get("state"), _r(poe.get("power_consumed"), 1)])
     connections = [[int(k) if str(k).isdigit() else k, c.get("name"), c.get("color"), where(c)]
                    for k, c in sorted(conns.items(), key=lambda kv: audit._port_sort(kv[0])) if isinstance(c, dict)]
-    panel_rows = [[p.get("id"), p.get("name"), p.get("ports"), "2 строки" if p.get("layout") == "double" else "1 строка",
-                   "над коммутатором" if p.get("position") == "above" else "под коммутатором"]
+    panel_rows = [[p.get("id"), p.get("name"), p.get("ports"), _("2 строки") if p.get("layout") == "double" else _("1 строка"),
+                   _("над коммутатором") if p.get("position") == "above" else _("под коммутатором")]
                   for p in panels if isinstance(p, dict)]
     with sqlite3.connect(DB) as conn:
         manual = conn.execute("""SELECT port_number, mac, ip, hostname, notes, last_seen FROM devices
                                  WHERE switch_id=? ORDER BY port_number""", (switch_id,)).fetchall()
         macs = conn.execute("""SELECT port_number, mac, ip, hostname, vlan, port_mac_count, last_seen, port_name
                                FROM mac_table WHERE switch_id=? ORDER BY port_number, mac""", (switch_id,)).fetchall()
-    devices = [[p, m, i, h, None, "привязано вручную", None, notes, seen] for p, m, i, h, notes, seen in manual]
-    devices += [[p, m, i, h, vl, "SNMP (таблица MAC)", (cnt or 0) > UPLINK_MAC_THRESHOLD or bool(trunks.get(str(p))), None, seen]
+    devices = [[p, m, i, h, None, _("привязано вручную"), None, notes, seen] for p, m, i, h, notes, seen in manual]
+    devices += [[p, m, i, h, vl, _("SNMP (таблица MAC)"), (cnt or 0) > UPLINK_MAC_THRESHOLD or bool(trunks.get(str(p))), None, seen]
                 for p, m, i, h, vl, cnt, seen, _ in macs]
     return sw, {
-        "ports": ("Порты", ["Порт", "Интерфейс", "Описание (ifAlias)", "Подключение", "Тип", "Транк", "Статус",
-                            "Скорость, Мбит/с", "Загрузка, %", "Вход, Мбит/с", "Выход, Мбит/с", "Ошибки за интервал",
-                            "VLAN", "Имя VLAN", "PoE", "PoE, Вт"], ports),
-        "connections": ("Подключения", ["Порт", "Назначение", "Цвет", "Куда"], connections),
-        "patch_panels": ("Патч-панели", ["ID", "Название", "Портов", "Расположение", "Позиция"], panel_rows),
-        "devices": ("Устройства", ["Порт", "MAC", "IP", "Имя хоста", "VLAN", "Источник", "Uplink", "Заметки",
-                                   "Последний раз"], devices),
+        "ports": (_("Порты"), [_("Порт"), _("Интерфейс"), _("Описание (ifAlias)"), _("Подключение"), _("Тип"), _("Транк"), _("Статус"),
+                            _("Скорость, Мбит/с"), _("Загрузка, %"), _("Вход, Мбит/с"), _("Выход, Мбит/с"), _("Ошибки за интервал"),
+                            "VLAN", _("Имя VLAN"), "PoE", _("PoE, Вт")], ports),
+        "connections": (_("Подключения"), [_("Порт"), _("Назначение"), _("Цвет"), _("Куда")], connections),
+        "patch_panels": (_("Патч-панели"), ["ID", _("Название"), _("Портов"), _("Расположение"), _("Позиция")], panel_rows),
+        "devices": (_("Устройства"), [_("Порт"), "MAC", "IP", _("Имя хоста"), "VLAN", _("Источник"), "Uplink", _("Заметки"),
+                                   _("Последний раз")], devices),
     }
 
 
@@ -3655,14 +3754,14 @@ def inventory_export_tables():
     labels = notify.LABELS
     log = audit.entries(DB, limit=10000)
     return {
-        "switches": ("Коммутаторы", ["Название", "IP", "SNMP", "Портов", "Порты up", "Порты по SNMP", "Пиковая загрузка, %",
-                                     "Активные оповещения", "Непрочитанные события", "CPU, %", "Температура, °C",
-                                     "Последний опрос"], switches),
-        "macs": ("MAC-адреса", ["Коммутатор", "Порт", "Интерфейс", "MAC", "IP", "Имя хоста", "VLAN", "MAC на порту",
-                                "Впервые", "Последний раз"], [list(m) for m in macs]),
-        "events": ("События", ["Время", "Коммутатор", "Порт", "Интерфейс / датчик", "Событие", "Детали", "Прочитано"],
+        "switches": (_("Коммутаторы"), [_("Название"), "IP", "SNMP", _("Портов"), _("Порты up"), _("Порты по SNMP"), _("Пиковая загрузка, %"),
+                                     _("Активные оповещения"), _("Непрочитанные события"), "CPU, %", _("Температура, °C"),
+                                     _("Последний опрос")], switches),
+        "macs": (_("MAC-адреса"), [_("Коммутатор"), _("Порт"), _("Интерфейс"), "MAC", "IP", _("Имя хоста"), "VLAN", _("MAC на порту"),
+                                _("Впервые"), _("Последний раз")], [list(m) for m in macs]),
+        "events": (_("События"), [_("Время"), _("Коммутатор"), _("Порт"), _("Интерфейс / датчик"), _("Событие"), _("Детали"), _("Прочитано")],
                    [[t, s, p, pn, labels.get(et, et), d, bool(rd)] for t, s, p, pn, et, d, rd in events]),
-        "audit": ("Журнал изменений", ["Время", "Источник", "Коммутатор", "Действие", "Описание"],
+        "audit": (_("Журнал изменений"), [_("Время"), _("Источник"), _("Коммутатор"), _("Действие"), _("Описание")],
                   [[e["time"], e["actor"], e["switch_name"], e["action_label"], e["summary"]] for e in log]),
     }
 
@@ -3698,7 +3797,7 @@ def export_switch_csv(switch_id, table):
     sw, tables = res
     if table not in tables:
         return "Unknown table", 404
-    _, headers, rows = tables[table]
+    _title, headers, rows = tables[table]
     return _download(write_csv(headers, rows), f"{_file_slug(sw['name'])}_{table}_{datetime.now():%Y-%m-%d}.csv",
                      "text/csv")
 
@@ -3714,19 +3813,19 @@ def export_inventory_csv(table):
     tables = inventory_export_tables()
     if table not in tables:
         return "Unknown table", 404
-    _, headers, rows = tables[table]
+    _title, headers, rows = tables[table]
     return _download(write_csv(headers, rows), f"switchmap_{table}_{datetime.now():%Y-%m-%d}.csv",
                      "text/csv")
 
 
 @app.errorhandler(404)
 def not_found(_e):
-    return _deny(404, "Страница не найдена")
+    return _deny(404, _("Страница не найдена"))
 
 
 @app.errorhandler(413)
 def too_large(_e):
-    return _deny(413, "Файл слишком большой")
+    return _deny(413, _("Файл слишком большой"))
 
 
 def cli_reset_password(username):
@@ -3738,11 +3837,11 @@ def cli_reset_password(username):
         row = conn.execute("SELECT id FROM users WHERE username = ? COLLATE NOCASE", (username,)).fetchone()
     if not row:
         uid, error = None, None
-        if input(f"Пользователя «{username}» нет. Создать администратора? [y/N] ").strip().lower() != "y":
+        if input(_s("Пользователя «{name}» нет. Создать администратора? [y/N] ", name=username)).strip().lower() != "y":
             return 1
-    password = getpass.getpass("Новый пароль: ")
-    if password != getpass.getpass("Повторите: "):
-        print("Пароли не совпадают")
+    password = getpass.getpass(_s("Новый пароль: "))
+    if password != getpass.getpass(_s("Повторите: ")):
+        print(_s("Пароли не совпадают"))
         return 1
     if row:
         error = security.set_password(DB, row[0], password)
@@ -3753,18 +3852,18 @@ def cli_reset_password(username):
     if error:
         print(error)
         return 1
-    audit.log(DB, "password_change", actor="консоль сервера", summary=f"Пароль «{username}» задан из командной строки")
-    print("Готово. Все сессии этого пользователя завершены.")
+    audit.log(DB, "password_change", actor=_s("консоль сервера"), summary=_s("Пароль «{username}» задан из командной строки", username=username))
+    print(_s("Готово. Все сессии этого пользователя завершены."))
     return 0
 
 
-USAGE = """SwitchMap {version}
+USAGE = N_("""SwitchMap {version}
 
   switchmap                         запустить сервер
   switchmap reset-password <имя>    задать пароль пользователю (или создать администратора)
   switchmap --version               версия
   switchmap --paths                 где лежат база, настройки и журнал
-"""
+""")
 
 
 def _stop_on_sigterm():
@@ -3817,7 +3916,7 @@ def main(argv):
         print(APP_VERSION)
         return 0
     if argv[:1] in (["--help"], ["-h"], ["help"]):
-        print(USAGE.format(version=APP_VERSION))
+        print(_s(USAGE, version=APP_VERSION))
         return 0
     if argv[:1] == ["--paths"]:
         print(f"Данные:    {DATA_DIR}\nБаза:      {DB}\nКлючи:     {security.secrets_path(DB)}\n"
@@ -3828,7 +3927,7 @@ def main(argv):
     if len(argv) >= 2 and argv[0] == "reset-password":
         return cli_reset_password(argv[1])
     if argv:
-        print(USAGE.format(version=APP_VERSION))
+        print(_s(USAGE, version=APP_VERSION))
         return 2
     return serve_forever()
 

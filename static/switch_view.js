@@ -155,12 +155,12 @@ function validateSnmpFields() {
     const privProto = document.getElementById('snmpV3PrivProto').value;
     const authKey = document.getElementById('snmpV3AuthKey').value;
     const privKey = document.getElementById('snmpV3PrivKey').value;
-    if (!user) return 'SNMPv3: укажите имя пользователя';
-    if (authProto === 'none' && privProto !== 'none') return 'SNMPv3: шифрование нельзя включить без аутентификации';
+    if (!user) return t('SNMPv3: укажите имя пользователя');
+    if (authProto === 'none' && privProto !== 'none') return t('SNMPv3: шифрование нельзя включить без аутентификации');
     if (authProto !== 'none' && (authKey ? authKey.length < 8 : !SNMP_CFG.has_auth_key))
-        return 'SNMPv3: пароль аутентификации должен быть не короче 8 символов';
+        return t('SNMPv3: пароль аутентификации должен быть не короче 8 символов');
     if (privProto !== 'none' && (privKey ? privKey.length < 8 : !SNMP_CFG.has_priv_key))
-        return 'SNMPv3: пароль шифрования должен быть не короче 8 символов';
+        return t('SNMPv3: пароль шифрования должен быть не короче 8 символов');
     return '';
 }
 
@@ -181,20 +181,20 @@ function testSNMP() {
     box.hidden = false;
     box.className = 'snmp-test-result';
     if (editMode) {
-        box.textContent = 'Проверяются сохранённые настройки — сначала нажмите «Сохранить».';
+        box.textContent = t('Проверяются сохранённые настройки — сначала нажмите «Сохранить».');
         return;
     }
     btn.disabled = true;
-    box.textContent = 'Проверяю…';
+    box.textContent = t('Проверяю…');
     fetch(`/api/snmp_test/${SWITCH_ID}`, { method: 'POST' })
         .then(r => r.json())
         .then(d => {
             box.className = 'snmp-test-result ' + (d.ok ? 'ok' : 'fail');
             box.textContent = d.ok
-                ? `Успешно · ${d.auth}: ${d.sys_name}${d.sys_descr ? ' — ' + d.sys_descr : ''}`
-                : `Ошибка · ${d.auth ? d.auth + ': ' : ''}${d.error}`;
+                ? t('Успешно · {auth}: {sys_name}{v}', { auth: d.auth, sys_name: d.sys_name, v: d.sys_descr ? ' — ' + d.sys_descr : '' })
+                : t('Ошибка · {v}{error}', { v: d.auth ? d.auth + ': ' : '', error: d.error });
         })
-        .catch(() => { box.className = 'snmp-test-result fail'; box.textContent = 'Ошибка · нет связи с приложением'; })
+        .catch(() => { box.className = 'snmp-test-result fail'; box.textContent = t('Ошибка · нет связи с приложением'); })
         .finally(() => { btn.disabled = false; });
 }
 
@@ -439,9 +439,9 @@ function createPatchPort(panelId, portNum, isTop) {
 function connectPorts(patchPanelId, patchPort) {
     if (!editMode || selectedSwitchPort === null) return;
     // Подсказываем описание порта с коммутатора (ifAlias), если оно есть
-    let name = prompt("Куда уходит сеть?", portAlias(selectedSwitchPort));
+    let name = prompt(t("Куда уходит сеть?"), portAlias(selectedSwitchPort));
     if (!name) return;
-    let color = prompt("Цвет (gray/red/black/yellow/blue/green)?", "gray");
+    let color = prompt(t("Цвет (gray/red/black/yellow/blue/green)?"), "gray");
     if (!color) color = "gray";
 
     state.connections[selectedSwitchPort] = {
@@ -530,7 +530,7 @@ function showPortTooltip(e, lines) {
 
 function formatPortSpeed(mbps) {
     if (!mbps) return '';
-    return mbps >= 1000 ? `${+(mbps / 1000).toFixed(1)} Гбит/с` : `${mbps} Мбит/с`;
+    return mbps >= 1000 ? t('{v} Гбит/с', { v: +(mbps / 1000).toFixed(1) }) : t('{mbps} Мбит/с', { mbps });
 }
 
 function portInfoLines(portNum) {
@@ -540,11 +540,11 @@ function portInfoLines(portNum) {
     if (info.alias) lines.push(`«${info.alias}»`);
     lines.push([info.name, formatPortSpeed(info.speed)].filter(Boolean).join(' · '));
     if (!info.up) {
-        lines.push('Нет линка (down)');
+        lines.push(t('Нет линка (down)'));
     } else if (typeof info.util === 'number') {
-        lines.push(`Загрузка ${info.util.toFixed(1)}%: ↓ ${formatRate(info.in_mbps)} · ↑ ${formatRate(info.out_mbps)}`);
+        lines.push(t('Загрузка {util}%: ↓ {in_mbps} · ↑ {out_mbps}', { util: info.util.toFixed(1), in_mbps: formatRate(info.in_mbps), out_mbps: formatRate(info.out_mbps) }));
     }
-    if (info.errors_delta) lines.push(`Ошибок с прошлого опроса: ${info.errors_delta}`);
+    if (info.errors_delta) lines.push(t('Ошибок с прошлого опроса: {errors_delta}', { errors_delta: info.errors_delta }));
     return lines;
 }
 
@@ -611,8 +611,8 @@ function loadPortLoad() {
             document.getElementById('loadLegendThreshold').textContent = loadThreshold || '—';
             const times = Object.values(portLoad).map(p => p.time).filter(Boolean).sort();
             document.getElementById('loadLegendTime').textContent = times.length
-                ? `Данные опроса ${times[times.length - 1]}`
-                : 'Нет данных — опросите коммутатор по SNMP';
+                ? t('Данные опроса {v}', { v: times[times.length - 1] })
+                : t('Нет данных — опросите коммутатор по SNMP');
             applyPortLoad();
             renderPortsTable();
         })
@@ -648,7 +648,7 @@ function renderPortsTable() {
         const status = !p.up
             ? '<span class="badge">down</span>'
             : alerts.length
-                ? `<span class="badge badge-danger">${alerts.includes('util') ? 'перегрузка' : 'ошибки'}</span>`
+                ? `<span class="badge badge-danger">${alerts.includes('util') ? t('перегрузка') : t('ошибки')}</span>`
                 : '<span class="badge badge-success">up</span>';
         const util = (p.up && typeof p.util === 'number')
             ? `<div class="util-inline"><div class="meter"><span style="width:${Math.min(p.util, 100)}%;background:${utilLevelColor(p.util)}"></span></div><span class="num">${p.util.toFixed(1)}%</span></div>`
@@ -658,7 +658,7 @@ function renderPortsTable() {
         const vlanCell = vlan && vlan.id
             ? `<span class="vlan-chip"><i style="background:${escapeAttr(state.vlanColors[vlan.id] || 'var(--text-3)')}"></i>${escapeHtml(vlan.id)}${vlan.name ? ' · ' + escapeHtml(vlan.name) : ''}</span>`
             : '<span class="muted">—</span>';
-        return `<tr data-port="${escapeAttr(port)}" title="Показать на схеме">
+        return `<tr data-port="${escapeAttr(port)}" title="${escapeAttr(t('Показать на схеме'))}">
             <td class="port-no">${escapeHtml(port)}</td>
             <td class="ifname">${escapeHtml(p.name || '')}</td>
             <td class="desc">${desc}</td>
@@ -670,7 +670,7 @@ function renderPortsTable() {
             <td class="col-optional num">${p.errors_delta ? `<span style="color:var(--danger)">${p.errors_delta}</span>` : '<span class="muted">0</span>'}</td>
             <td class="col-optional">${vlanCell}</td>
         </tr>`;
-    }).join('') || `<tr><td colspan="10" class="muted" style="text-align:center;padding:22px">Нет портов под выбранный фильтр</td></tr>`;
+    }).join('') || t('<tr><td colspan="10" class="muted" style="text-align:center;padding:22px">Нет портов под выбранный фильтр</td></tr>');
 }
 
 document.getElementById('portsFilter')?.addEventListener('click', e => {
@@ -705,7 +705,7 @@ function highlightPortFromUrl() {
 function renderConnectionsList() {
     const container = document.getElementById("connectionsList");
     if (Object.keys(state.connections).length === 0) {
-        container.innerHTML = '<div class="empty-note">Подключений пока нет</div>';
+        container.innerHTML = t('<div class="empty-note">Подключений пока нет</div>');
         return;
     }
 
@@ -715,11 +715,11 @@ function renderConnectionsList() {
         let destinationText = "";
 
         if (conn.patchPanel === null) {
-            destinationText = `Прямое подключение`;
+            destinationText = t('Прямое подключение');
         } else {
             let panel = state.patchPanels.find(p => p.id == conn.patchPanel);
             let panelName = panel ? escapeHtml(panel.name) : `Panel ${escapeHtml(conn.patchPanel)}`;
-            destinationText = `→ ${panelName} / Порт ${escapeHtml(conn.patch)}`;
+            destinationText = t('→ {panelName} / Порт {patch}', { panelName, patch: escapeHtml(conn.patch) });
         }
 
         const connName = escapeHtml(conn.name);
@@ -732,7 +732,7 @@ function renderConnectionsList() {
             <div class="connection-header">
                 <div class="connection-title">
                     <span class="color-preview" style="background: ${connColor};"></span>
-                    Порт ${escapeHtml(portNum)}
+                    ${escapeHtml(t('Порт {port}', { port: portNum }))}
                 </div>
             </div>
             <div class="connection-details">
@@ -741,8 +741,8 @@ function renderConnectionsList() {
             </div>
             ${editMode ? `
             <div class="connection-actions">
-                <button type="button" class="small" data-click="editConnection" data-args="[${parseInt(portNum)}]">Изменить</button>
-                <button type="button" class="small delete" data-click="deleteConnection" data-args="[${parseInt(portNum)}]">Удалить</button>
+                <button type="button" class="small" data-click="editConnection" data-args="[${parseInt(portNum)}]">${t('Изменить')}</button>
+                <button type="button" class="small delete" data-click="deleteConnection" data-args="[${parseInt(portNum)}]">${t('Удалить')}</button>
             </div>
             ` : ''}
         `;
@@ -752,9 +752,9 @@ function renderConnectionsList() {
 
 function editConnection(portNum) {
     let conn = state.connections[portNum];
-    let newName = prompt("Новое название:", conn.name);
+    let newName = prompt(t("Новое название:"), conn.name);
     if (newName !== null && newName !== "") conn.name = newName;
-    let newColor = prompt("Новый цвет (gray/red/black/yellow/blue/green):", conn.color);
+    let newColor = prompt(t("Новый цвет (gray/red/black/yellow/blue/green):"), conn.color);
     if (newColor !== null && newColor !== "") conn.color = newColor;
     updateHiddenFields();
     renderConnectionsList();
@@ -762,12 +762,21 @@ function editConnection(portNum) {
 }
 
 function deleteConnection(portNum) {
-    if (confirm(`Удалить соединение с портом ${portNum}?`)) {
+    if (confirm(t('Удалить соединение с портом {portNum}?', { portNum }))) {
         delete state.connections[portNum];
         updateHiddenFields();
         renderConnectionsList();
         restoreConnections();
     }
+}
+
+// «Портов: 24 | Расположение: 1 строка | Позиция: под коммутатором» — для списка и PDF
+function panelMeta(panel) {
+    return t('Портов: {ports} | Расположение: {layout} | Позиция: {position}', {
+        ports: panel.ports,
+        layout: (panel.layout || 'single') === 'single' ? t('1 строка') : t('2 строки (шахматно)'),
+        position: panel.position === 'above' ? t('Над коммутатором') : t('Под коммутатором'),
+    });
 }
 
 function renderPatchPanelsList() {
@@ -781,24 +790,24 @@ function renderPatchPanelsList() {
                 <strong>${escapeHtml(panel.name)}</strong>
             </div>
             ${editMode ? `
-                <label class="label">Название:</label>
+                <label class="label">${t('Название:')}</label>
                 <input type="text" value="${escapeAttr(panel.name)}" data-change="updatePatchPanelName" data-args='[${panel.id}, "$value"]'>
-                <label class="label">Количество портов:</label>
+                <label class="label">${t('Количество портов:')}</label>
                 <input type="number" value="${panel.ports}" min="1" max="96" data-change="updatePatchPanelPorts" data-args='[${panel.id}, "$value"]'>
-                <label class="label">Расположение портов:</label>
+                <label class="label">${t('Расположение портов:')}</label>
                 <select data-change="updatePatchPanelLayout" data-args='[${panel.id}, "$value"]'>
-                    <option value="single" ${(panel.layout || 'single') === 'single' ? 'selected' : ''}>1 строка</option>
-                    <option value="double" ${(panel.layout || 'single') === 'double' ? 'selected' : ''}>2 строки (шахматно)</option>
+                    <option value="single" ${(panel.layout || 'single') === 'single' ? 'selected' : ''}>${t('1 строка')}</option>
+                    <option value="double" ${(panel.layout || 'single') === 'double' ? 'selected' : ''}>${t('2 строки (шахматно)')}</option>
                 </select>
-                <label class="label">Позиция:</label>
+                <label class="label">${t('Позиция:')}</label>
                 <select data-change="updatePatchPanelPosition" data-args='[${panel.id}, "$value"]'>
-                    <option value="above" ${panel.position === 'above' ? 'selected' : ''}>Над коммутатором</option>
-                    <option value="below" ${panel.position === 'below' ? 'selected' : ''}>Под коммутатором</option>
+                    <option value="above" ${panel.position === 'above' ? 'selected' : ''}>${t('Над коммутатором')}</option>
+                    <option value="below" ${panel.position === 'below' ? 'selected' : ''}>${t('Под коммутатором')}</option>
                 </select>
-                <button type="button" class="small delete" data-click="deletePatchPanel" data-args="[${panel.id}]">Удалить панель</button>
+                <button type="button" class="small delete" data-click="deletePatchPanel" data-args="[${panel.id}]">${t('Удалить панель')}</button>
             ` : `
                 <div class="panel-meta">
-                    Портов: ${panel.ports} | Расположение: ${(panel.layout || 'single') === 'single' ? '1 строка' : '2 строки'} | Позиция: ${panel.position === 'above' ? 'Над коммутатором' : 'Под коммутатором'}
+                    ${panelMeta(panel)}
                 </div>
             `}
         `;
@@ -808,9 +817,9 @@ function renderPatchPanelsList() {
 
 function addPatchPanel() {
     if (!editMode) return;
-    let name = prompt("Название новой патч-панели:", `Patch Panel ${nextPatchPanelId}`);
+    let name = prompt(t("Название новой патч-панели:"), `Patch Panel ${nextPatchPanelId}`);
     if (!name) return;
-    let ports = parseInt(prompt("Количество портов:", "24"));
+    let ports = parseInt(prompt(t("Количество портов:"), "24"));
     if (!ports || ports < 1) ports = 24;
     if (ports > 96) ports = 96;
     state.patchPanels.push({ id: nextPatchPanelId++, name: name, ports: ports, position: 'below', layout: 'single' });
@@ -840,7 +849,7 @@ function updatePatchPanelPosition(id, position) {
 }
 
 function deletePatchPanel(id) {
-    if (!confirm("Удалить эту патч-панель? Все соединения с ней будут удалены.")) return;
+    if (!confirm(t("Удалить эту патч-панель? Все соединения с ней будут удалены."))) return;
     for (let sw in state.connections) {
         if (state.connections[sw].patchPanel === id) delete state.connections[sw];
     }
@@ -891,11 +900,11 @@ setInterval(loadPortLoad, LOAD_REFRESH_MS);
 async function exportToPDF() {
     // pdfmake (~1.5 МБ) нужен только здесь — загружаем при первом экспорте, а не с каждой страницей
     if (typeof pdfMake === 'undefined' || !pdfMake.vfs) {
-        const wait = notify('Готовлю PDF…', 'info', 15000);
+        const wait = notify(t('Готовлю PDF…'), 'info', 15000);
         try {
             for (const [url, integrity] of PDFMAKE_SCRIPTS) await loadScript(url, integrity);  // шрифты — строго после pdfmake
         } catch (e) {
-            notify('Не удалось загрузить библиотеку PDF. Проверьте подключение к интернету.', 'error');
+            notify(t('Не удалось загрузить библиотеку PDF. Проверьте подключение к интернету.'), 'error');
             return;
         } finally {
             wait.remove();
@@ -904,11 +913,11 @@ async function exportToPDF() {
     try {
         const tableBody = [
             [
-                { text: 'Порт\nкомм-ра', style: 'tableHeader', alignment: 'center' },
-                { text: 'Патч-панель', style: 'tableHeader', alignment: 'center' },
-                { text: 'Порт\nпанели', style: 'tableHeader', alignment: 'center' },
-                { text: 'Назначение', style: 'tableHeader', alignment: 'center' },
-                { text: 'Цвет кабеля', style: 'tableHeader', alignment: 'center' }
+                { text: t('Порт\nкомм-ра'), style: 'tableHeader', alignment: 'center' },
+                { text: t('Патч-панель'), style: 'tableHeader', alignment: 'center' },
+                { text: t('Порт\nпанели'), style: 'tableHeader', alignment: 'center' },
+                { text: t('Назначение'), style: 'tableHeader', alignment: 'center' },
+                { text: t('Цвет кабеля'), style: 'tableHeader', alignment: 'center' }
             ]
         ];
         if (Object.keys(state.connections).length > 0) {
@@ -937,7 +946,7 @@ async function exportToPDF() {
             return {
                 text: [
                     { text: `${index + 1}. ${panel.name}\n`, bold: true },
-                    { text: `   Портов: ${panel.ports} | Расположение: ${(panel.layout || 'single') === 'single' ? '1 строка' : '2 строки (шахматно)'} | Позиция: ${panel.position === 'above' ? 'Над коммутатором' : 'Под коммутатором'}\n`, fontSize: 10, color: '#666' }
+                    { text: `   ${panelMeta(panel)}\n`, fontSize: 10, color: '#666' }
                 ],
                 margin: [0, 0, 0, 8]
             };
@@ -947,23 +956,23 @@ async function exportToPDF() {
             pageSize: 'A4',
             pageMargins: [40, 40, 40, 40],
             content: [
-                { text: nameInput.value || 'Схема коммутатора', style: 'header', alignment: 'center', margin: [0, 0, 0, 10] },
-                { text: `Дата создания: ${new Date().toLocaleDateString('ru-RU')}`, alignment: 'center', fontSize: 10, color: '#666', margin: [0, 0, 0, 20] },
-                { text: 'Коммутатор', style: 'subheader', margin: [0, 0, 0, 10] },
+                { text: nameInput.value || t('Схема коммутатора'), style: 'header', alignment: 'center', margin: [0, 0, 0, 10] },
+                { text: t('Дата создания: {v}', { v: new Date().toLocaleDateString(LOCALE) }), alignment: 'center', fontSize: 10, color: '#666', margin: [0, 0, 0, 20] },
+                { text: t('Коммутатор'), style: 'subheader', margin: [0, 0, 0, 10] },
                 {
                     text: [
-                        { text: 'Количество портов: ', bold: true }, state.switchPortsCount.toString(), '\n',
-                        { text: 'Расположение портов: ', bold: true }, state.layout === 'single' ? '1 строка' : '2 строки (шахматно)'
+                        { text: t('Количество портов: '), bold: true }, state.switchPortsCount.toString(), '\n',
+                        { text: t('Расположение портов: '), bold: true }, state.layout === 'single' ? t('1 строка') : t('2 строки (шахматно)')
                     ],
                     margin: [0, 0, 0, 20]
                 },
-                { text: 'Патч-панели', style: 'subheader', margin: [0, 0, 0, 10] },
+                { text: t('Патч-панели'), style: 'subheader', margin: [0, 0, 0, 10] },
                 ...patchPanelsList,
-                { text: 'Карта соединений', style: 'subheader', margin: [0, 20, 0, 10] },
+                { text: t('Карта соединений'), style: 'subheader', margin: [0, 20, 0, 10] },
                 Object.keys(state.connections).length > 0 ? {
                     table: { headerRows: 1, widths: [50, 100, 50, 150, 65], body: tableBody },
                     layout: { fillColor: function (rowIndex) { return (rowIndex === 0) ? '#4a2d3f' : null; } }
-                } : { text: 'Нет настроенных соединений', italics: true, color: '#999' }
+                } : { text: t('Нет настроенных соединений'), italics: true, color: '#999' }
             ],
             styles: {
                 header: { fontSize: 20, bold: true, color: '#4a2d3f' },
@@ -972,10 +981,10 @@ async function exportToPDF() {
             },
             defaultStyle: { fontSize: 10 }
         };
-        const filename = `${nameInput.value || 'коммутатор'}_схема.pdf`;
+        const filename = `${nameInput.value || 'switch'}_${t('схема')}.pdf`;
         pdfMake.createPdf(docDefinition).download(filename);
     } catch (error) {
-        notify('Ошибка при экспорте: ' + error.message, 'error');
+        notify(t('Ошибка при экспорте: ') + error.message, 'error');
     }
 }
 
@@ -985,16 +994,16 @@ function checkSwitchStatus() {
     const ip = document.getElementById('ipInput').value.trim();
     const dot = document.getElementById('switchStatusDot');
     const txt = document.getElementById('switchStatusText');
-    if (!ip) { txt.textContent = 'IP не задан'; return; }
+    if (!ip) { txt.textContent = t('IP не задан'); return; }
     dot.className = 'status-indicator checking';
-    txt.textContent = 'Проверка...';
+    txt.textContent = t('Проверка...');
     fetch(`/api/status/${SWITCH_ID}`)
         .then(r => r.json())
         .then(d => {
-            if (d.status === 'online') { dot.className = 'status-indicator online'; txt.textContent = 'Онлайн'; }
-            else { dot.className = 'status-indicator offline'; txt.textContent = 'Недоступен'; }
+            if (d.status === 'online') { dot.className = 'status-indicator online'; txt.textContent = t('Онлайн'); }
+            else { dot.className = 'status-indicator offline'; txt.textContent = t('Недоступен'); }
         })
-        .catch(() => { dot.className = 'status-indicator unknown'; txt.textContent = 'Ошибка'; });
+        .catch(() => { dot.className = 'status-indicator unknown'; txt.textContent = t('Ошибка'); });
 }
 
 function pollSNMP() {
@@ -1003,7 +1012,7 @@ function pollSNMP() {
     const content = document.getElementById('snmpContent');
     btn.disabled = true; btn.classList.add('is-loading');
     panel.classList.add('visible');
-    content.innerHTML = '<div class="snmp-message">Опрашиваю коммутатор по SNMP…</div>';
+    content.innerHTML = t('<div class="snmp-message">Опрашиваю коммутатор по SNMP…</div>');
 
     fetch(`/api/poll_snmp/${SWITCH_ID}`, {method: 'POST'})
         .then(r => r.json())
@@ -1017,7 +1026,7 @@ function pollSNMP() {
         })
         .catch(e => {
             btn.disabled = false; btn.classList.remove('is-loading');
-            content.innerHTML = '<div class="snmp-message is-error">Ошибка соединения</div>';
+            content.innerHTML = t('<div class="snmp-message is-error">Ошибка соединения</div>');
         });
 }
 
@@ -1039,24 +1048,24 @@ function renderSNMPResults(data) {
     const ports = Object.entries(data).sort((a, b) =>
         (a[1].port ?? 1e9) - (b[1].port ?? 1e9) || parseInt(a[0]) - parseInt(b[0]));
     if (ports.length === 0) {
-        content.innerHTML = '<div class="snmp-message">Нет данных (SNMP не ответил)</div>';
+        content.innerHTML = t('<div class="snmp-message">Нет данных (SNMP не ответил)</div>');
         return;
     }
-    let html = `<div class="snmp-summary">Найдено интерфейсов: ${ports.length}</div>`;
+    let html = t('<div class="snmp-summary">Найдено интерфейсов: {ports}</div>', { ports: ports.length });
     ports.forEach(([ifindex, info]) => {
         const devCount = info.devices ? info.devices.length : 0;
         const statusClass = info.up ? 'up' : 'down';
         const statusLabel = info.up ? '▲' : '▼';
         const portName = escapeHtml(info.name || 'Port '+ifindex);
-        const portNo = info.port ? `<span class="snmp-port-no" title="Номер порта на схеме">${info.port}</span>` : '';
+        const portNo = info.port ? t('<span class="snmp-port-no" title="Номер порта на схеме">{port}</span>', { port: info.port }) : '';
         const alias = info.alias ? `<span class="snmp-port-alias">${escapeHtml(info.alias)}</span>` : '';
         const targetPort = parseInt(info.port || ifindex);
         html += `<div class="snmp-port-item">
             <div class="snmp-port-header" data-click="toggleSNMPDevices" data-args='["$el"]'>
-                <span class="port-status-dot ${statusClass}" title="${info.up ? 'Активен' : 'Неактивен'}"></span>
+                <span class="port-status-dot ${statusClass}" title="${info.up ? t('Активен') : t('Неактивен')}"></span>
                 ${portNo}
                 <span class="port-name">${portName}${alias}</span>
-                <span class="port-device-count">${devCount > 0 ? devCount + ' устр.' : ''}</span>
+                <span class="port-device-count">${devCount > 0 ? escapeHtml(t('{n} устр.', { n: devCount })) : ''}</span>
                 <span class="snmp-state">${statusLabel}</span>
             </div>`;
         if (devCount > 0) {
@@ -1070,7 +1079,7 @@ function renderSNMPResults(data) {
                     ${dev.ip ? `<div class="dev-ip">IP: ${ip}</div>` : ''}
                     ${dev.hostname ? `<div class="dev-host">Host: ${hostname}</div>` : ''}
                     <button type="button" class="assign-btn" data-click="assignDeviceToPort" data-args="${escapeAttr(JSON.stringify([targetPort, dev.ip || '', dev.mac || '', dev.hostname || '']))}">
-                        📌 Привязать к порту
+                        📌 ${t('Привязать к порту')}
                     </button>
                 </div>`;
             });
@@ -1087,9 +1096,9 @@ function toggleSNMPDevices(header) {
 }
 
 function assignDeviceToPort(ifindex, ip, mac, hostname) {
-    const portNum = prompt(`К какому порту коммутатора привязать устройство?\nMAC: ${mac}\nIP: ${ip}`, ifindex);
+    const portNum = prompt(t('К какому порту коммутатора привязать устройство?\\nMAC: {mac}\\nIP: {ip}', { mac, ip }), ifindex);
     if (!portNum) return;
-    const notes = prompt('Комментарий (необязательно):', '') || '';
+    const notes = prompt(t('Комментарий (необязательно):'), '') || '';
     fetch(`/api/assign_device/${SWITCH_ID}`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -1097,13 +1106,13 @@ function assignDeviceToPort(ifindex, ip, mac, hostname) {
     })
     .then(r => r.json())
     .then(d => {
-        if (d.success) { notify(`Устройство привязано к порту ${portNum}`, 'success'); setTimeout(() => location.reload(), 600); }
-        else { notify('Ошибка: ' + (d.error || 'неизвестная ошибка'), 'error'); }
+        if (d.success) { notify(t('Устройство привязано к порту {portNum}', { portNum }), 'success'); setTimeout(() => location.reload(), 600); }
+        else { notify(t('Ошибка: ') + (d.error || t('неизвестная ошибка')), 'error'); }
     });
 }
 
 function removeDeviceFromPort(portNum) {
-    if (!confirm(`Удалить устройство с порта ${portNum}?`)) return;
+    if (!confirm(t('Удалить устройство с порта {portNum}?', { portNum }))) return;
     fetch(`/api/remove_device/${SWITCH_ID}/${portNum}`, {method: 'POST'})
         .then(r => r.json())
         .then(() => location.reload());
@@ -1150,13 +1159,13 @@ function renderVlanList() {
     const ids = Object.keys(vlans).sort((a, b) => parseInt(a) - parseInt(b));
 
     if (ids.length === 0) {
-        container.innerHTML = '<div class="empty-note">Нет данных. Опросите коммутатор по SNMP.</div>';
+        container.innerHTML = t('<div class="empty-note">Нет данных. Опросите коммутатор по SNMP.</div>');
     } else {
         container.innerHTML = ids.map(id => {
             const color = state.vlanColors[id] || '#666';
             const name = vlans[id] ? ` — ${vlans[id]}` : '';
             return `<div class="vlan-item">
-                <span class="vlan-swatch" style="background:${color}" data-click="setVlanColor" data-args="${escapeAttr(JSON.stringify([id]))}" title="Назначить цвет"></span>
+                <span class="vlan-swatch" style="background:${color}" data-click="setVlanColor" data-args="${escapeAttr(JSON.stringify([id]))}" title="${escapeAttr(t('Назначить цвет'))}"></span>
                 <span class="vlan-label">VLAN ${id}${name}</span>
             </div>`;
         }).join('');
@@ -1164,7 +1173,7 @@ function renderVlanList() {
 
     if (filterSelect) {
         const prevValue = filterSelect.value;
-        filterSelect.innerHTML = '<option value="">Все порты</option>' +
+        filterSelect.innerHTML = t('<option value="">Все порты</option>') +
             ids.map(id => `<option value="${id}">VLAN ${id}${vlans[id] ? ' — ' + vlans[id] : ''}</option>`).join('');
         if (ids.includes(prevValue)) filterSelect.value = prevValue;
         else vlanFilter = "";
@@ -1173,7 +1182,7 @@ function renderVlanList() {
 
 function setVlanColor(vlanId) {
     const current = state.vlanColors[vlanId] || '#3498db';
-    const color = prompt(`Цвет для VLAN ${vlanId} (HEX, например #3498db):`, current);
+    const color = prompt(t('Цвет для VLAN {vlanId} (HEX, например #3498db):', { vlanId }), current);
     if (color === null) return;
     const trimmed = color.trim();
 
@@ -1189,10 +1198,10 @@ function setVlanColor(vlanId) {
             renderVlanList();
             renderRack();
         } else {
-            notify('Ошибка: ' + (d.error || 'неизвестная ошибка'), 'error');
+            notify(t('Ошибка: ') + (d.error || t('неизвестная ошибка')), 'error');
         }
     })
-    .catch(() => notify('Ошибка соединения', 'error'));
+    .catch(() => notify(t('Ошибка соединения'), 'error'));
 }
 
 function onVlanFilterChange() {
@@ -1250,13 +1259,13 @@ function toggleTrunk() {
 function assignDirectPort() {
     if (portTypeMenuTarget === null || !editMode) return;
     
-    let name = prompt("Назначение порта (куда идет линк)?", portAlias(portTypeMenuTarget));
+    let name = prompt(t("Назначение порта (куда идет линк)?"), portAlias(portTypeMenuTarget));
     if (!name) {
         document.getElementById('portTypeMenu').style.display = 'none';
         return;
     }
     
-    let color = prompt("Цвет (gray/red/black/yellow/blue/green)?", "gray");
+    let color = prompt(t("Цвет (gray/red/black/yellow/blue/green)?"), "gray");
     if (!color) color = "gray";
 
     state.connections[portTypeMenuTarget] = {
@@ -1308,7 +1317,7 @@ function renderDeviceBadges() {
             badge.className = 'port-device-badge' + (dev.is_online ? '' : ' offline');
             badge.dataset.dev = dev.id;
             const displayText = dev.hostname || dev.ip || dev.mac || '?';
-            badge.title = `${displayText}\nПравый клик - удалить`;
+            badge.title = t('{displayText}\\nПравый клик - удалить', { displayText });
             badge.textContent = displayText;
             portEl.appendChild(badge);
 
@@ -1316,7 +1325,7 @@ function renderDeviceBadges() {
             badge.oncontextmenu = function(e) {
                 e.preventDefault();
                 e.stopPropagation();
-                if (confirm(`Удалить устройство с порта ${portNum}?\n${displayText}`)) {
+                if (confirm(t('Удалить устройство с порта {portNum}?\\n{displayText}', { portNum, displayText }))) {
                     removeDeviceFromPort(portNum);
                 }
             };
@@ -1382,7 +1391,7 @@ async function autoRefreshStats() {
 
 function chartLibMissing(emptyEl) {
     if (typeof Chart !== 'undefined') return false;
-    emptyEl.textContent = 'Не удалось загрузить библиотеку графиков (Chart.js). Проверьте доступ к интернету.';
+    emptyEl.textContent = t('Не удалось загрузить библиотеку графиков (Chart.js). Проверьте доступ к интернету.');
     emptyEl.hidden = false;
     return true;
 }
@@ -1400,15 +1409,15 @@ async function loadHealthStats() {
         document.getElementById('ramValue').textContent = formatStatValue(data.ram_usage, '%');
         document.getElementById('tempValue').textContent = formatStatValue(data.temperature, '°C');
         document.getElementById('statsLastPoll').textContent = data.last_poll_time
-            ? `Последний опрос: ${data.last_poll_time}`
-            : 'Коммутатор ещё не опрашивался';
+            ? t('Последний опрос: {last_poll_time}', { last_poll_time: data.last_poll_time })
+            : t('Коммутатор ещё не опрашивался');
     } catch (error) {
         console.error('Error loading health stats:', error);
     }
 }
 
 // ─── Период графиков (1 ч … 1 год) ───
-const PERIOD_LABELS = { '1h': 'последний час', '6h': '6 часов', '24h': '24 часа', '7d': '7 дней', '30d': '30 дней', '1y': 'год' };
+const PERIOD_LABELS = { '1h': t('последний час'), '6h': t('6 часов'), '24h': t('24 часа'), '7d': t('7 дней'), '30d': t('30 дней'), '1y': t('год') };
 let statsPeriod = (() => {
     try { const p = localStorage.getItem('switchmap.statsPeriod'); return PERIOD_LABELS[p] ? p : '24h'; }
     catch (e) { return '24h'; }
@@ -1447,7 +1456,7 @@ async function loadHealthHistory() {
                 healthChart.destroy();
                 healthChart = null;
             }
-            emptyEl.textContent = `Нет данных за ${PERIOD_LABELS[statsPeriod]} — нажмите «Обновить данные», чтобы опросить коммутатор.`;
+            emptyEl.textContent = t('Нет данных за {statsPeriod} — нажмите «Обновить данные», чтобы опросить коммутатор.', { statsPeriod: PERIOD_LABELS[statsPeriod] });
             emptyEl.hidden = false;
             return;
         }
@@ -1476,7 +1485,7 @@ async function loadHealthHistory() {
                 datasets: [
                     series('CPU %', 'cpu_usage', CT.blue, CT.blueSoft, 'y'),
                     series('RAM %', 'ram_usage', CT.violet, CT.violetSoft, 'y'),
-                    series('Температура °C', 'temperature', CT.red, CT.redSoft, 'y1')
+                    series(t('Температура °C'), 'temperature', CT.red, CT.redSoft, 'y1')
                 ]
             },
             options: {
@@ -1489,15 +1498,15 @@ async function loadHealthHistory() {
                     tooltip: {
                         callbacks: {
                             title: items => bucketed
-                                ? `${items[0].label} · среднее за ${formatInterval(data.bucket_sec)}`
+                                ? t('{label} · среднее за {bucket_sec}', { label: items[0].label, bucket_sec: formatInterval(data.bucket_sec) })
                                 : items[0].label,
                             label: item => {
                                 const p = points[item.dataIndex];
                                 const key = ['cpu_usage', 'ram_usage', 'temperature'][item.datasetIndex];
                                 const unit = key === 'temperature' ? '°C' : '%';
                                 const v = p[key];
-                                if (v === null || v === undefined) return ` ${item.dataset.label}: нет данных`;
-                                const max = bucketed && p[key + '_max'] != null ? ` (пик ${p[key + '_max'].toFixed(1)}${unit})` : '';
+                                if (v === null || v === undefined) return t(' {label}: нет данных', { label: item.dataset.label });
+                                const max = bucketed && p[key + '_max'] != null ? t(' (пик {v}{unit})', { v: p[key + '_max'].toFixed(1), unit }) : '';
                                 return ` ${item.dataset.label.split(' ')[0]}: ${v.toFixed(1)}${unit}${max}`;
                             }
                         }
@@ -1512,7 +1521,7 @@ async function loadHealthHistory() {
                     y1: {
                         type: 'linear', display: true, position: 'right',
                         ticks: { color: CT.muted }, grid: { drawOnChartArea: false },
-                        title: { display: true, text: 'Температура °C', color: CT.text }
+                        title: { display: true, text: t('Температура °C'), color: CT.text }
                     },
                     x: { ticks: { color: CT.muted, maxRotation: 0, autoSkipPadding: 16 }, grid: { color: CT.grid } }
                 }
@@ -1537,7 +1546,7 @@ async function loadPortList() {
 
         const placeholder = document.createElement('option');
         placeholder.value = '';
-        placeholder.textContent = data.length ? 'Выберите порт...' : 'Нет данных о портах — нажмите «Обновить данные»';
+        placeholder.textContent = data.length ? t('Выберите порт...') : t('Нет данных о портах — нажмите «Обновить данные»');
         select.appendChild(placeholder);
 
         // Сначала физические порты по номеру, затем служебные интерфейсы
@@ -1545,7 +1554,7 @@ async function loadPortList() {
         data.forEach(port => {
             const option = document.createElement('option');
             option.value = port.ifindex;
-            option.textContent = [port.port ? `Порт ${port.port}` : null, port.name, port.alias ? `«${port.alias}»` : null]
+            option.textContent = [port.port ? t('Порт {port}', { port: port.port }) : null, port.name, port.alias ? `«${port.alias}»` : null]
                 .filter(Boolean).join(' · ');
             select.appendChild(option);
         });
@@ -1567,25 +1576,25 @@ function parseServerTime(ts) {
 function formatTimeLabels(timestamps, bucketSec = 0) {
     const dates = timestamps.map(parseServerTime);
     if (bucketSec >= 86400) {
-        return dates.map(d => d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }));
+        return dates.map(d => d.toLocaleDateString(LOCALE, { day: '2-digit', month: '2-digit' }));
     }
     const multiDay = dates.length > 1 && dates[0].toDateString() !== dates[dates.length - 1].toDateString();
     return dates.map(d => multiDay
-        ? d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-        : d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
+        ? d.toLocaleString(LOCALE, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        : d.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' }));
 }
 
 function formatInterval(sec) {
-    if (sec < 90) return `${Math.round(sec)} с`;
-    if (sec < 5400) return `${Math.round(sec / 60)} мин`;
-    return `${(sec / 3600).toFixed(1)} ч`;
+    if (sec < 90) return t('{sec} с', { sec: Math.round(sec) });
+    if (sec < 5400) return t('{v} мин', { v: Math.round(sec / 60) });
+    return t('{v} ч', { v: (sec / 3600).toFixed(1) });
 }
 
 function formatRate(mbps) {
     if (mbps === null || mbps === undefined) return '—';
-    if (mbps >= 1000) return `${(mbps / 1000).toFixed(2)} Гбит/с`;
-    if (mbps >= 1) return `${mbps.toFixed(2)} Мбит/с`;
-    return `${(mbps * 1000).toFixed(1)} Кбит/с`;
+    if (mbps >= 1000) return t('{v} Гбит/с', { v: (mbps / 1000).toFixed(2) });
+    if (mbps >= 1) return t('{mbps} Мбит/с', { mbps: mbps.toFixed(2) });
+    return t('{v} Кбит/с', { v: (mbps * 1000).toFixed(1) });
 }
 
 function clearTrafficChart(message) {
@@ -1604,7 +1613,7 @@ async function loadPortTraffic() {
     const emptyEl = document.getElementById('trafficEmpty');
     const summaryEl = document.getElementById('trafficSummary');
     if (!ifindex) {
-        clearTrafficChart('Выберите порт, чтобы увидеть скорость трафика.');
+        clearTrafficChart(t('Выберите порт, чтобы увидеть скорость трафика.'));
         return;
     }
 
@@ -1613,7 +1622,7 @@ async function loadPortTraffic() {
         const data = await response.json();
         const points = Array.isArray(data.points) ? data.points : [];
         if (points.length === 0) {
-            clearTrafficChart(`Нет данных о скорости порта за ${PERIOD_LABELS[statsPeriod]}. Для расчёта скорости нужно минимум два опроса — подождите следующего или нажмите «Обновить данные» позже.`);
+            clearTrafficChart(t('Нет данных о скорости порта за {statsPeriod}. Для расчёта скорости нужно минимум два опроса — подождите следующего или нажмите «Обновить данные» позже.', { statsPeriod: PERIOD_LABELS[statsPeriod] }));
             return;
         }
         if (chartLibMissing(emptyEl)) return;
@@ -1624,20 +1633,20 @@ async function loadPortTraffic() {
         const peak = arr => { const v = arr.filter(x => x !== null && x !== undefined); return v.length ? Math.max(...v) : null; };
         if (bucketed) {
             const errors = points.reduce((s, p) => s + (p.errors || 0), 0);
-            summaryEl.textContent = `За ${PERIOD_LABELS[statsPeriod]}: в среднем ↓ ${formatRate(avg(points.map(p => p.in_mbps)))} · ↑ ${formatRate(avg(points.map(p => p.out_mbps)))}` +
-                ` · пик ↓ ${formatRate(peak(points.map(p => p.in_mbps_max)))} · ↑ ${formatRate(peak(points.map(p => p.out_mbps_max)))} · ошибок: ${errors}`;
+            summaryEl.textContent = t('За {statsPeriod}: в среднем ↓ {v} · ↑ {v2}', { statsPeriod: PERIOD_LABELS[statsPeriod], v: formatRate(avg(points.map(p => p.in_mbps))), v2: formatRate(avg(points.map(p => p.out_mbps))) }) +
+                t(' · пик ↓ {v} · ↑ {v2} · ошибок: {errors}', { v: formatRate(peak(points.map(p => p.in_mbps_max))), v2: formatRate(peak(points.map(p => p.out_mbps_max))), errors });
         } else {
             const last = points[points.length - 1];
             summaryEl.textContent = last.in_mbps === null
-                ? `Последний интервал (${formatInterval(last.interval_sec)}): счётчики сбросились — вероятно, коммутатор или порт перезагружался.`
-                : `Последний интервал (${formatInterval(last.interval_sec)}): ↓ ${formatRate(last.in_mbps)} · ↑ ${formatRate(last.out_mbps)} · ошибок: ${last.errors ?? 0}`;
+                ? t('Последний интервал ({interval_sec}): счётчики сбросились — вероятно, коммутатор или порт перезагружался.', { interval_sec: formatInterval(last.interval_sec) })
+                : t('Последний интервал ({interval_sec}): ↓ {in_mbps} · ↑ {out_mbps} · ошибок: {v}', { interval_sec: formatInterval(last.interval_sec), in_mbps: formatRate(last.in_mbps), out_mbps: formatRate(last.out_mbps), v: last.errors ?? 0 });
         }
 
         // Единица оси подстраивается под величину трафика
         const maxMbps = Math.max(0, ...points.map(p => Math.max(p.in_mbps ?? 0, p.out_mbps ?? 0, p.in_mbps_max ?? 0, p.out_mbps_max ?? 0)));
-        const unit = maxMbps >= 1000 ? { k: 0.001, name: 'Гбит/с' }
-                   : maxMbps >= 1    ? { k: 1, name: 'Мбит/с' }
-                   :                   { k: 1000, name: 'Кбит/с' };
+        const unit = maxMbps >= 1000 ? { k: 0.001, name: t('Гбит/с') }
+                   : maxMbps >= 1    ? { k: 1, name: t('Мбит/с') }
+                   :                   { k: 1000, name: t('Кбит/с') };
         const scaled = v => (v === null || v === undefined) ? null : +(v * unit.k).toFixed(3);
 
         const animate = !trafficChart;
@@ -1649,14 +1658,14 @@ async function loadPortTraffic() {
         const pointRadius = points.length > 60 ? 0 : 3;
         const datasets = [
             {
-                label: bucketed ? `Входящий, среднее, ${unit.name}` : `Входящий, ${unit.name}`,
+                label: bucketed ? t('Входящий, среднее, {name}', { name: unit.name }) : t('Входящий, {name}', { name: unit.name }),
                 data: points.map(p => scaled(p.in_mbps)),
                 borderColor: CT.green, backgroundColor: CT.greenSoft,
                 cubicInterpolationMode: 'monotone', // без выбросов ниже нуля между точками
                 fill: true, spanGaps: false, pointRadius
             },
             {
-                label: bucketed ? `Исходящий, среднее, ${unit.name}` : `Исходящий, ${unit.name}`,
+                label: bucketed ? t('Исходящий, среднее, {name}', { name: unit.name }) : t('Исходящий, {name}', { name: unit.name }),
                 data: points.map(p => scaled(p.out_mbps)),
                 borderColor: CT.blue, backgroundColor: CT.blueSoft,
                 cubicInterpolationMode: 'monotone',
@@ -1664,7 +1673,7 @@ async function loadPortTraffic() {
             },
             {
                 type: 'bar',
-                label: bucketed ? `Ошибки за ${formatInterval(data.bucket_sec)}` : 'Ошибки за интервал',
+                label: bucketed ? t('Ошибки за {bucket_sec}', { bucket_sec: formatInterval(data.bucket_sec) }) : t('Ошибки за интервал'),
                 data: points.map(p => p.errors ?? null),
                 backgroundColor: CT.redBar, borderColor: CT.red,
                 yAxisID: 'y1', maxBarThickness: 10
@@ -1673,9 +1682,9 @@ async function loadPortTraffic() {
         if (bucketed) {
             // Пики — пунктиром поверх средних
             datasets.push(
-                { label: 'Пик входящий', data: points.map(p => scaled(p.in_mbps_max)), borderColor: CT.green,
+                { label: t('Пик входящий'), data: points.map(p => scaled(p.in_mbps_max)), borderColor: CT.green,
                   borderDash: [4, 4], borderWidth: 1.2, pointRadius: 0, fill: false, cubicInterpolationMode: 'monotone' },
-                { label: 'Пик исходящий', data: points.map(p => scaled(p.out_mbps_max)), borderColor: CT.blue,
+                { label: t('Пик исходящий'), data: points.map(p => scaled(p.out_mbps_max)), borderColor: CT.blue,
                   borderDash: [4, 4], borderWidth: 1.2, pointRadius: 0, fill: false, cubicInterpolationMode: 'monotone' });
         }
 
@@ -1695,15 +1704,15 @@ async function loadPortTraffic() {
                             title: items => {
                                 const p = points[items[0].dataIndex];
                                 return bucketed
-                                    ? `${items[0].label} · среднее за ${formatInterval(data.bucket_sec)}`
-                                    : `${items[0].label} (интервал ${formatInterval(p.interval_sec)})`;
+                                    ? t('{label} · среднее за {bucket_sec}', { label: items[0].label, bucket_sec: formatInterval(data.bucket_sec) })
+                                    : t('{label} (интервал {interval_sec})', { label: items[0].label, interval_sec: formatInterval(p.interval_sec) });
                             },
                             label: item => {
                                 const p = points[item.dataIndex];
-                                if (item.dataset.yAxisID === 'y1') return ` Ошибки: ${item.raw ?? '—'}`;
+                                if (item.dataset.yAxisID === 'y1') return t(' Ошибки: {v}', { v: item.raw ?? '—' });
                                 if (item.datasetIndex >= 3) return ` ${item.dataset.label}: ${formatRate(item.datasetIndex === 3 ? p.in_mbps_max : p.out_mbps_max)}`;
                                 const mbps = item.datasetIndex === 0 ? p.in_mbps : p.out_mbps;
-                                return ` ${item.datasetIndex === 0 ? 'Входящий' : 'Исходящий'}: ${mbps === null ? 'сброс счётчика' : formatRate(mbps)}`;
+                                return ` ${item.datasetIndex === 0 ? t('Входящий') : t('Исходящий')}: ${mbps === null ? t('сброс счётчика') : formatRate(mbps)}`;
                             }
                         }
                     }
@@ -1712,12 +1721,12 @@ async function loadPortTraffic() {
                     y: {
                         type: 'linear', display: true, position: 'left', beginAtZero: true,
                         ticks: { color: CT.muted }, grid: { color: CT.grid },
-                        title: { display: true, text: `Скорость, ${unit.name}`, color: CT.text }
+                        title: { display: true, text: t('Скорость, {name}', { name: unit.name }), color: CT.text }
                     },
                     y1: {
                         type: 'linear', display: true, position: 'right', beginAtZero: true,
                         ticks: { color: CT.muted, precision: 0 }, grid: { drawOnChartArea: false },
-                        title: { display: true, text: 'Ошибки', color: CT.text }
+                        title: { display: true, text: t('Ошибки'), color: CT.text }
                     },
                     x: { ticks: { color: CT.muted, maxRotation: 0, autoSkipPadding: 16 }, grid: { color: CT.grid } }
                 }
@@ -1737,7 +1746,7 @@ async function loadDuplicateMACs() {
             document.getElementById('duplicateAlert').style.display = 'block';
             const list = document.getElementById('duplicateList');
             list.innerHTML = data.map(dup =>
-                `<div class="alert-item">MAC ${escapeHtml(dup.mac)} обнаружен на портах: ${dup.ports.join(', ')}</div>`
+                t('<div class="alert-item">MAC {mac} обнаружен на портах: {v}</div>', { mac: escapeHtml(dup.mac), v: dup.ports.join(', ') })
             ).join('');
         } else {
             document.getElementById('duplicateAlert').style.display = 'none';
@@ -1749,12 +1758,12 @@ async function loadDuplicateMACs() {
 
 const POE_STATE_BY_CODE = { 1: 'disabled', 2: 'searching', 3: 'delivering', 4: 'fault', 5: 'test', 6: 'fault' };
 const POE_STATE_VIEW = {
-    delivering: { cls: 'delivering', text: 'Питание' },
-    searching:  { cls: 'searching',  text: 'Поиск' },
-    disabled:   { cls: 'disabled',   text: 'Выключен' },
-    test:       { cls: 'searching',  text: 'Тест' },
-    fault:      { cls: 'fault',      text: 'Ошибка' },
-    unknown:    { cls: 'disabled',   text: 'Неизвестно' }
+    delivering: { cls: 'delivering', text: t('Питание') },
+    searching:  { cls: 'searching',  text: t('Поиск') },
+    disabled:   { cls: 'disabled',   text: t('Выключен') },
+    test:       { cls: 'searching',  text: t('Тест') },
+    fault:      { cls: 'fault',      text: t('Ошибка') },
+    unknown:    { cls: 'disabled',   text: t('Неизвестно') }
 };
 
 async function loadPoEStatus() {
@@ -1787,7 +1796,7 @@ async function loadPoEStatus() {
                     <div class="poe-port-name">${escapeHtml(info.port_name || ('Port ' + ifindex))}</div>
                     <div class="poe-status ${view.cls}">${view.text}</div>
                 </div>
-                <div class="poe-power" title="${typeof poe.power_consumed === 'number' ? '' : 'Коммутатор не сообщает потребление по портам'}">${power}</div>
+                <div class="poe-power" title="${typeof poe.power_consumed === 'number' ? '' : escapeAttr(t('Коммутатор не сообщает потребление по портам'))}">${power}</div>
             `;
             grid.appendChild(card);
         });
@@ -1805,12 +1814,12 @@ async function refreshStatsData() {
         const response = await fetch(`/api/poll_snmp/${SWITCH_ID}`, { method: 'POST' });
         const result = await response.json();
         if (result && result.error) {
-            notify('Ошибка SNMP-опроса: ' + result.error, 'error');
+            notify(t('Ошибка SNMP-опроса: ') + result.error, 'error');
         }
         await loadStatsData();
     } catch (error) {
         console.error('Error refreshing stats:', error);
-        notify('Ошибка при обновлении данных', 'error');
+        notify(t('Ошибка при обновлении данных'), 'error');
     } finally {
         btn.disabled = false;
         btn.classList.remove('is-loading');

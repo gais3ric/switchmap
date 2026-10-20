@@ -14,7 +14,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     const browser = await puppeteer.launch({
         executablePath: process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
         headless: true,
-        args: ['--no-first-run', '--no-default-browser-check'],
+        args: ['--no-first-run', '--no-default-browser-check', '--lang=ru-RU', '--accept-lang=ru-RU'],
     });
     const page = await browser.newPage();
     await page.goto(base + '/login', { waitUntil: 'domcontentloaded' }); await page.type('#username', 'admin'); await page.type('#password', 'adminpass123');

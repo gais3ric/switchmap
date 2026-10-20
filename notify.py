@@ -28,9 +28,11 @@ from datetime import datetime, timedelta
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr
 
+from i18n import N_, _, _ns, _s
+
 TS = "%Y-%m-%d %H:%M:%S"
 CHANNELS = ("telegram", "email")
-CHANNEL_LABELS = {"telegram": "Telegram", "email": "Почта"}
+CHANNEL_LABELS = {"telegram": "Telegram", "email": N_("Почта")}
 
 # Группы событий, которые можно включать по отдельности
 EVENT_GROUPS = {
@@ -41,11 +43,11 @@ EVENT_GROUPS = {
     "health": ("cpu_high", "cpu_ok", "temp_high", "temp_ok"),
 }
 GROUP_LABELS = {
-    "switch": "Коммутатор недоступен / снова доступен",
-    "port": "Порт упал / поднялся",
-    "util": "Высокая загрузка порта",
-    "errors": "Ошибки на порту",
-    "health": "CPU и температура коммутатора",
+    "switch": N_("Коммутатор недоступен / снова доступен"),
+    "port": N_("Порт упал / поднялся"),
+    "util": N_("Высокая загрузка порта"),
+    "errors": N_("Ошибки на порту"),
+    "health": N_("CPU и температура коммутатора"),
 }
 RECOVERY = {"switch_up", "up", "util_ok", "errors_ok", "cpu_ok", "temp_ok"}
 # Что отправляется и в тихие часы
@@ -53,13 +55,14 @@ CRITICAL = {"switch_down", "switch_up", "temp_high"}
 # Событие восстановления → событие, с которого началась проблема (для «длилось N мин»)
 PAIRS = {"up": "down", "util_ok": "util_high", "errors_ok": "errors_high", "cpu_ok": "cpu_high", "temp_ok": "temp_high"}
 
+# Подписи событий; у событий порта — без слова «порт» (оно в тексте строки: «порт 5 — упал»)
 LABELS = {
-    "switch_down": "коммутатор недоступен", "switch_up": "коммутатор снова доступен",
-    "down": "порт упал", "up": "порт поднялся",
-    "util_high": "высокая загрузка", "util_ok": "загрузка в норме",
-    "errors_high": "ошибки на порту", "errors_ok": "ошибки прекратились",
-    "cpu_high": "высокая загрузка CPU", "cpu_ok": "CPU в норме",
-    "temp_high": "перегрев", "temp_ok": "температура в норме",
+    "switch_down": N_("коммутатор недоступен"), "switch_up": N_("коммутатор снова доступен"),
+    "down": N_("упал"), "up": N_("поднялся"),
+    "util_high": N_("высокая загрузка"), "util_ok": N_("загрузка в норме"),
+    "errors_high": N_("ошибки на порту"), "errors_ok": N_("ошибки прекратились"),
+    "cpu_high": N_("высокая загрузка CPU"), "cpu_ok": N_("CPU в норме"),
+    "temp_high": N_("перегрев"), "temp_ok": N_("температура в норме"),
 }
 SEVERITY_MARK = {"critical": "🔴", "warning": "🟠", "ok": "🟢", "info": "🔵"}
 
@@ -180,7 +183,7 @@ def sanitize(incoming, current, box):
     cfg = _merge(DEFAULT_CONFIG, {})
     base = str(incoming.get("base_url") or "").strip().rstrip("/")
     if base and not base.lower().startswith(("http://", "https://")):
-        return None, "Адрес SwitchMap должен начинаться с http:// или https://"
+        return None, _("Адрес SwitchMap должен начинаться с http:// или https://")
     cfg["base_url"] = base[:300]
     try:
         cfg["flap_limit"] = max(0, min(100, int(incoming.get("flap_limit", 6))))
@@ -209,16 +212,16 @@ def sanitize(incoming, current, box):
             dst["chats"] = _clean_chats(src.get("chats"))
             proxy = str(src.get("proxy") or "").strip()
             if proxy and not proxy.lower().startswith(("http://", "https://")):
-                return None, "Прокси указывается как http://адрес:порт"
+                return None, _("Прокси указывается как http://адрес:порт")
             dst["proxy"] = proxy[:300]
             if dst["enabled"] and (not dst["token"] or not dst["chats"]):
-                return None, "Для Telegram нужны токен бота и хотя бы один чат"
+                return None, _("Для Telegram нужны токен бота и хотя бы один чат")
         else:
             dst["host"] = str(src.get("host") or "").strip()[:200]
             try:
                 dst["port"] = max(1, min(65535, int(src.get("port") or 465)))
             except (TypeError, ValueError):
-                return None, "Порт почтового сервера — число от 1 до 65535"
+                return None, _("Порт почтового сервера — число от 1 до 65535")
             dst["security"] = src.get("security") if src.get("security") in ("ssl", "starttls", "none") else "ssl"
             dst["verify"] = bool(src.get("verify", True))
             dst["username"] = str(src.get("username") or "").strip()[:200]
@@ -226,13 +229,13 @@ def sanitize(incoming, current, box):
             rcpts = _split_addresses(src.get("recipients"))
             bad = [a for a in rcpts if not _valid_address(a)]
             if bad:
-                return None, f"Неверный адрес получателя: {bad[0]}"
+                return None, _("Неверный адрес получателя: {bad}", bad=bad[0])
             dst["recipients"] = ", ".join(rcpts)
             sender = dst["sender"] or dst["username"]
             if sender and not _valid_address(parseaddr(sender)[1]):
-                return None, "Адрес отправителя указан неверно"
+                return None, _("Адрес отправителя указан неверно")
             if dst["enabled"] and (not dst["host"] or not rcpts or not sender):
-                return None, "Для почты нужны сервер, отправитель и хотя бы один получатель"
+                return None, _("Для почты нужны сервер, отправитель и хотя бы один получатель")
     return cfg, None
 
 
@@ -265,31 +268,31 @@ def describe_changes(before, after):
         if b != a:
             changes.append({"field": field, "before": b, "after": a})
 
-    yn = lambda v: "да" if v else "нет"
-    add("Адрес SwitchMap для ссылок", before["base_url"] or "—", after["base_url"] or "—")
-    add("Порог «мигания» порта", str(before["flap_limit"]), str(after["flap_limit"]))
+    yn = lambda v: _s("да") if v else _s("нет")
+    add(_s("Адрес SwitchMap для ссылок"), before["base_url"] or "—", after["base_url"] or "—")
+    add(_s("Порог «мигания» порта"), str(before["flap_limit"]), str(after["flap_limit"]))
     for ch in CHANNELS:
-        b, a, name = before[ch], after[ch], CHANNEL_LABELS[ch]
-        add(f"{name}: включено", yn(b["enabled"]), yn(a["enabled"]))
-        groups = lambda c: ", ".join(GROUP_LABELS[g].lower() for g in c["events"]) or "—"
-        add(f"{name}: события", groups(b), groups(a))
-        add(f"{name}: о восстановлении", yn(b["recovery"]), yn(a["recovery"]))
-        add(f"{name}: только важные порты", yn(b["important_only"]), yn(a["important_only"]))
-        quiet = lambda c: f"{c['quiet']['from']}–{c['quiet']['to']}" if c["quiet"]["enabled"] else "выкл."
-        add(f"{name}: тихие часы", quiet(b), quiet(a))
+        b, a, name = before[ch], after[ch], _s(CHANNEL_LABELS[ch])
+        add(_s("{name}: включено", name=name), yn(b["enabled"]), yn(a["enabled"]))
+        groups = lambda c: ", ".join(_s(GROUP_LABELS[g]).lower() for g in c["events"]) or "—"
+        add(_s("{name}: события", name=name), groups(b), groups(a))
+        add(_s("{name}: о восстановлении", name=name), yn(b["recovery"]), yn(a["recovery"]))
+        add(_s("{name}: только важные порты", name=name), yn(b["important_only"]), yn(a["important_only"]))
+        quiet = lambda c: f"{c['quiet']['from']}–{c['quiet']['to']}" if c["quiet"]["enabled"] else _s("выкл.")
+        add(_s("{name}: тихие часы", name=name), quiet(b), quiet(a))
         key = SECRET_KEYS[ch]
         if b[key] != a[key]:
-            changes.append({"field": f"{name}: {'токен бота' if ch == 'telegram' else 'пароль'}",
-                            "before": "•••" if b[key] else "—", "after": "изменён" if a[key] else "удалён"})
+            changes.append({"field": _s("{name}: токен бота", name=name) if ch == "telegram" else _s("{name}: пароль", name=name),
+                            "before": "•••" if b[key] else "—", "after": _s("изменён") if a[key] else _s("удалён")})
         if ch == "telegram":
             chats = lambda c: ", ".join(x["title"] or x["id"] for x in c["chats"]) or "—"
-            add(f"{name}: чаты", chats(b), chats(a))
-            add(f"{name}: прокси", b["proxy"] or "—", a["proxy"] or "—")
+            add(_s("{name}: чаты", name=name), chats(b), chats(a))
+            add(_s("{name}: прокси", name=name), b["proxy"] or "—", a["proxy"] or "—")
         else:
-            add(f"{name}: сервер", f"{b['host']}:{b['port']} ({b['security']})" if b["host"] else "—",
+            add(_s("{name}: сервер", name=name), f"{b['host']}:{b['port']} ({b['security']})" if b["host"] else "—",
                 f"{a['host']}:{a['port']} ({a['security']})" if a["host"] else "—")
-            add(f"{name}: логин", b["username"] or "—", a["username"] or "—")
-            add(f"{name}: получатели", b["recipients"] or "—", a["recipients"] or "—")
+            add(_s("{name}: логин", name=name), b["username"] or "—", a["username"] or "—")
+            add(_s("{name}: получатели", name=name), b["recipients"] or "—", a["recipients"] or "—")
     return changes
 
 
@@ -310,7 +313,7 @@ def log_entries(db, limit=50):
     with sqlite3.connect(db) as conn:
         rows = conn.execute("SELECT id, time, channel, ok, events, title, error FROM notify_log "
                             "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-    return [{"id": r[0], "time": r[1], "channel": r[2], "channel_label": CHANNEL_LABELS.get(r[2], r[2]),
+    return [{"id": r[0], "time": r[1], "channel": r[2], "channel_label": _(CHANNEL_LABELS[r[2]]) if r[2] in CHANNEL_LABELS else r[2],
              "ok": bool(r[3]), "events": r[4], "title": r[5] or "", "error": r[6] or ""} for r in rows]
 
 
@@ -343,13 +346,13 @@ def _plural(n, one, few, many):
 def _duration(minutes):
     minutes = int(round(minutes))
     if minutes < 1:
-        return "меньше минуты"
+        return _s("меньше минуты")
     if minutes < 60:
-        return f"{minutes} мин"
+        return _s("{minutes} мин", minutes=minutes)
     hours, mins = divmod(minutes, 60)
     if hours < 48:
-        return f"{hours} ч {mins} мин" if mins else f"{hours} ч"
-    return f"{hours // 24} дн {hours % 24} ч"
+        return _s("{hours} ч {mins} мин", hours=hours, mins=mins) if mins else _s("{hours} ч", hours=hours)
+    return _s("{days} дн {hours} ч", days=hours // 24, hours=hours % 24)
 
 
 def _switch_info(conn):
@@ -380,7 +383,7 @@ def _switch_info(conn):
                 aliases[str(ifindex)] = alias
             if alias or str(port.get("port") or "") in marked:
                 important.add(str(ifindex))
-        info[sid] = {"name": name or f"Коммутатор {sid}", "ip": ip or "", "important": important, "aliases": aliases}
+        info[sid] = {"name": name or _s("Коммутатор {id}", id=sid), "ip": ip or "", "important": important, "aliases": aliases}
     return info
 
 
@@ -426,7 +429,7 @@ def select_events(conn, rows, ch_cfg, flap_limit, mutes, now):
         etype = ev["event_type"]
         if etype not in allowed:
             continue
-        sw = info.get(ev["switch_id"], {"name": f"Коммутатор {ev['switch_id']}", "ip": "", "important": set(), "aliases": {}})
+        sw = info.get(ev["switch_id"], {"name": _s("Коммутатор {id}", id=ev['switch_id']), "ip": "", "important": set(), "aliases": {}})
         is_port = ev["ifindex"] is not None
         if is_port and ch_cfg["important_only"] and str(ev["ifindex"]) not in sw["important"]:
             continue
@@ -459,13 +462,14 @@ def select_events(conn, rows, ch_cfg, flap_limit, mutes, now):
         for key, (ev, sw, count) in flapping_now.items():
             notes.append({"severity": "warning", "switch_id": ev["switch_id"], "switch_name": sw["name"],
                           "port_number": ev["port_number"], "text":
-                          f"{sw['name']}: порт {_port_label(ev, sw['aliases'].get(str(ev['ifindex']), ''))} нестабилен — "
-                          f"{count} переключений за час. Уведомления по нему приостановлены на час."})
+                          _ns(count, "{name}: порт {port} нестабилен — {n} переключение за час. Уведомления по нему приостановлены на час.",
+                              "{name}: порт {port} нестабилен — {n} переключения за час. Уведомления по нему приостановлены на час.",
+                              "{name}: порт {port} нестабилен — {n} переключений за час. Уведомления по нему приостановлены на час.",
+                              name=sw['name'], port=_port_label(ev, sw['aliases'].get(str(ev['ifindex']), '')))})
     if stale:
-        notes.append({"severity": "info", "text": f"Пропущено старых событий (больше {STALE_HOURS} ч назад): {stale}. "
-                                                  "Они есть в журнале событий SwitchMap."})
+        notes.append({"severity": "info", "text": _s("Пропущено старых событий (больше {hours} ч назад): {n}. Они есть в журнале событий SwitchMap.", hours=STALE_HOURS, n=stale)})
     if quiet_skipped and items:
-        notes.append({"severity": "info", "text": f"Тихие часы: некритичных событий не отправлено — {quiet_skipped}."})
+        notes.append({"severity": "info", "text": _s("Тихие часы: некритичных событий не отправлено — {n}.", n=quiet_skipped)})
     return items, notes
 
 
@@ -518,19 +522,26 @@ def _line(it, now):
     if it.get("flips"):
         final = it["final"]
         sev = "ok" if final == "up" else "critical"
-        text = (f"порт {_port_label(it, it['alias'])} переключался {it['flips']} {_plural(it['flips'], 'раз', 'раза', 'раз')}, сейчас "
-                f"{'работает' if final == 'up' else 'не работает'}")
+        port = _port_label(it, it['alias'])
+        if final == "up":
+            text = _ns(it["flips"], "порт {port} переключался {n} раз, сейчас работает",
+                       "порт {port} переключался {n} раза, сейчас работает",
+                       "порт {port} переключался {n} раз, сейчас работает", port=port)
+        else:
+            text = _ns(it["flips"], "порт {port} переключался {n} раз, сейчас не работает",
+                       "порт {port} переключался {n} раза, сейчас не работает",
+                       "порт {port} переключался {n} раз, сейчас не работает", port=port)
         return sev, text, _short_time(it.get("event_time_last") or it["event_time"], now)
-    label = LABELS.get(etype, etype)
+    label = _s(LABELS[etype]) if etype in LABELS else etype
     if it["ifindex"] is not None:
-        text = f"порт {_port_label(it, it['alias'])} — {label.removeprefix('порт ')}"
+        text = _s("порт {port} — {event}", port=_port_label(it, it['alias']), event=label)
     else:
         text = label[:1].upper() + label[1:]
     details = (it.get("details") or "").strip()
     if details:
         text += f": {details}"
     if it.get("duration") is not None and etype != "switch_up":
-        text += f" (длилось {_duration(it['duration'])})"
+        text += _s(" (длилось {duration})", duration=_duration(it['duration']))
     return _severity(etype), text, _short_time(it["event_time"], now)
 
 
@@ -545,16 +556,19 @@ def build_message(items, notes, base_url, now=None):
     if len(items) == 1 and not notes:
         it = items[0]
         if it.get("flips"):
-            title = f"{it['switch_name']}: порт {_port_label(it, it['alias'])} переключался"
+            title = _s("{name}: порт {port} переключался", name=it['switch_name'], port=_port_label(it, it['alias']))
         else:
-            label = LABELS.get(it["event_type"], it["event_type"])
-            title = (f"{it['switch_name']}: порт {_port_label(it, it['alias'])} — {label.removeprefix('порт ')}"
+            label = _s(LABELS[it["event_type"]]) if it["event_type"] in LABELS else it["event_type"]
+            title = (_s("{name}: порт {port} — {event}", name=it['switch_name'], port=_port_label(it, it['alias']), event=label)
                      if it["ifindex"] is not None else f"{it['switch_name']}: {label}")
     elif items:
         n = len(items)
-        word = _plural(n, "событие", "события", "событий")
-        title =(f"{next(iter(switches.values()))[0]['switch_name']}: {n} {word}" if len(switches) == 1
-                 else f"{n} {word} на {len(switches)} коммутаторах")
+        if len(switches) == 1:
+            title = _ns(n, "{name}: {n} событие", "{name}: {n} события", "{name}: {n} событий",
+                        name=next(iter(switches.values()))[0]['switch_name'])
+        else:
+            title = _ns(n, "{n} событие, коммутаторов: {switches}", "{n} события, коммутаторов: {switches}",
+                        "{n} событий, коммутаторов: {switches}", switches=len(switches))
     else:
         title = notes[0]["text"] if notes else "SwitchMap"
     if len(title) > 150:
@@ -574,7 +588,7 @@ def build_message(items, notes, base_url, now=None):
         head = first["switch_name"] + (f" ({first['switch_ip']})" if first["switch_ip"] else "")
         url = link(sid)
         plain.append(head + (f" — {url}" if url else ""))
-        rich.append(f"<b>{html.escape(head)}</b>" + (f' · <a href="{html.escape(url)}">открыть</a>' if url else ""))
+        rich.append(f"<b>{html.escape(head)}</b>" + (_s(" · <a href=\"{url}\">открыть</a>", url=html.escape(url)) if url else ""))
         for it in group:
             if full():
                 break
@@ -590,8 +604,8 @@ def build_message(items, notes, base_url, now=None):
         rich.append("")
     if shown < len(items):
         rest = len(items) - shown
-        plain.append(f"…и ещё {rest}. Полный список — в журнале событий SwitchMap.")
-        rich.append(f"<i>…и ещё {rest}. Полный список — в журнале событий SwitchMap.</i>")
+        plain.append(_s("…и ещё {rest}. Полный список — в журнале событий SwitchMap.", rest=rest))
+        rich.append(_s("<i>…и ещё {rest}. Полный список — в журнале событий SwitchMap.</i>", rest=rest))
     for note in notes:
         mark = SEVERITY_MARK[note["severity"]]
         plain.append(f"{mark} {note['text']}")
@@ -613,7 +627,7 @@ def _http_json(url, data=None, proxy="", timeout=15):
             return json.loads(resp.read().decode("utf-8") or "{}")
     except urllib.error.HTTPError as e:
         if e.code == 407:
-            raise NotifyError("Прокси требует логин и пароль: укажите их в адресе прокси")
+            raise NotifyError(_s("Прокси требует логин и пароль: укажите их в адресе прокси"))
         try:
             data = json.loads(e.read().decode("utf-8") or "{}")
         except ValueError:
@@ -621,13 +635,12 @@ def _http_json(url, data=None, proxy="", timeout=15):
         if isinstance(data, dict) and "ok" in data:
             return data
         if e.code >= 500:
-            raise NotifyError(f"Сервер Telegram временно недоступен (HTTP {e.code}) — сообщение уйдёт при следующей попытке")
-        raise NotifyError(f"Telegram ответил ошибкой HTTP {e.code}" + (" — возможно, мешает прокси" if proxy else ""))
+            raise NotifyError(_s("Сервер Telegram временно недоступен (HTTP {code}) — сообщение уйдёт при следующей попытке", code=e.code))
+        raise NotifyError(_s("Telegram ответил ошибкой HTTP {code}", code=e.code) + (_s(" — возможно, мешает прокси") if proxy else ""))
     except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError) as e:
         reason = getattr(e, "reason", e)
-        hint = " через прокси " + proxy if proxy else ""
-        raise NotifyError(f"Нет связи с api.telegram.org{hint}: {reason}. Проверьте доступ в интернет с сервера "
-                          "SwitchMap или укажите прокси.")
+        hint = _s(" через прокси ") + proxy if proxy else ""
+        raise NotifyError(_s("Нет связи с api.telegram.org{hint}: {reason}. Проверьте доступ в интернет с сервера SwitchMap или укажите прокси.", hint=hint, reason=reason))
 
 
 # Можно указать собственный сервер Bot API (telegram-bot-api) — например, если Telegram доступен только через него
@@ -636,13 +649,13 @@ TELEGRAM_API = os.environ.get("SWITCHMAP_TELEGRAM_API", "https://api.telegram.or
 
 def _tg_call(token, method, payload=None, proxy=""):
     if not token:
-        raise NotifyError("Не указан токен бота")
+        raise NotifyError(_s("Не указан токен бота"))
     resp = _http_json(f"{TELEGRAM_API}/bot{token}/{method}", payload, proxy)
     if resp.get("ok"):
         return resp.get("result")
-    code, desc = resp.get("error_code"), resp.get("description") or "неизвестная ошибка"
+    code, desc = resp.get("error_code"), resp.get("description") or _s("неизвестная ошибка")
     if code in (401, 404):
-        raise NotifyError("Telegram не принял токен бота — проверьте, что он скопирован целиком")
+        raise NotifyError(_s("Telegram не принял токен бота — проверьте, что он скопирован целиком"))
     err = NotifyError(_tg_error_text(desc))
     err.parameters = resp.get("parameters") or {}
     raise err
@@ -651,15 +664,15 @@ def _tg_call(token, method, payload=None, proxy=""):
 def _tg_error_text(desc):
     low = desc.lower()
     if "chat not found" in low:
-        return "Чат не найден: напишите боту /start или добавьте бота в группу"
+        return _s("Чат не найден: напишите боту /start или добавьте бота в группу")
     if "bot was blocked" in low:
-        return "Пользователь заблокировал бота — разблокируйте его в Telegram"
+        return _s("Пользователь заблокировал бота — разблокируйте его в Telegram")
     if "kicked" in low or "not a member" in low:
-        return "Бот удалён из группы — добавьте его снова"
+        return _s("Бот удалён из группы — добавьте его снова")
     if "too many requests" in low:
-        return "Telegram просит подождать (слишком много сообщений)"
+        return _s("Telegram просит подождать (слишком много сообщений)")
     if "upgraded to a supergroup" in low:
-        return "Группа стала супергруппой — номер чата изменился"
+        return _s("Группа стала супергруппой — номер чата изменился")
     return f"Telegram: {desc}"
 
 
@@ -684,7 +697,7 @@ def telegram_find_chats(token, proxy=""):
                     title += f" (@{chat['username']})"
             else:
                 title = chat.get("title") or ""
-            kind = {"private": "личный чат", "group": "группа", "supergroup": "группа", "channel": "канал"}.get(chat.get("type"), "")
+            kind = {"private": _s("личный чат"), "group": _s("группа"), "supergroup": _s("группа"), "channel": _s("канал")}.get(chat.get("type"), "")
             chats[str(chat["id"])] = {"id": str(chat["id"]), "title": title.strip() or str(chat["id"]), "kind": kind}
     return list(chats.values())
 
@@ -695,7 +708,7 @@ def _tg_html(msg):
     if len(text) > TELEGRAM_LIMIT:
         cut = text[:TELEGRAM_LIMIT - 80]
         cut = cut[:cut.rfind("\n")] if "\n" in cut else cut
-        text = cut + "\n<i>…сообщение сокращено, полный список — в SwitchMap</i>"
+        text = cut + _s("\n<i>…сообщение сокращено, полный список — в SwitchMap</i>")
     return text
 
 
@@ -703,14 +716,14 @@ def send_telegram(cfg, box, msg):
     """Отправляет во все чаты. Возвращает (доставлено, ошибки, новые id чатов после миграции групп)."""
     token = box.decrypt(cfg["token"]) if cfg.get("token") else ""
     if not token:
-        raise NotifyError("Не указан токен бота")
+        raise NotifyError(_s("Не указан токен бота"))
     if not cfg["chats"]:
-        raise NotifyError("Не выбран ни один чат")
+        raise NotifyError(_s("Не выбран ни один чат"))
     text = _tg_html(msg)
     delivered, errors, migrated = 0, [], {}
     for chat in cfg["chats"]:
         cid = chat["id"]
-        for _ in range(2):
+        for _attempt in range(2):
             try:
                 _tg_call(token, "sendMessage", {"chat_id": cid, "text": text, "parse_mode": "HTML",
                                                 "disable_web_page_preview": True}, cfg.get("proxy", ""))
@@ -737,28 +750,24 @@ def _valid_address(addr):
     addr = addr.strip()
     if "@" not in addr or " " in addr:
         return False
-    local, _, domain = addr.rpartition("@")
+    local, _at, domain = addr.rpartition("@")
     return bool(local) and "." in domain and not domain.startswith(".") and not domain.endswith(".")
 
 
 def _email_html(msg):
     body = msg["html"].replace("\n", "<br>\n")
-    return (f'<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.55;color:#1f2430">'
-            f'<div style="font-size:16px;font-weight:600;margin-bottom:12px">{html.escape(msg["title"])}</div>'
-            f'{body}'
-            f'<div style="margin-top:18px;font-size:12px;color:#8a90a0">Это сообщение отправил SwitchMap. '
-            f'Настроить уведомления можно на странице «Уведомления».</div></div>')
+    return (_s("<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.55;color:#1f2430\"><div style=\"font-size:16px;font-weight:600;margin-bottom:12px\">{title}</div>{body}<div style=\"margin-top:18px;font-size:12px;color:#8a90a0\">Это сообщение отправил SwitchMap. Настроить уведомления можно на странице «Уведомления».</div></div>", title=html.escape(msg["title"]), body=body))
 
 
 def send_email(cfg, box, msg):
     rcpts = _split_addresses(cfg["recipients"])
     if not cfg["host"]:
-        raise NotifyError("Не указан почтовый сервер")
+        raise NotifyError(_s("Не указан почтовый сервер"))
     if not rcpts:
-        raise NotifyError("Не указан ни один получатель")
+        raise NotifyError(_s("Не указан ни один получатель"))
     sender = cfg["sender"] or cfg["username"]
     if not sender:
-        raise NotifyError("Не указан адрес отправителя")
+        raise NotifyError(_s("Не указан адрес отправителя"))
     sender_name, sender_addr = parseaddr(sender)
 
     em = EmailMessage()
@@ -790,32 +799,30 @@ def send_email(cfg, box, msg):
                 server.login(cfg["username"], password)
             refused = server.send_message(em, from_addr=sender_addr, to_addrs=rcpts)
     except smtplib.SMTPAuthenticationError:
-        raise NotifyError("Сервер отклонил логин или пароль. Для Gmail, Яндекса и Mail.ru нужен «пароль приложения», "
-                          "а не обычный пароль от почты")
+        raise NotifyError(_s("Сервер отклонил логин или пароль. Для Gmail, Яндекса и Mail.ru нужен «пароль приложения», "
+                          "а не обычный пароль от почты"))
     except smtplib.SMTPNotSupportedError:
-        raise NotifyError("Сервер не поддерживает вход по паролю на этом порту — попробуйте другой тип шифрования")
+        raise NotifyError(_s("Сервер не поддерживает вход по паролю на этом порту — попробуйте другой тип шифрования"))
     except smtplib.SMTPRecipientsRefused as e:
-        raise NotifyError("Сервер не принял получателей: " + ", ".join(e.recipients))
+        raise NotifyError(_s("Сервер не принял получателей: ") + ", ".join(e.recipients))
     except smtplib.SMTPSenderRefused as e:
-        raise NotifyError(f"Сервер не принял отправителя {e.sender}: обычно отправитель должен совпадать с логином")
+        raise NotifyError(_s("Сервер не принял отправителя {sender}: обычно отправитель должен совпадать с логином", sender=e.sender))
     except ssl.SSLCertVerificationError as e:
-        raise NotifyError(f"Сертификат сервера {where} не прошёл проверку ({e.verify_message}). Для внутреннего "
-                          "сервера с самоподписанным сертификатом снимите галочку «Проверять сертификат»")
+        raise NotifyError(_s("Сертификат сервера {where} не прошёл проверку ({verify_message}). Для внутреннего сервера с самоподписанным сертификатом снимите галочку «Проверять сертификат»", where=where, verify_message=e.verify_message))
     except ssl.SSLError as e:
-        raise NotifyError(f"Ошибка SSL при подключении к {where}: {e.reason or e}. Обычно порт 465 — SSL, 587 — STARTTLS, "
-                          "25 — без шифрования")
+        raise NotifyError(_s("Ошибка SSL при подключении к {where}: {e}. Обычно порт 465 — SSL, 587 — STARTTLS, 25 — без шифрования", where=where, e=e.reason or e))
     except smtplib.SMTPServerDisconnected:
-        raise NotifyError(f"Сервер {where} разорвал соединение — проверьте порт и тип шифрования")
+        raise NotifyError(_s("Сервер {where} разорвал соединение — проверьте порт и тип шифрования", where=where))
     except smtplib.SMTPException as e:
-        raise NotifyError(f"Почтовый сервер ответил ошибкой: {e}")
+        raise NotifyError(_s("Почтовый сервер ответил ошибкой: {e}", e=e))
     except socket.gaierror:
-        raise NotifyError(f"Сервер {cfg['host']} не найден — проверьте адрес")
+        raise NotifyError(_s("Сервер {host} не найден — проверьте адрес", host=cfg['host']))
     except (socket.timeout, TimeoutError):
-        raise NotifyError(f"Сервер {where} не ответил за 20 секунд — проверьте адрес, порт и доступ из сети")
+        raise NotifyError(_s("Сервер {where} не ответил за 20 секунд — проверьте адрес, порт и доступ из сети", where=where))
     except OSError as e:
-        raise NotifyError(f"Не удалось подключиться к {where}: {e.strerror or e}")
+        raise NotifyError(_s("Не удалось подключиться к {where}: {e}", where=where, e=e.strerror or e))
     if refused:
-        raise NotifyError("Часть получателей не принята: " + ", ".join(refused))
+        raise NotifyError(_s("Часть получателей не принята: ") + ", ".join(refused))
     return len(rcpts)
 
 
@@ -824,21 +831,20 @@ def send(channel, cfg, box, msg):
     if channel == "telegram":
         delivered, errors, migrated = send_telegram(cfg, box, msg)
         if not delivered:
-            raise NotifyError("; ".join(errors) or "не доставлено")
-        return f"доставлено в чатов: {delivered}", "; ".join(errors), migrated
+            raise NotifyError("; ".join(errors) or _s("не доставлено"))
+        return _s("доставлено в чатов: {delivered}", delivered=delivered), "; ".join(errors), migrated
     count = send_email(cfg, box, msg)
-    return f"получателей: {count}", "", {}
+    return _s("получателей: {count}", count=count), "", {}
 
 
 def test_message(base_url):
     now = datetime.now()
-    text = ("Тестовое сообщение. Если вы его видите — уведомления настроены правильно.\n"
-            f"Время сервера: {now.strftime('%d.%m.%Y %H:%M:%S')}")
+    text = (_s("Тестовое сообщение. Если вы его видите — уведомления настроены правильно.\nВремя сервера: {S}", S=now.strftime('%d.%m.%Y %H:%M:%S')))
     rich = "✅ " + html.escape(text)
     if base_url:
         text += f"\nSwitchMap: {base_url}"
-        rich += f'\n<a href="{html.escape(base_url)}">Открыть SwitchMap</a>'
-    return {"title": "проверка уведомлений", "text": text, "html": rich, "count": 1}
+        rich += _s("\n<a href=\"{base_url}\">Открыть SwitchMap</a>", base_url=html.escape(base_url))
+    return {"title": _s("проверка уведомлений"), "text": text, "html": rich, "count": 1}
 
 
 # ─────────────────────────────────────────
@@ -849,7 +855,7 @@ def dispatch(db, box, now=None, sender=None):
     """Отправляет накопившиеся события во включённые каналы. sender — для тестов.
     Возвращает {канал: итог}."""
     if not _lock.acquire(blocking=False):
-        return {"skipped": "рассылка уже идёт"}
+        return {"skipped": _s("рассылка уже идёт")}
     try:
         return _dispatch(db, box, now or datetime.now(), sender or send)
     finally:
@@ -869,7 +875,7 @@ def _dispatch(db, box, now, sender):
         if "cursor" not in st:
             st["cursor"] = _max_event_id(db)
         if st.get("next_try") and st["next_try"] > now_s:
-            report[ch] = "ждёт повтора"
+            report[ch] = _s("ждёт повтора")
             continue
         with sqlite3.connect(db) as conn:
             conn.row_factory = sqlite3.Row
@@ -883,7 +889,7 @@ def _dispatch(db, box, now, sender):
         last_id = rows[-1]["id"]
         if not items and not [n for n in notes if n["severity"] != "info"]:
             st["cursor"] = last_id
-            report[ch] = "нечего отправлять"
+            report[ch] = _s("нечего отправлять")
             continue
         msg = build_message(items, notes, cfg["base_url"], now)
         try:
@@ -894,13 +900,13 @@ def _dispatch(db, box, now, sender):
                       next_try=(now + timedelta(minutes=BACKOFF_MIN[min(fails, len(BACKOFF_MIN)) - 1])).strftime(TS))
             if fails <= 3 or fails % 10 == 0:
                 write_log(db, ch, False, msg["count"], msg["title"], str(e))
-            report[ch] = f"ошибка: {e}"
+            report[ch] = _s("ошибка: {e}", e=e)
             continue
         except Exception as e:  # неожиданная ошибка не должна ломать планировщик
-            st.update(fails=st.get("fails", 0) + 1, last_error=f"Внутренняя ошибка: {e}", last_error_time=now_s,
+            st.update(fails=st.get("fails", 0) + 1, last_error=_s("Внутренняя ошибка: {e}", e=e), last_error_time=now_s,
                       next_try=(now + timedelta(minutes=5)).strftime(TS))
-            write_log(db, ch, False, msg["count"], msg["title"], f"Внутренняя ошибка: {e}")
-            report[ch] = f"ошибка: {e}"
+            write_log(db, ch, False, msg["count"], msg["title"], _s("Внутренняя ошибка: {e}", e=e))
+            report[ch] = _s("ошибка: {e}", e=e)
             continue
         if migrated:
             _apply_chat_migration(db, migrated)

@@ -9,6 +9,8 @@ import re
 import sqlite3
 from datetime import datetime, timedelta
 
+from i18n import N_, _
+
 TS = "%Y-%m-%d %H:%M:%S"
 
 
@@ -270,8 +272,8 @@ def health_series(db, switch_id, period, now=None):
 
 BACKUP_RE = re.compile(r"^switches-(\d{8}-\d{6})(?:-([a-z0-9-]+))?\.db$")
 BACKUP_REASONS = {
-    "manual": "вручную", "auto": "автоматически", "startup": "при запуске",
-    "pre-migrate": "перед обновлением базы", "before-restore": "перед восстановлением",
+    "manual": N_("вручную"), "auto": N_("автоматически"), "startup": N_("при запуске"),
+    "pre-migrate": N_("перед обновлением базы"), "before-restore": N_("перед восстановлением"),
 }
 
 
@@ -317,7 +319,8 @@ def list_backups(db):
             "name": name,
             "size": os.path.getsize(os.path.join(folder, name)),
             "time": datetime.strptime(m.group(1), "%Y%m%d-%H%M%S").strftime(TS),
-            "reason": BACKUP_REASONS.get(reason_key, reason_key),
+            "reason": _(BACKUP_REASONS[reason_key]) if reason_key in BACKUP_REASONS else reason_key,
+            "reason_key": reason_key,
         })
     return sorted(items, key=lambda x: x["name"], reverse=True)
 
@@ -350,18 +353,18 @@ def validate_backup_file(path):
     try:
         with open(path, "rb") as f:
             if f.read(16) != b"SQLite format 3\x00":
-                return "файл не является базой SQLite"
+                return _("файл не является базой SQLite")
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
         try:
             if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-                return "база повреждена (integrity_check)"
+                return _("база повреждена (integrity_check)")
             cols = {r[1] for r in conn.execute("PRAGMA table_info(switches)")}
             if not {"id", "name", "ports"} <= cols:
-                return "в файле нет таблицы коммутаторов SwitchMap"
+                return _("в файле нет таблицы коммутаторов SwitchMap")
         finally:
             conn.close()
     except sqlite3.Error as e:
-        return f"не удалось открыть базу: {e}"
+        return _("не удалось открыть базу: {e}", e=e)
     return None
 
 

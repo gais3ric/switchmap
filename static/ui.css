@@ -796,6 +796,36 @@ a.event-item:hover { background: var(--surface-2); color: var(--text); }
 .user-card { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 8px 9px 6px; }
 .user-card b { font-size: 14px; }
 .menu-note { padding: 4px 9px 6px; font-size: 11.5px; color: var(--text-3, var(--muted)); }
+/* Подсказка «?» у поля: пояснение при наведении, фокусе или нажатии (класс is-open ставит app.js) */
+.help-tip {
+    position: relative; display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; margin-left: 5px; vertical-align: -2px; border-radius: 50%;
+    font-size: 10.5px; font-weight: 700; line-height: 1; cursor: help; user-select: none;
+    color: var(--text-3); border: 1px solid var(--border-strong, var(--border)); background: var(--surface);
+}
+.help-tip:hover, .help-tip:focus, .help-tip.is-open { color: var(--accent-text); border-color: var(--accent); outline: none; }
+.help-pop {
+    position: absolute; z-index: 60; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
+    width: max-content; max-width: 300px; padding: 9px 11px; border-radius: var(--r);
+    font-size: 12.5px; font-weight: 400; line-height: 1.5; text-align: left; white-space: normal; cursor: default;
+    color: var(--text); background: var(--surface-3, var(--surface)); border: 1px solid var(--border);
+    box-shadow: var(--shadow-lg, 0 8px 24px rgba(0,0,0,.25));
+    opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--dur-1, .12s) var(--ease, ease);
+}
+.help-pop a { display: inline-block; margin-top: 4px; font-weight: 600; }
+.help-tip:hover .help-pop, .help-tip:focus .help-pop, .help-tip:focus-within .help-pop, .help-tip.is-open .help-pop {
+    opacity: 1; visibility: visible; pointer-events: auto;
+}
+.help-tip.pop-below .help-pop { bottom: auto; top: calc(100% + 8px); }
+.help-tip.pop-left .help-pop { left: auto; right: -8px; transform: none; }
+.help-tip.pop-right .help-pop { left: -8px; transform: none; }
+.help-link { font-size: 12.5px; }
+.first-steps { max-width: 520px; margin: 18px auto 14px; padding-left: 22px; text-align: left; font-size: 13px; color: var(--text-2); line-height: 1.6; }
+.first-steps li { margin: 4px 0; }
+
+.menu-lang { display: flex; align-items: center; gap: 8px; padding: 4px 9px; color: var(--text-2); }
+.menu-lang .ic { width: 15px; height: 15px; flex: none; }
+.menu-lang select { height: 28px; font-size: 12.5px; padding: 0 26px 0 8px; }
 
 /* Наблюдатель не видит действий, доступных только администратору (права проверяет и сервер) */
 .role-viewer .admin-only,

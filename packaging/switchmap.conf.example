@@ -7,8 +7,13 @@
 SWITCHMAP_HOST=127.0.0.1
 SWITCHMAP_PORT=5000
 
-# Работа за HTTPS-прокси (Caddy, nginx, IIS): cookie входа передаются только по HTTPS
+# Работа за HTTPS-прокси (Caddy, nginx, IIS) — см. справку «Установка и настройка → HTTPS»:
+# cookie входа только по HTTPS; адрес клиента — из заголовков прокси (только вместе с SWITCHMAP_HOST=127.0.0.1)
 #SWITCHMAP_HTTPS=1
+#SWITCHMAP_PROXY=1
+
+# Язык журнала и уведомлений по умолчанию (ru, en, zh, es, de, fr); обычно задаётся в «Настройках»
+#SWITCHMAP_LANG=
 
 # Папка данных: база, ключи шифрования, резервные копии, журнал.
 # По умолчанию: C:\ProgramData\SwitchMap (Windows), /var/lib/switchmap (Linux)

@@ -1,0 +1,10 @@
+{# Подсказка «?» рядом с полем: короткое пояснение и ссылка на статью справки.
+   {{ tip(_('Текст подсказки'), 'snmp-basics', 'community') }} — открывается при наведении, фокусе (Tab) и нажатии. #}
+{% macro tip(text, slug=None, anchor=None) -%}
+<span class="help-tip" tabindex="0" role="button" aria-label="{{ _('Подсказка') }}: {{ text }}">?<span class="help-pop" role="tooltip">{{ text }}{% if slug %} <a href="/help/{{ slug }}{{ '#' ~ anchor if anchor }}" tabindex="-1">{{ _('Подробнее') }} →</a>{% endif %}</span></span>
+{%- endmacro %}
+
+{# Ссылка на статью: {{ help_link(_('Как включить SNMP'), 'snmp-vendors') }} #}
+{% macro help_link(text, slug, anchor=None) -%}
+<a class="help-link" href="/help/{{ slug }}{{ '#' ~ anchor if anchor }}">{{ text }}</a>
+{%- endmacro %}

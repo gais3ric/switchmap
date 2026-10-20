@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% from "_snmp.html" import snmp_fields %}
+{% from "_help.html" import tip, help_link %}
 {% set active_nav = 'switches' %}
+{% set help_slug = 'getting-started' %}
 
-{% block title %}Коммутаторы{% endblock %}
+{% block title %}{{ _('Коммутаторы') }}{% endblock %}
 
-{% block crumbs %}<span class="current">Коммутаторы</span>{% endblock %}
+{% block crumbs %}<span class="current">{{ _('Коммутаторы') }}</span>{% endblock %}
 
 {% block head %}
 <style>
@@ -49,64 +51,64 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
 {% block content %}
 <div class="page-header">
     <div>
-        <h1>Коммутаторы</h1>
-        <div class="page-sub">Инвентарь, доступность и загрузка сети</div>
+        <h1>{{ _('Коммутаторы') }}</h1>
+        <div class="page-sub">{{ _('Инвентарь, доступность и загрузка сети') }}</div>
     </div>
     <div class="page-actions">
         <div class="menu-wrap">
-            <button type="button" class="btn" data-menu-toggle aria-haspopup="true">{{ icon('download') }} Экспорт {{ icon('chevron') }}</button>
+            <button type="button" class="btn" data-menu-toggle aria-haspopup="true">{{ icon('download') }} {{ _('Экспорт') }} {{ icon('chevron') }}</button>
             <div class="dropdown" role="menu">
                 <div class="dropdown-title">Excel</div>
-                <a href="/export/inventory.xlsx" role="menuitem">{{ icon('sheet') }} Инвентарь целиком <small>4 листа</small></a>
+                <a href="/export/inventory.xlsx" role="menuitem">{{ icon('sheet') }} {{ _('Инвентарь целиком') }} <small>{{ _('4 листа') }}</small></a>
                 <hr>
                 <div class="dropdown-title">CSV</div>
-                <a href="/export/switches.csv" role="menuitem">{{ icon('server') }} Коммутаторы</a>
-                <a href="/export/macs.csv" role="menuitem">{{ icon('search') }} MAC-адреса</a>
-                <a href="/export/events.csv" role="menuitem">{{ icon('bell') }} События</a>
-                <a href="/export/audit.csv" role="menuitem">{{ icon('history') }} Журнал изменений</a>
+                <a href="/export/switches.csv" role="menuitem">{{ icon('server') }} {{ _('Коммутаторы') }}</a>
+                <a href="/export/macs.csv" role="menuitem">{{ icon('search') }} {{ _('MAC-адреса') }}</a>
+                <a href="/export/events.csv" role="menuitem">{{ icon('bell') }} {{ _('События') }}</a>
+                <a href="/export/audit.csv" role="menuitem">{{ icon('history') }} {{ _('Журнал изменений') }}</a>
             </div>
         </div>
-        <a href="/topology" class="btn">{{ icon('topology') }} Топология</a>
-        <a href="/discover" class="btn admin-only">{{ icon('radar') }} Найти в сети</a>
-        <button type="button" class="btn btn-primary admin-only" data-click="openModal">{{ icon('plus') }} Добавить коммутатор</button>
+        <a href="/topology" class="btn">{{ icon('topology') }} {{ _('Топология') }}</a>
+        <a href="/discover" class="btn admin-only">{{ icon('radar') }} {{ _('Найти в сети') }}</a>
+        <button type="button" class="btn btn-primary admin-only" data-click="openModal">{{ icon('plus') }} {{ _('Добавить коммутатор') }}</button>
     </div>
 </div>
 
 <div class="kpis">
     <div class="kpi">
-        <div class="kpi-label">{{ icon('server') }} Коммутаторы</div>
+        <div class="kpi-label">{{ icon('server') }} {{ _('Коммутаторы') }}</div>
         <div class="kpi-value num">{{ summary.total }}</div>
-        <div class="kpi-foot">с IP-адресом: {{ summary.with_ip }}</div>
+        <div class="kpi-foot">{{ _('с IP-адресом: {n}', n=summary.with_ip) }}</div>
     </div>
     <div class="kpi" id="kpiOnlineCard">
-        <div class="kpi-label">{{ icon('activity') }} Доступны</div>
+        <div class="kpi-label">{{ icon('activity') }} {{ _('Доступны') }}</div>
         <div class="kpi-value num"><span id="kpiOnline">—</span><small>/ {{ summary.with_ip }}</small></div>
-        <div class="kpi-foot" id="kpiOnlineFoot">проверка ping…</div>
+        <div class="kpi-foot" id="kpiOnlineFoot">{{ _('проверка ping…') }}</div>
     </div>
     <div class="kpi">
-        <div class="kpi-label">{{ icon('plug') }} Активные порты</div>
+        <div class="kpi-label">{{ icon('plug') }} {{ _('Активные порты') }}</div>
         {% if summary.ports_seen %}
         <div class="kpi-value num">{{ summary.ports_up }}<small>/ {{ summary.ports_seen }}</small></div>
-        <div class="kpi-foot">по данным SNMP-опросов</div>
+        <div class="kpi-foot">{{ _('по данным SNMP-опросов') }}</div>
         {% else %}
         <div class="kpi-value num">—</div>
-        <div class="kpi-foot">опросите коммутаторы по SNMP</div>
+        <div class="kpi-foot">{{ _('опросите коммутаторы по SNMP') }}</div>
         {% endif %}
     </div>
     <div class="kpi {{ 'is-danger' if summary.alerts }}">
-        <div class="kpi-label">{{ icon('alert') }} Активные оповещения</div>
+        <div class="kpi-label">{{ icon('alert') }} {{ _('Активные оповещения') }}</div>
         <div class="kpi-value num">{{ summary.alerts }}</div>
-        <div class="kpi-foot">непрочитанных событий: {{ summary.unread }}</div>
+        <div class="kpi-foot">{{ _('непрочитанных событий: {n}', n=summary.unread) }}</div>
     </div>
 </div>
 
 <div class="card rise">
     <div class="card-header">
-        <div class="card-title">Все коммутаторы <span class="badge">{{ summary.total }}</span></div>
+        <div class="card-title">{{ _('Все коммутаторы') }} <span class="badge">{{ summary.total }}</span></div>
         {% if switches %}
         <div class="filter-input">
             {{ icon('filter') }}
-            <input type="text" id="switchFilter" placeholder="Фильтр по названию или IP" autocomplete="off" aria-label="Фильтр">
+            <input type="text" id="switchFilter" placeholder="{{ _('Фильтр по названию или IP') }}" autocomplete="off" aria-label="{{ _('Фильтр') }}">
         </div>
         {% endif %}
     </div>
@@ -116,13 +118,13 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
         <table class="table" id="switchTable">
             <thead>
                 <tr>
-                    <th>Коммутатор</th>
-                    <th>Статус</th>
+                    <th>{{ _('Коммутатор') }}</th>
+                    <th>{{ _('Статус') }}</th>
                     <th class="col-optional">SNMP</th>
-                    <th>Порты</th>
-                    <th class="col-optional">Пиковая загрузка</th>
-                    <th>Оповещения</th>
-                    <th class="col-optional">Последний опрос</th>
+                    <th>{{ _('Порты') }}</th>
+                    <th class="col-optional">{{ _('Пиковая загрузка') }}</th>
+                    <th>{{ _('Оповещения') }}</th>
+                    <th class="col-optional">{{ _('Последний опрос') }}</th>
                     <th class="col-actions"></th>
                 </tr>
             </thead>
@@ -133,13 +135,13 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
                     <td>
                         <div class="sw-name">
                             <a href="/switch/{{ sw.id }}">{{ sw.name }}</a>
-                            <span class="mono muted" style="font-size:12px">{{ sw.ip or 'IP не задан' }}{% if sw.model %} <span class="sw-model">· {{ sw.model }}</span>{% endif %}</span>
+                            <span class="mono muted" style="font-size:12px">{{ sw.ip or _('IP не задан') }}{% if sw.model %} <span class="sw-model">· {{ sw.model }}</span>{% endif %}</span>
                         </div>
                     </td>
                     <td>
                         <div class="status-cell">
                             <span class="status-dot dot {{ 'checking' if sw.ip else 'unknown' }}" id="status-{{ sw.id }}"></span>
-                            <span class="status-text" id="status-text-{{ sw.id }}">{{ 'Проверка…' if sw.ip else 'Нет IP' }}</span>
+                            <span class="status-text" id="status-text-{{ sw.id }}">{{ _('Проверка…') if sw.ip else _('Нет IP') }}</span>
                         </div>
                     </td>
                     <td class="col-optional"><span class="badge {{ 'badge-accent' if sw.snmp == 'v3' else 'badge-outline' }}">{{ sw.snmp }}</span></td>
@@ -150,7 +152,7 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
                             <div class="meter"><span style="width: {{ (100 * sw.ports_up / sw.ports_seen)|round(1) }}%"></span></div>
                         </div>
                         {% else %}
-                        <span class="muted num">{{ sw.ports|plural('порт', 'порта', 'портов') }}</span>
+                        <span class="muted num">{{ _n(sw.ports, '{n} порт', '{n} порта', '{n} портов') }}</span>
                         {% endif %}
                     </td>
                     <td class="col-optional">
@@ -164,31 +166,40 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
                     </td>
                     <td>
                         {% if sw.alerts %}<span class="badge badge-danger">{{ icon('alert') }} {{ sw.alerts }}</span>
-                        {% elif sw.polled %}<span class="badge badge-success">{{ icon('check') }} норма</span>
+                        {% elif sw.polled %}<span class="badge badge-success">{{ icon('check') }} {{ _('норма') }}</span>
                         {% else %}<span class="muted">—</span>{% endif %}
-                        {% if sw.unread %}<span class="badge badge-outline" title="Непрочитанные события">{{ sw.unread }} нов.</span>{% endif %}
+                        {% if sw.unread %}<span class="badge badge-outline" title="{{ _('Непрочитанные события') }}">{{ _('{n} нов.', n=sw.unread) }}</span>{% endif %}
                     </td>
-                    <td class="col-optional"><span class="muted num rel-time" data-time="{{ sw.last_poll or '' }}">{{ sw.last_poll or 'не опрашивался' }}</span></td>
+                    <td class="col-optional"><span class="muted num rel-time" data-time="{{ sw.last_poll or '' }}">{{ sw.last_poll or _('не опрашивался') }}</span></td>
                     <td class="col-actions">
                         <div class="row-actions">
-                            <a href="/switch/{{ sw.id }}" class="btn btn-sm">Открыть</a>
+                            <a href="/switch/{{ sw.id }}" class="btn btn-sm">{{ _('Открыть') }}</a>
                             <button type="button" class="btn btn-ghost btn-icon btn-sm btn-delete admin-only" data-name="{{ sw.name }}"
-                                    title="Удалить" aria-label="Удалить {{ sw.name }}"
+                                    title="{{ _('Удалить') }}" aria-label="{{ _('Удалить {name}', name=sw.name) }}"
                                     data-click="deleteSwitch" data-args='{{ [sw.id, sw.name]|tojson }}'>{{ icon('trash') }}</button>
                         </div>
                     </td>
                 </tr>
             {% endfor %}
-                <tr class="no-results" id="noResults" hidden><td colspan="8">Нет коммутаторов, подходящих под фильтр</td></tr>
+                <tr class="no-results" id="noResults" hidden><td colspan="8">{{ _('Нет коммутаторов, подходящих под фильтр') }}</td></tr>
             </tbody>
         </table>
     </div>
     {% else %}
     <div class="empty">
         {{ icon('server') }}
-        <h3>Пока нет коммутаторов</h3>
-        <p>Добавьте первый коммутатор — укажите IP и параметры SNMP, чтобы видеть состояние портов, загрузку и устройства.</p>
-        <button type="button" class="btn btn-primary admin-only" data-click="openModal">{{ icon('plus') }} Добавить коммутатор</button>
+        <h3>{{ _('Пока нет коммутаторов') }}</h3>
+        <p>{{ _('Добавьте первый коммутатор — укажите IP и параметры SNMP, чтобы видеть состояние портов, загрузку и устройства.') }}</p>
+        <div class="row" style="justify-content:center;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-primary admin-only" data-click="openModal">{{ icon('plus') }} {{ _('Добавить коммутатор') }}</button>
+            <a href="/discover" class="btn admin-only">{{ icon('radar') }} {{ _('Найти в сети') }}</a>
+        </div>
+        <ol class="first-steps">
+            <li>{{ _('Включите SNMP на коммутаторе (только чтение).') }} <a href="/help/snmp-vendors">{{ _('Как это сделать на Cisco, HPE, MikroTik, D-Link и других') }}</a></li>
+            <li>{{ _('Добавьте коммутатор вручную или найдите все коммутаторы сети сразу.') }}</li>
+            <li>{{ _('Нажмите «Опросить по SNMP» на странице коммутатора и включите периодический опрос в настройках.') }}</li>
+        </ol>
+        <a href="/help/getting-started">{{ icon('book') }} {{ _('Первые шаги: подробное руководство') }}</a>
     </div>
     {% endif %}
 </div>
@@ -197,54 +208,54 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
 <div id="addSwitchModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="addTitle">
     <div class="modal-content">
         <div class="modal-header">
-            <h2 id="addTitle">Новый коммутатор</h2>
-            <button type="button" class="modal-close" data-click="closeModal" aria-label="Закрыть">&times;</button>
+            <h2 id="addTitle">{{ _('Новый коммутатор') }}</h2>
+            <button type="button" class="modal-close" data-click="closeModal" aria-label="{{ _('Закрыть') }}">&times;</button>
         </div>
         <form method="POST" action="/add" id="addSwitchForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="modal-body">
-                <div class="modal-section-title">Основное</div>
+                <div class="modal-section-title">{{ _('Основное') }}</div>
                 <div class="form-group">
-                    <label class="label" for="name">Название</label>
-                    <input type="text" id="name" name="name" required placeholder="Например: 4 этаж">
+                    <label class="label" for="name">{{ _('Название') }}</label>
+                    <input type="text" id="name" name="name" required placeholder="{{ _('Например: 4 этаж') }}">
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="label" for="ports">Портов</label>
+                        <label class="label" for="ports">{{ _('Портов') }}</label>
                         <input type="number" id="ports" name="ports" value="24" min="1" max="96" required>
                     </div>
                     <div class="form-group">
-                        <label class="label" for="switch_layout">Расположение портов</label>
+                        <label class="label" for="switch_layout">{{ _('Расположение портов') }}{{ tip(_('Как порты нарисованы на схеме: одной строкой или двумя (верхний ряд — нечётные, нижний — чётные, как на большинстве коммутаторов).')) }}</label>
                         <select id="switch_layout" name="switch_layout">
-                            <option value="single">1 строка</option>
-                            <option value="double">2 строки (шахматно)</option>
+                            <option value="single">{{ _('1 строка') }}</option>
+                            <option value="double">{{ _('2 строки (шахматно)') }}</option>
                         </select>
                     </div>
                 </div>
 
-                <div class="modal-section-title">Мониторинг</div>
+                <div class="modal-section-title">{{ _('Мониторинг') }}</div>
                 <div class="probe-row">
                     <div class="field">
-                        <label for="ip_address">IP-адрес</label>
+                        <label for="ip_address">{{ _('IP-адрес') }}{{ tip(_('Адрес управления коммутатора. Без IP схема работает, но опроса по SNMP, состояния портов и поиска устройств не будет.'), 'add-switch') }}</label>
                         <input type="text" id="ip_address" name="ip_address" placeholder="192.168.1.1" autocomplete="off">
                     </div>
-                    <button type="button" class="btn" data-click="probeSwitchForm" data-args='["$form", "$el"]' title="Опросить по SNMP и подставить название, число портов и модель">{{ icon('plug') }} Проверить и заполнить</button>
+                    <button type="button" class="btn" data-click="probeSwitchForm" data-args='["$form", "$el"]' title="{{ _('Опросить по SNMP и подставить название, число портов и модель') }}">{{ icon('plug') }} {{ _('Проверить и заполнить') }}</button>
                 </div>
                 {{ snmp_fields('add') }}
                 <div class="probe-result" data-probe-result hidden></div>
                 <input type="hidden" name="model">
-                <div class="hint" style="margin:-6px 0 6px">Много коммутаторов сразу — <a href="/discover">поиск в сети или импорт из NetBox</a>.</div>
+                <div class="hint" style="margin:-6px 0 6px">{{ _('Много коммутаторов сразу —') }} <a href="/discover">{{ _('поиск в сети или импорт из NetBox') }}</a>.</div>
 
                 <div class="modal-section-title row" style="justify-content:space-between">
-                    <span>Патч-панели</span>
-                    <button type="button" class="btn btn-sm" data-click="addPatchPanelField">{{ icon('plus') }} Добавить</button>
+                    <span>{{ _('Патч-панели') }}</span>
+                    <button type="button" class="btn btn-sm" data-click="addPatchPanelField">{{ icon('plus') }} {{ _('Добавить') }}</button>
                 </div>
                 <div id="patchPanelsList"></div>
             </div>
             <input type="hidden" name="patch_panels_data" id="patchPanelsData">
             <div class="form-actions">
-                <button type="button" class="btn btn-cancel" data-click="closeModal">Отмена</button>
-                <button type="submit" class="btn btn-primary btn-submit">Создать коммутатор</button>
+                <button type="button" class="btn btn-cancel" data-click="closeModal">{{ _('Отмена') }}</button>
+                <button type="submit" class="btn btn-primary btn-submit">{{ _('Создать коммутатор') }}</button>
             </div>
         </form>
     </div>
@@ -278,30 +289,30 @@ function addPatchPanelField() {
     panelDiv.className = 'patch-panel-field';
     panelDiv.id = `panel-${patchPanelCounter}`;
     panelDiv.innerHTML = `
-        <button type="button" class="btn btn-ghost btn-icon btn-sm remove-btn" data-click="removePatchPanel" data-args="[${patchPanelCounter}]" title="Удалить панель" aria-label="Удалить панель">&times;</button>
-        <h4>Патч-панель ${patchPanelCounter}</h4>
+        <button type="button" class="btn btn-ghost btn-icon btn-sm remove-btn" data-click="removePatchPanel" data-args="[${patchPanelCounter}]" title="{{ _('Удалить панель') }}" aria-label="{{ _('Удалить панель') }}">&times;</button>
+        <h4>{{ _('Патч-панель') }} ${patchPanelCounter}</h4>
         <div class="form-group">
-            <label class="label">Название</label>
+            <label class="label">{{ _('Название') }}</label>
             <input type="text" class="panel-name" value="Patch Panel ${patchPanelCounter}" required>
         </div>
         <div class="form-row">
             <div class="form-group">
-                <label class="label">Портов</label>
+                <label class="label">{{ _('Портов') }}</label>
                 <input type="number" class="panel-ports" value="24" min="1" max="96" required>
             </div>
             <div class="form-group">
-                <label class="label">Расположение</label>
+                <label class="label">{{ _('Расположение') }}</label>
                 <select class="panel-layout">
-                    <option value="single">1 строка</option>
-                    <option value="double">2 строки</option>
+                    <option value="single">{{ _('1 строка') }}</option>
+                    <option value="double">{{ _('2 строки') }}</option>
                 </select>
             </div>
         </div>
         <div class="form-group">
-            <label class="label">Позиция</label>
+            <label class="label">{{ _('Позиция') }}</label>
             <select class="panel-position">
-                <option value="below">Под коммутатором</option>
-                <option value="above">Над коммутатором</option>
+                <option value="below">{{ _('Под коммутатором') }}</option>
+                <option value="above">{{ _('Над коммутатором') }}</option>
             </select>
         </div>`;
     document.getElementById('patchPanelsList').appendChild(panelDiv);
@@ -341,8 +352,8 @@ document.addEventListener('keydown', e => {
 // ───────── Удаление ─────────
 async function deleteSwitch(id, name) {
     const ok = await confirmDialog(
-        `Коммутатор «${name}» будет удалён вместе с подключениями, историей опросов и событиями.`,
-        { title: 'Удалить коммутатор?', okText: 'Удалить', danger: true });
+        t('Коммутатор «{name}» будет удалён вместе с подключениями, историей опросов и событиями.', { name }),
+        { title: t('Удалить коммутатор?'), okText: t('Удалить'), danger: true });
     if (!ok) return;
     try {
         const response = await fetch(`/delete/${id}`, { method: 'POST' });
@@ -353,10 +364,10 @@ async function deleteSwitch(id, name) {
             row.style.opacity = '0';
             row.style.transform = 'translateX(8px)';
         }
-        notify(`Коммутатор «${name}» удалён`, 'success');
+        notify(t('Коммутатор «{name}» удалён', { name }), 'success');
         setTimeout(() => window.location.reload(), 350);
     } catch (e) {
-        notify('Ошибка при удалении коммутатора', 'error');
+        notify(t('Ошибка при удалении коммутатора'), 'error');
     }
 }
 
@@ -385,10 +396,10 @@ function relativeTime(ts) {
     const date = new Date(String(ts).replace(' ', 'T'));
     if (isNaN(date)) return ts;
     const sec = Math.round((Date.now() - date) / 1000);
-    if (sec < 60) return 'только что';
-    if (sec < 3600) return `${Math.round(sec / 60)} мин назад`;
-    if (sec < 86400) return `${Math.round(sec / 3600)} ч назад`;
-    return date.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    if (sec < 60) return t('только что');
+    if (sec < 3600) return t('{v} мин назад', { v: Math.round(sec / 60) });
+    if (sec < 86400) return t('{v} ч назад', { v: Math.round(sec / 3600) });
+    return date.toLocaleString(LOCALE, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 function updateRelativeTimes() {
     document.querySelectorAll('.rel-time[data-time]').forEach(el => {
@@ -405,7 +416,7 @@ function checkSwitchStatuses() {
         .filter(row => row.dataset.ip)
         .map(row => ({ id: parseInt(row.id.replace('sw-row-', '')), ip: row.dataset.ip }));
     if (!switches.length) {
-        document.getElementById('kpiOnlineFoot').textContent = 'нет коммутаторов с IP';
+        document.getElementById('kpiOnlineFoot').textContent = t('нет коммутаторов с IP');
         return;
     }
     fetch('/api/status_bulk', {
@@ -421,17 +432,17 @@ function checkSwitchStatuses() {
                 const text = document.getElementById('status-text-' + id);
                 if (status === 'online') online++;
                 if (dot) dot.className = 'status-dot dot ' + status;
-                if (text) text.textContent = status === 'online' ? 'Онлайн' : status === 'offline' ? 'Недоступен' : 'Нет IP';
+                if (text) text.textContent = status === 'online' ? t('Онлайн') : status === 'offline' ? t('Недоступен') : t('Нет IP');
             });
             document.getElementById('kpiOnline').textContent = online;
             const card = document.getElementById('kpiOnlineCard');
             card.classList.toggle('is-success', online === switches.length);
             card.classList.toggle('is-danger', online < switches.length);
             document.getElementById('kpiOnlineFoot').textContent =
-                online === switches.length ? 'все отвечают на ping' : `не отвечают: ${switches.length - online}`;
+                online === switches.length ? t('все отвечают на ping') : t('не отвечают: {v}', { v: switches.length - online });
         })
         .catch(() => {
-            document.getElementById('kpiOnlineFoot').textContent = 'ошибка проверки';
+            document.getElementById('kpiOnlineFoot').textContent = t('ошибка проверки');
         });
 }
 

@@ -16,6 +16,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from i18n import _
+
 PAGE = 250
 MAX_DEVICES = 5000
 
@@ -59,7 +61,7 @@ def sanitize(incoming, current, box):
     if url.endswith("/api"):
         url = url[:-4]
     if url and not url.lower().startswith(("http://", "https://")):
-        return None, "Адрес NetBox должен начинаться с http:// или https://"
+        return None, _("Адрес NetBox должен начинаться с http:// или https://")
     cfg["url"] = url[:300]
     token = str(incoming.get("token") or "").strip()
     if incoming.get("token_clear"):
@@ -97,10 +99,10 @@ def _auth_header(token):
 
 def api_get(cfg, box, path, params=None, timeout=20):
     if not cfg.get("url"):
-        raise NetBoxError("Не указан адрес NetBox")
+        raise NetBoxError(_("Не указан адрес NetBox"))
     token = box.decrypt(cfg["token"]) if cfg.get("token") else ""
     if not token:
-        raise NetBoxError("Не указан API-токен NetBox")
+        raise NetBoxError(_("Не указан API-токен NetBox"))
     query = urllib.parse.urlencode(params or {}, doseq=True)
     url = f"{cfg['url']}/api/{path.strip('/')}/" + (f"?{query}" if query else "")
     req = urllib.request.Request(url, headers={"Authorization": _auth_header(token), "Accept": "application/json"})
@@ -119,26 +121,24 @@ def api_get(cfg, box, path, params=None, timeout=20):
         except (ValueError, AttributeError):
             pass
         if e.code in (401, 403):
-            raise NetBoxError("NetBox не принял токен" + (f" ({detail})" if detail else "") +
-                              ". Проверьте токен и что у него есть право на чтение")
+            raise NetBoxError(_("NetBox не принял токен") + (f" ({detail})" if detail else "") +
+                              _(". Проверьте токен и что у него есть право на чтение"))
         if e.code == 404:
-            raise NetBoxError(f"По адресу {cfg['url']} не найден API NetBox — проверьте адрес")
-        raise NetBoxError(f"NetBox ответил ошибкой HTTP {e.code}" + (f": {detail}" if detail else ""))
+            raise NetBoxError(_("По адресу {url} не найден API NetBox — проверьте адрес", url=cfg['url']))
+        raise NetBoxError(_("NetBox ответил ошибкой HTTP {code}", code=e.code) + (f": {detail}" if detail else ""))
     except ssl.SSLCertVerificationError as e:
-        raise NetBoxError(f"Сертификат NetBox не прошёл проверку ({e.verify_message}). Если у NetBox "
-                          "самоподписанный сертификат, снимите галочку «Проверять сертификат»")
+        raise NetBoxError(_("Сертификат NetBox не прошёл проверку ({verify_message}). Если у NetBox самоподписанный сертификат, снимите галочку «Проверять сертификат»", verify_message=e.verify_message))
     except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError) as e:
         reason = getattr(e, "reason", e)
         if isinstance(reason, ssl.SSLCertVerificationError):
-            raise NetBoxError(f"Сертификат NetBox не прошёл проверку ({reason.verify_message}). Если у NetBox "
-                              "самоподписанный сертификат, снимите галочку «Проверять сертификат»")
-        raise NetBoxError(f"Нет связи с NetBox ({cfg['url']}): {reason}")
+            raise NetBoxError(_("Сертификат NetBox не прошёл проверку ({verify_message}). Если у NetBox самоподписанный сертификат, снимите галочку «Проверять сертификат»", verify_message=reason.verify_message))
+        raise NetBoxError(_("Нет связи с NetBox ({url}): {reason}", url=cfg['url'], reason=reason))
     if "json" not in ctype:
-        raise NetBoxError(f"По адресу {cfg['url']} ответил не NetBox (получена веб-страница вместо API)")
+        raise NetBoxError(_("По адресу {url} ответил не NetBox (получена веб-страница вместо API)", url=cfg['url']))
     try:
         return json.loads(body)
     except ValueError:
-        raise NetBoxError("NetBox вернул некорректный ответ")
+        raise NetBoxError(_("NetBox вернул некорректный ответ"))
 
 
 def api_list(cfg, box, path, params=None, limit=MAX_DEVICES):
@@ -241,9 +241,9 @@ def plan(devices, switches):
         if sw:
             changes = []
             if (sw["name"] or "") != d["name"]:
-                changes.append({"field": "Название", "before": sw["name"] or "—", "after": d["name"]})
+                changes.append({"field": _("Название"), "before": sw["name"] or "—", "after": d["name"]})
             if d["ip"] and (sw["ip_address"] or "") != d["ip"]:
-                changes.append({"field": "IP-адрес", "before": sw["ip_address"] or "—", "after": d["ip"]})
+                changes.append({"field": _("IP-адрес"), "before": sw["ip_address"] or "—", "after": d["ip"]})
             item["match"] = {"switch_id": sw["id"], "switch_name": sw["name"], "by": how, "changes": changes}
         else:
             item["match"] = None

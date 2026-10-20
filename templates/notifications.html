@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_help.html" import tip, help_link %}
 {% set active_nav = 'notifications' %}
+{% set help_slug = 'notifications' %}
 
-{% block title %}Уведомления{% endblock %}
-{% block crumbs %}<span class="current">Уведомления</span>{% endblock %}
+{% block title %}{{ _('Уведомления') }}{% endblock %}
+{% block crumbs %}<span class="current">{{ _('Уведомления') }}</span>{% endblock %}
 
 {% block head %}
 <style>
@@ -52,33 +54,33 @@ details.more summary { cursor: pointer; font-size: 13px; color: var(--text-2); u
 {% block content %}
 <div class="page-header">
     <div>
-        <h1>Уведомления</h1>
-        <div class="page-sub">События сети — в Telegram и на почту. Оповещения появляются по порогам из «Настроек», а здесь выбирается, куда и о чём сообщать.</div>
+        <h1>{{ _('Уведомления') }}</h1>
+        <div class="page-sub">{{ _('События сети — в Telegram и на почту. Оповещения появляются по порогам из «Настроек», а здесь выбирается, куда и о чём сообщать.') }}</div>
     </div>
     <div class="page-actions save-bar">
-        <span class="dirty" id="dirtyMark" hidden>Есть несохранённые изменения</span>
-        <button type="button" class="btn btn-primary" id="saveBtn">{{ icon('check') }} Сохранить</button>
+        <span class="dirty" id="dirtyMark" hidden>{{ _('Есть несохранённые изменения') }}</span>
+        <button type="button" class="btn btn-primary" id="saveBtn">{{ icon('check') }} {{ _('Сохранить') }}</button>
     </div>
 </div>
 
 {% macro event_filters(ch) %}
-<div class="section-title">О чём сообщать</div>
+<div class="section-title">{{ _('О чём сообщать') }}</div>
 <div class="checks">
     {% for key, label in groups.items() %}
-    <label class="check"><input type="checkbox" data-field="{{ ch }}.events" value="{{ key }}"> {{ label }}</label>
+    <label class="check"><input type="checkbox" data-field="{{ ch }}.events" value="{{ key }}"> {{ _(label) }}</label>
     {% endfor %}
 </div>
-<div class="section-title">Меньше шума</div>
+<div class="section-title">{{ _('Меньше шума') }}</div>
 <div class="checks">
-    <label class="check"><input type="checkbox" data-field="{{ ch }}.recovery"> Сообщать и о восстановлении («порт поднялся», «снова доступен»)</label>
-    <label class="check"><input type="checkbox" data-field="{{ ch }}.important_only"> Только важные порты — с описанием на коммутаторе, подключением на схеме или транком</label>
+    <label class="check"><input type="checkbox" data-field="{{ ch }}.recovery"> {{ _('Сообщать и о восстановлении («порт поднялся», «снова доступен»)') }}</label>
+    <label class="check"><input type="checkbox" data-field="{{ ch }}.important_only"> {{ _('Только важные порты — с описанием на коммутаторе, подключением на схеме или транком') }}{{ tip(_('Порты пользователей включаются и выключаются постоянно (компьютеры, телефоны). Этот фильтр оставляет только порты серверов, точек доступа, uplink и всего, что подписано.'), 'notifications', 'filters') }}</label>
     <div>
-        <label class="check"><input type="checkbox" data-field="{{ ch }}.quiet.enabled"> Тихие часы</label>
+        <label class="check"><input type="checkbox" data-field="{{ ch }}.quiet.enabled"> {{ _('Тихие часы') }}{{ tip(_('В это время приходят только критичные события: коммутатор недоступен или снова доступен, перегрев.'), 'notifications', 'filters') }}</label>
         <div class="quiet-row" style="margin-left:28px">
-            <span class="muted">с</span><input type="time" data-field="{{ ch }}.quiet.from" aria-label="Начало тихих часов">
-            <span class="muted">до</span><input type="time" data-field="{{ ch }}.quiet.to" aria-label="Конец тихих часов">
+            <span class="muted">{{ _('с') }}</span><input type="time" data-field="{{ ch }}.quiet.from" aria-label="{{ _('Начало тихих часов') }}">
+            <span class="muted">{{ _('до') }}</span><input type="time" data-field="{{ ch }}.quiet.to" aria-label="{{ _('Конец тихих часов') }}">
         </div>
-        <div class="hint" style="margin-left:28px">В это время приходят только аварии: коммутатор недоступен или перегрелся.</div>
+        <div class="hint" style="margin-left:28px">{{ _('В это время приходят только аварии: коммутатор недоступен или перегрелся.') }}</div>
     </div>
 </div>
 {% endmacro %}
@@ -88,46 +90,46 @@ details.more summary { cursor: pointer; font-size: 13px; color: var(--text-2); u
     <div class="card channel rise" id="card-telegram">
         <div class="card-header">
             <div class="card-title">{{ icon('send') }} Telegram <span class="badge" id="badge-telegram"></span></div>
-            <label class="check channel-enable"><input type="checkbox" data-field="telegram.enabled"> Включено</label>
+            <label class="check channel-enable"><input type="checkbox" data-field="telegram.enabled"> {{ _('Включено') }}</label>
         </div>
         <div class="card-body">
             <div class="channel-status" id="status-telegram" hidden></div>
-            <div class="section-title">Бот</div>
+            <div class="section-title">{{ _('Бот') }}</div>
             <ol class="steps">
-                <li>Напишите в Telegram <b>@BotFather</b> команду <code>/newbot</code> и придумайте имя — он пришлёт токен.</li>
-                <li>Вставьте токен ниже.</li>
-                <li>Напишите своему боту <code>/start</code> или добавьте его в рабочую группу.</li>
-                <li>Нажмите «Найти чаты» и добавьте нужные.</li>
+                <li>{{ _('Напишите в Telegram') }} <b>@BotFather</b> {{ _('команду') }} <code>/newbot</code> {{ _('и придумайте имя — он пришлёт токен.') }}</li>
+                <li>{{ _('Вставьте токен ниже.') }}</li>
+                <li>{{ _('Напишите своему боту') }} <code>/start</code> {{ _('или добавьте его в рабочую группу.') }}</li>
+                <li>{{ _('Нажмите «Найти чаты» и добавьте нужные.') }}</li>
             </ol>
             <div class="field">
-                <label for="tgToken">Токен бота</label>
+                <label for="tgToken">{{ _('Токен бота') }}{{ tip(_('Получите у @BotFather в Telegram: команда /newbot, затем скопируйте токен вида 123456:ABC…'), 'notifications', 'telegram') }}</label>
                 <div class="input-row">
                     <input type="password" id="tgToken" data-field="telegram.token" autocomplete="new-password" spellcheck="false"
                            placeholder="123456789:AA…">
-                    <button type="button" class="btn" id="findChats">{{ icon('search') }} Найти чаты</button>
+                    <button type="button" class="btn" id="findChats">{{ icon('search') }} {{ _('Найти чаты') }}</button>
                 </div>
                 <div class="hint" id="tgTokenHint"></div>
             </div>
             <div class="field" style="margin-bottom:6px">
-                <label>Куда отправлять</label>
+                <label>{{ _('Куда отправлять') }}{{ tip(_('Личный чат, группа или канал. Напишите боту /start (или добавьте бота в группу) и нажмите «Найти чаты».'), 'notifications', 'telegram') }}</label>
                 <div class="chat-list" id="chatList"></div>
                 <div class="input-row">
-                    <input type="text" id="chatManual" placeholder="или номер чата вручную, например -1001234567890" spellcheck="false">
-                    <button type="button" class="btn" id="chatAdd">{{ icon('plus') }} Добавить</button>
+                    <input type="text" id="chatManual" placeholder="{{ _('или номер чата вручную, например -1001234567890') }}" spellcheck="false">
+                    <button type="button" class="btn" id="chatAdd">{{ icon('plus') }} {{ _('Добавить') }}</button>
                 </div>
                 <div class="found" id="foundChats" hidden></div>
             </div>
             <details class="more">
-                <summary>Если у сервера нет прямого доступа к Telegram</summary>
+                <summary>{{ _('Если у сервера нет прямого доступа к Telegram') }}</summary>
                 <div class="field">
-                    <label for="tgProxy">HTTP-прокси</label>
+                    <label for="tgProxy">{{ _('HTTP-прокси') }}{{ tip(_('Нужен, только если сервер SwitchMap выходит в интернет через прокси.'), 'notifications', 'telegram') }}</label>
                     <input type="text" id="tgProxy" data-field="telegram.proxy" placeholder="http://proxy.company.local:3128" spellcheck="false">
-                    <div class="hint">SwitchMap обращается к <code>api.telegram.org</code> по HTTPS. Логин и пароль прокси можно указать так: <code>http://user:pass@host:3128</code>.</div>
+                    <div class="hint">{{ _('SwitchMap обращается к') }} <code>api.telegram.org</code> {{ _('по HTTPS. Логин и пароль прокси можно указать так:') }} <code>http://user:pass@host:3128</code>.</div>
                 </div>
             </details>
             {{ event_filters('telegram') }}
             <div class="card-actions">
-                <button type="button" class="btn" data-test="telegram">{{ icon('send') }} Отправить тестовое сообщение</button>
+                <button type="button" class="btn" data-test="telegram">{{ icon('send') }} {{ _('Отправить тестовое сообщение') }}</button>
             </div>
         </div>
     </div>
@@ -135,107 +137,107 @@ details.more summary { cursor: pointer; font-size: 13px; color: var(--text-2); u
     <!-- Почта -->
     <div class="card channel rise" id="card-email">
         <div class="card-header">
-            <div class="card-title">{{ icon('mail') }} Почта <span class="badge" id="badge-email"></span></div>
-            <label class="check channel-enable"><input type="checkbox" data-field="email.enabled"> Включено</label>
+            <div class="card-title">{{ icon('mail') }} {{ _('Почта') }} <span class="badge" id="badge-email"></span></div>
+            <label class="check channel-enable"><input type="checkbox" data-field="email.enabled"> {{ _('Включено') }}</label>
         </div>
         <div class="card-body">
             <div class="channel-status" id="status-email" hidden></div>
-            <div class="section-title">Почтовый сервер</div>
-            <div class="segmented presets" id="presets" role="group" aria-label="Почтовый сервис">
+            <div class="section-title">{{ _('Почтовый сервер') }}</div>
+            <div class="segmented presets" id="presets" role="group" aria-label="{{ _('Почтовый сервис') }}">
                 <button type="button" data-preset="gmail">Gmail</button>
-                <button type="button" data-preset="yandex">Яндекс</button>
+                <button type="button" data-preset="yandex">{{ _('Яндекс') }}</button>
                 <button type="button" data-preset="mailru">Mail.ru</button>
-                <button type="button" data-preset="custom">Свой сервер</button>
+                <button type="button" data-preset="custom">{{ _('Свой сервер') }}</button>
             </div>
             <div class="hint" id="presetHint" style="margin:-4px 0 14px"></div>
             <div class="grid-fields">
                 <div class="field">
-                    <label for="mHost">Сервер (SMTP)</label>
+                    <label for="mHost">{{ _('Сервер (SMTP)') }}</label>
                     <input type="text" id="mHost" data-field="email.host" placeholder="smtp.example.com" spellcheck="false">
                 </div>
                 <div class="grid-fields" style="gap:0 10px">
                     <div class="field">
-                        <label for="mPort">Порт</label>
+                        <label for="mPort">{{ _('Порт') }}</label>
                         <input type="number" id="mPort" data-field="email.port" min="1" max="65535">
                     </div>
                     <div class="field">
-                        <label for="mSecurity">Шифрование</label>
+                        <label for="mSecurity">{{ _('Шифрование') }}{{ tip(_('Обычно: порт 465 — SSL, 587 — STARTTLS, 25 — без шифрования (только для внутреннего почтового сервера).'), 'notifications', 'email') }}</label>
                         <select id="mSecurity" data-field="email.security">
                             <option value="ssl">SSL/TLS</option>
                             <option value="starttls">STARTTLS</option>
-                            <option value="none">Нет</option>
+                            <option value="none">{{ _('Нет') }}</option>
                         </select>
                     </div>
                 </div>
                 <div class="field">
-                    <label for="mUser">Логин <span class="muted">(обычно адрес почты)</span></label>
+                    <label for="mUser">{{ _('Логин') }} <span class="muted">{{ _('(обычно адрес почты)') }}</span></label>
                     <input type="text" id="mUser" data-field="email.username" autocomplete="off" spellcheck="false">
                 </div>
                 <div class="field">
-                    <label for="mPass">Пароль приложения</label>
+                    <label for="mPass">{{ _('Пароль приложения') }}{{ tip(_('Gmail, Яндекс, Mail.ru и Outlook не принимают обычный пароль от почты — создайте в настройках безопасности почты «пароль приложения».'), 'notifications', 'email') }}</label>
                     <input type="password" id="mPass" data-field="email.password" autocomplete="new-password">
                     <div class="hint" id="mPassHint"></div>
                 </div>
                 <div class="field wide">
-                    <label for="mRcpt">Получатели</label>
+                    <label for="mRcpt">{{ _('Получатели') }}</label>
                     <input type="text" id="mRcpt" data-field="email.recipients" placeholder="admin@company.ru, noc@company.ru" spellcheck="false">
-                    <div class="hint">Несколько адресов — через запятую.</div>
+                    <div class="hint">{{ _('Несколько адресов — через запятую.') }}</div>
                 </div>
             </div>
             <details class="more">
-                <summary>Дополнительно</summary>
+                <summary>{{ _('Дополнительно') }}</summary>
                 <div class="field">
-                    <label for="mSender">Отправитель <span class="muted">(если отличается от логина)</span></label>
+                    <label for="mSender">{{ _('Отправитель') }} <span class="muted">{{ _('(если отличается от логина)') }}</span></label>
                     <input type="text" id="mSender" data-field="email.sender" placeholder="SwitchMap &lt;monitor@company.ru&gt;" spellcheck="false">
                 </div>
-                <label class="check"><input type="checkbox" data-field="email.verify"> Проверять сертификат сервера</label>
-                <div class="hint" style="margin-left:28px">Снимите, только если внутренний сервер использует самоподписанный сертификат.</div>
+                <label class="check"><input type="checkbox" data-field="email.verify"> {{ _('Проверять сертификат сервера') }}</label>
+                <div class="hint" style="margin-left:28px">{{ _('Снимите, только если внутренний сервер использует самоподписанный сертификат.') }}</div>
             </details>
             {{ event_filters('email') }}
             <div class="card-actions">
-                <button type="button" class="btn" data-test="email">{{ icon('mail') }} Отправить тестовое письмо</button>
+                <button type="button" class="btn" data-test="email">{{ icon('mail') }} {{ _('Отправить тестовое письмо') }}</button>
             </div>
         </div>
     </div>
 </div>
 
 <div class="card general rise">
-    <div class="card-header"><div class="card-title">{{ icon('sliders') }} Общие</div></div>
+    <div class="card-header"><div class="card-title">{{ icon('sliders') }} {{ _('Общие') }}</div></div>
     <div class="card-body">
         <div class="grid-fields">
             <div class="field">
-                <label for="baseUrl">Адрес SwitchMap для ссылок в сообщениях</label>
+                <label for="baseUrl">{{ _('Адрес SwitchMap для ссылок в сообщениях') }}{{ tip(_('По этому адресу будут открываться ссылки из сообщений. Укажите адрес, доступный с телефонов и компьютеров получателей.'), 'notifications') }}</label>
                 <div class="input-row">
                     <input type="text" id="baseUrl" data-field="base_url" placeholder="http://10.0.0.5:5000" spellcheck="false">
-                    <button type="button" class="btn" id="useCurrentUrl" title="Подставить адрес, по которому открыта эта страница">Текущий</button>
+                    <button type="button" class="btn" id="useCurrentUrl" title="{{ _('Подставить адрес, по которому открыта эта страница') }}">{{ _('Текущий') }}</button>
                 </div>
-                <div class="hint">По ссылке из сообщения откроется нужный коммутатор и порт. Пусто — без ссылок.</div>
+                <div class="hint">{{ _('По ссылке из сообщения откроется нужный коммутатор и порт. Пусто — без ссылок.') }}</div>
             </div>
             <div class="field">
-                <label for="flapLimit">«Мигающий» порт: переключений за час</label>
+                <label for="flapLimit">{{ _('«Мигающий» порт: переключений за час') }}{{ tip(_('Если порт упал и поднялся столько раз за час, вместо потока сообщений придёт одно предупреждение, а уведомления по порту приостановятся на час. 0 — выключено.'), 'notifications', 'filters') }}</label>
                 <input type="number" id="flapLimit" data-field="flap_limit" min="0" max="100">
-                <div class="hint">Если порт падает и поднимается чаще — придёт одно предупреждение, и уведомления по нему замолчат на час. 0 — не ограничивать.</div>
+                <div class="hint">{{ _('Если порт падает и поднимается чаще — придёт одно предупреждение, и уведомления по нему замолчат на час. 0 — не ограничивать.') }}</div>
             </div>
         </div>
-        <div class="hint">Все события одного опроса приходят одним сообщением. Если сеть или почтовый сервер недоступны — сообщение уйдёт позже: попытки повторяются через 1, 2, 5, 10, 30 минут и далее раз в час.</div>
+        <div class="hint">{{ _('Все события одного опроса приходят одним сообщением. Если сеть или почтовый сервер недоступны — сообщение уйдёт позже: попытки повторяются через 1, 2, 5, 10, 30 минут и далее раз в час.') }}</div>
     </div>
 </div>
 
 <div class="card rise" style="margin-top:16px">
     <div class="card-header">
-        <div class="card-title">{{ icon('history') }} История отправки</div>
-        <button type="button" class="btn btn-ghost btn-sm" id="reloadLog">{{ icon('refresh') }} Обновить</button>
+        <div class="card-title">{{ icon('history') }} {{ _('История отправки') }}</div>
+        <button type="button" class="btn btn-ghost btn-sm" id="reloadLog">{{ icon('refresh') }} {{ _('Обновить') }}</button>
     </div>
     <div class="table-wrap">
         <table class="table" id="logTable">
-            <thead><tr><th>Время</th><th>Канал</th><th>Сообщение</th><th>Результат</th></tr></thead>
+            <thead><tr><th>{{ _('Время') }}</th><th>{{ _('Канал') }}</th><th>{{ _('Сообщение') }}</th><th>{{ _('Результат') }}</th></tr></thead>
             <tbody id="logBody"></tbody>
         </table>
     </div>
     <div class="empty" id="logEmpty" hidden>
         {{ icon('send') }}
-        <h3>Пока ничего не отправлялось</h3>
-        <p>Настройте канал и нажмите «Отправить тестовое сообщение».</p>
+        <h3>{{ _('Пока ничего не отправлялось') }}</h3>
+        <p>{{ _('Настройте канал и нажмите «Отправить тестовое сообщение».') }}</p>
     </div>
 </div>
 {% endblock %}
@@ -246,12 +248,12 @@ const esc = eventsEscape;
 const ICON_TRASH = {{ icon('trash')|tojson }};
 const PRESETS = {
     gmail:  { host: 'smtp.gmail.com', port: 465, security: 'ssl',
-              hint: 'Gmail: включите двухэтапную аутентификацию, затем Аккаунт Google → Безопасность → «Пароли приложений». Логин — ваш адрес Gmail.' },
+              hint: t('Gmail: включите двухэтапную аутентификацию, затем Аккаунт Google → Безопасность → «Пароли приложений». Логин — ваш адрес Gmail.') },
     yandex: { host: 'smtp.yandex.ru', port: 465, security: 'ssl',
-              hint: 'Яндекс: Яндекс ID → Безопасность → «Пароли приложений» → Почта. В настройках почты должен быть разрешён доступ почтовым программам.' },
+              hint: t('Яндекс: Яндекс ID → Безопасность → «Пароли приложений» → Почта. В настройках почты должен быть разрешён доступ почтовым программам.') },
     mailru: { host: 'smtp.mail.ru', port: 465, security: 'ssl',
-              hint: 'Mail.ru: Настройки → Безопасность → «Пароли для внешних приложений».' },
-    custom: { hint: 'Корпоративный сервер: уточните адрес и порт у администратора почты. Часто это порт 25 или 587; если сервер принимает письма из внутренней сети, логин и пароль не нужны.' },
+              hint: t('Mail.ru: Настройки → Безопасность → «Пароли для внешних приложений».') },
+    custom: { hint: t('Корпоративный сервер: уточните адрес и порт у администратора почты. Часто это порт 25 или 587; если сервер принимает письма из внутренней сети, логин и пароль не нужны.') },
 };
 let state = null;     // ответ /api/notify
 let chats = [];       // выбранные чаты Telegram
@@ -281,10 +283,10 @@ function fill(cfg) {
         else el.value = v == null ? '' : v;
     });
     chats = (cfg.telegram.chats || []).map(c => ({ ...c }));
-    document.getElementById('tgToken').placeholder = cfg.telegram.has_token ? 'Токен сохранён — введите новый, чтобы заменить' : '123456789:AA…';
-    document.getElementById('tgTokenHint').textContent = cfg.telegram.has_token ? 'Токен хранится в зашифрованном виде.' : '';
-    document.getElementById('mPass').placeholder = cfg.email.has_password ? 'Сохранён — введите новый, чтобы заменить' : '';
-    document.getElementById('mPassHint').textContent = cfg.email.has_password ? 'Пароль хранится в зашифрованном виде.' : 'Не обычный пароль от почты — см. подсказку выше.';
+    document.getElementById('tgToken').placeholder = cfg.telegram.has_token ? t('Токен сохранён — введите новый, чтобы заменить') : '123456789:AA…';
+    document.getElementById('tgTokenHint').textContent = cfg.telegram.has_token ? t('Токен хранится в зашифрованном виде.') : '';
+    document.getElementById('mPass').placeholder = cfg.email.has_password ? t('Сохранён — введите новый, чтобы заменить') : '';
+    document.getElementById('mPassHint').textContent = cfg.email.has_password ? t('Пароль хранится в зашифрованном виде.') : t('Не обычный пароль от почты — см. подсказку выше.');
     renderChats();
     syncPreset();
     syncChannelState();
@@ -320,22 +322,22 @@ function renderStatus(ch, enabledInForm) {
     const saved = st && st.enabled;
     if (!saved) {
         badge.className = 'badge badge-outline';
-        badge.textContent = enabledInForm ? 'включится после сохранения' : 'выключено';
+        badge.textContent = enabledInForm ? t('включится после сохранения') : t('выключено');
         box.hidden = true;
         return;
     }
     if (st.fails) {
         badge.className = 'badge badge-danger';
-        badge.textContent = 'ошибка';
+        badge.textContent = t('ошибка');
         box.className = 'channel-status is-error';
-        box.innerHTML = `<div class="grow"><b>Не удалось отправить</b> (${esc(st.last_error_time)}): ${esc(st.last_error)}<br>
-            ${st.pending ? `Ждут отправки событий: ${st.pending}. ` : ''}Следующая попытка — ${esc(st.next_try.slice(11, 16))}.</div>
-            <button type="button" class="btn btn-sm" data-retry>Повторить сейчас</button>`;
+        box.innerHTML = `<div class="grow"><b>${t('Не удалось отправить')}</b> (${esc(st.last_error_time)}): ${esc(st.last_error)}<br>
+            ${st.pending ? t('Ждут отправки событий: {n}.', { n: st.pending }) + ' ' : ''}${t('Следующая попытка — {time}.', { time: esc(st.next_try.slice(11, 16)) })}</div>
+            <button type="button" class="btn btn-sm" data-retry>${t('Повторить сейчас')}</button>`;
     } else {
         badge.className = 'badge badge-success';
-        badge.textContent = 'работает';
+        badge.textContent = t('работает');
         box.className = 'channel-status';
-        box.innerHTML = `<div class="grow">${st.last_ok ? `Последняя отправка: <b>${esc(st.last_ok)}</b>` : 'Новых событий пока не было — сообщение придёт, когда они появятся.'}
+        box.innerHTML = `<div class="grow">${st.last_ok ? t('Последняя отправка: <b>{time}</b>', { time: esc(st.last_ok) }) : t('Новых событий пока не было — сообщение придёт, когда они появятся.')}
             ${st.warning ? `<div class="log-warn">${esc(st.warning)}</div>` : ''}</div>`;
     }
     box.hidden = false;
@@ -345,9 +347,9 @@ function renderChats() {
     const list = document.getElementById('chatList');
     list.innerHTML = chats.length ? chats.map((c, i) => `
         <div class="chat-item">
-            <span class="grow">${esc(c.title || 'Чат')} <span class="muted">${esc(c.id)}</span></span>
-            <button type="button" class="btn btn-ghost btn-icon btn-sm" data-remove-chat="${i}" title="Убрать" aria-label="Убрать чат">${ICON_TRASH}</button>
-        </div>`).join('') : '<div class="hint" style="margin:0 0 4px">Чаты не выбраны.</div>';
+            <span class="grow">${esc(c.title || t('Чат'))} <span class="muted">${esc(c.id)}</span></span>
+            <button type="button" class="btn btn-ghost btn-icon btn-sm" data-remove-chat="${i}" title="${t('Убрать')}" aria-label="${t('Убрать чат')}">${ICON_TRASH}</button>
+        </div>`).join('') : t('<div class="hint" style="margin:0 0 4px">Чаты не выбраны.</div>');
 }
 
 function syncPreset() {
@@ -370,9 +372,9 @@ async function loadLog() {
         <tr>
             <td class="num">${esc(r.time)}</td>
             <td>${esc(r.channel_label)}</td>
-            <td class="msg">${esc(r.title)}${r.events > 1 ? ` <span class="muted">· событий: ${r.events}</span>` : ''}
+            <td class="msg">${esc(r.title)}${r.events > 1 ? ` <span class="muted">· ${t('событий: {n}', { n: r.events })}</span>` : ''}
                 ${r.error ? `<div class="${r.ok ? 'log-warn' : 'log-error'}">${esc(r.error)}</div>` : ''}</td>
-            <td>${r.ok ? '<span class="badge badge-success">доставлено</span>' : '<span class="badge badge-danger">ошибка</span>'}</td>
+            <td>${r.ok ? `<span class="badge badge-success">${t('доставлено')}</span>` : `<span class="badge badge-danger">${t('ошибка')}</span>`}</td>
         </tr>`).join('');
     document.getElementById('logEmpty').hidden = rows.length > 0;
     document.getElementById('logTable').parentElement.hidden = rows.length === 0;
@@ -436,10 +438,10 @@ document.getElementById('chatAdd').addEventListener('click', () => {
     const input = document.getElementById('chatManual');
     const id = input.value.trim();
     if (!/^-?\d+$/.test(id) && !/^@\w{4,}$/.test(id)) {
-        notify('Номер чата — число (у групп начинается с минуса) или @имя_канала', 'error');
+        notify(t('Номер чата — число (у групп начинается с минуса) или @имя_канала'), 'error');
         return;
     }
-    if (!addChat({ id })) notify('Этот чат уже добавлен', 'warning');
+    if (!addChat({ id })) notify(t('Этот чат уже добавлен'), 'warning');
     input.value = '';
 });
 
@@ -448,49 +450,48 @@ document.getElementById('findChats').addEventListener('click', e => withLoading(
         body: JSON.stringify({ config: collect() }) })).json();
     const box = document.getElementById('foundChats');
     if (!r.ok) { box.hidden = true; notify(r.error, 'error', 8000); return; }
-    const bot = r.bot.username ? `@${r.bot.username}` : 'бот';
+    const bot = r.bot.username ? `@${r.bot.username}` : t('бот');
     if (!r.chats.length) {
-        box.innerHTML = `<div class="found-title">Токен верный, бот <b>${esc(bot)}</b>. Чатов пока нет — напишите боту <code>/start</code>
-            (или добавьте его в группу и напишите там что-нибудь), затем нажмите «Найти чаты» ещё раз.</div>`;
+        box.innerHTML = `<div class="found-title">${t('Токен верный, бот <b>{bot}</b>. Чатов пока нет — напишите боту <code>/start</code> (или добавьте его в группу и напишите там что-нибудь), затем нажмите «Найти чаты» ещё раз.', { bot: esc(bot) })}</div>`;
         box.hidden = false;
         return;
     }
     foundChats = r.chats;
-    box.innerHTML = `<div class="found-title">Бот <b>${esc(bot)}</b> · найденные чаты:</div>` + r.chats.map((c, i) => {
+    box.innerHTML = t('<div class="found-title">Бот <b>{bot}</b> · найденные чаты:</div>', { bot: esc(bot) }) + r.chats.map((c, i) => {
         const added = chats.some(x => x.id === c.id);
         return `<div class="chat-item">
             <span class="grow">${esc(c.title)} <span class="muted">${esc(c.kind)} · ${esc(c.id)}</span></span>
-            <button type="button" class="btn btn-sm" data-add-chat="${i}" ${added ? 'disabled' : ''}>${added ? 'добавлен' : 'Добавить'}</button>
+            <button type="button" class="btn btn-sm" data-add-chat="${i}" ${added ? 'disabled' : ''}>${added ? t('добавлен') : t('Добавить')}</button>
         </div>`;
     }).join('');
     box.hidden = false;
-}).catch(() => notify('Не удалось связаться с сервером', 'error')));
+}).catch(() => notify(t('Не удалось связаться с сервером'), 'error')));
 
 document.getElementById('foundChats').addEventListener('click', e => {
     const b = e.target.closest('[data-add-chat]');
     if (!b) return;
     addChat(foundChats[+b.dataset.addChat]);
     b.disabled = true;
-    b.textContent = 'добавлен';
+    b.textContent = t('добавлен');
 });
 
 document.querySelectorAll('[data-test]').forEach(btn => btn.addEventListener('click', () => withLoading(btn, async () => {
     const r = await (await fetch('/api/notify/test', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel: btn.dataset.test, config: collect() }) })).json();
-    if (r.ok) notify(`Отправлено (${r.result})${r.warning ? '. ' + r.warning : ''}`, r.warning ? 'warning' : 'success', 6000);
+    if (r.ok) notify(t('Отправлено ({result}){v}', { result: r.result, v: r.warning ? '. ' + r.warning : '' }), r.warning ? 'warning' : 'success', 6000);
     else notify(r.error, 'error', 10000);
     loadLog();
-}).catch(() => notify('Не удалось связаться с сервером', 'error'))));
+}).catch(() => notify(t('Не удалось связаться с сервером'), 'error'))));
 
 document.getElementById('saveBtn').addEventListener('click', e => withLoading(e.currentTarget, async () => {
     const r = await fetch('/api/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(collect()) });
     const data = await r.json();
-    if (!r.ok) { notify(data.error || 'Не удалось сохранить', 'error', 8000); return; }
+    if (!r.ok) { notify(data.error || t('Не удалось сохранить'), 'error', 8000); return; }
     state = data;
     fill(state.config);
     setDirty(false);
-    notify('Настройки уведомлений сохранены', 'success');
-}).catch(() => notify('Не удалось сохранить', 'error')));
+    notify(t('Настройки уведомлений сохранены'), 'success');
+}).catch(() => notify(t('Не удалось сохранить'), 'error')));
 
 document.querySelector('.channels').addEventListener('click', e => {
     const b = e.target.closest('[data-retry]');

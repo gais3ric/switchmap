@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_help.html" import tip, help_link %}
 {% set active_nav = 'topology' %}
+{% set help_slug = 'topology' %}
 
-{% block title %}Топология{% endblock %}
-{% block crumbs %}<span class="current">Топология</span>{% endblock %}
+{% block title %}{{ _('Топология') }}{% endblock %}
+{% block crumbs %}<span class="current">{{ _('Топология') }}</span>{% endblock %}
 {% block content_class %}is-flush{% endblock %}
 
 {% block head %}
@@ -114,32 +116,32 @@
 
     <div class="topo-toolbar">
         <div class="topo-title">
-            <h1>Топология сети</h1>
-            <span id="status">Загрузка…</span>
+            <h1>{{ _('Топология сети') }}</h1>
+            <span id="status">{{ _('Загрузка…') }}</span>
         </div>
         <div class="topo-actions">
-            <button type="button" class="btn btn-ghost btn-sm" data-click="loadTopology">{{ icon('refresh') }} Обновить</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-click="fitGraph">{{ icon('fit') }} Вписать</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-click="loadTopology">{{ icon('refresh') }} {{ _('Обновить') }}</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-click="fitGraph">{{ icon('fit') }} {{ _('Вписать') }}</button>
         </div>
     </div>
 
     <div id="empty" class="empty">
         {{ icon('topology') }}
-        <h3>Нет данных топологии</h3>
-        <p>Добавьте коммутаторы и настройте SNMP — связи строятся по LLDP и назначенным устройствам.</p>
+        <h3>{{ _('Нет данных топологии') }}</h3>
+        <p>{{ _('Добавьте коммутаторы и настройте SNMP — связи строятся по LLDP и назначенным устройствам.') }}</p>
     </div>
 
     <div id="side">
-        <button type="button" class="modal-close side-close" data-click="closeSide" aria-label="Закрыть">&times;</button>
+        <button type="button" class="modal-close side-close" data-click="closeSide" aria-label="{{ _('Закрыть') }}">&times;</button>
         <div id="sideContent"></div>
     </div>
 
     <div id="legend">
-        <div class="legend-row"><span class="legend-swatch sw"></span> Коммутатор</div>
-        <div class="legend-row"><span class="legend-swatch srv"></span> Сервер / устройство</div>
-        <div class="legend-row"><span class="legend-swatch unk"></span> Неизвестный LLDP-узел</div>
-        <div class="legend-row"><span class="legend-line"></span> LLDP / физический линк</div>
-        <div class="legend-row"><span class="legend-dash"></span> Назначенное устройство</div>
+        <div class="legend-row"><span class="legend-swatch sw"></span> {{ _('Коммутатор') }}</div>
+        <div class="legend-row"><span class="legend-swatch srv"></span> {{ _('Сервер / устройство') }}</div>
+        <div class="legend-row"><span class="legend-swatch unk"></span> {{ _('Неизвестный LLDP-узел') }}</div>
+        <div class="legend-row"><span class="legend-line"></span> {{ _('LLDP / физический линк') }}</div>
+        <div class="legend-row"><span class="legend-dash"></span> {{ _('Назначенное устройство') }}</div>
     </div>
 </div>
 {% endblock %}
@@ -180,20 +182,20 @@ function statusClass(d) {
 
 function openNode(d) {
     const isSwitch = d.type === "switch";
-    const typeName = isSwitch ? "Коммутатор" :
-                     d.type === "server" ? "Сервер / устройство" : "LLDP-узел";
+    const typeName = isSwitch ? t("Коммутатор") :
+                     d.type === "server" ? t("Сервер / устройство") : t("LLDP-узел");
     let html = `<h2>${esc(d.name)}</h2><div class="side-type">${typeName}</div>`;
 
     if (d.ip) html += `<div class="side-row">IP <b class="mono">${esc(d.ip)}</b></div>`;
     if (d.mac) html += `<div class="side-row">MAC <b class="mono">${esc(d.mac)}</b></div>`;
-    if (isSwitch) html += `<div class="side-row">Портов <b>${esc(d.ports)}</b></div>`;
-    if (d.port) html += `<div class="side-row">Порт <b>${esc(d.port)}</b></div>`;
+    if (isSwitch) html += t('<div class="side-row">Портов <b>{ports}</b></div>', { ports: esc(d.ports) });
+    if (d.port) html += t('<div class="side-row">Порт <b>{port}</b></div>', { port: esc(d.port) });
     if (d.chassis) html += `<div class="side-row">Chassis ID <b class="mono">${esc(d.chassis)}</b></div>`;
-    if (d.last_seen) html += `<div class="side-row">Последний ping <b>${esc(d.last_seen)}</b></div>`;
+    if (d.last_seen) html += t('<div class="side-row">Последний ping <b>{last_seen}</b></div>', { last_seen: esc(d.last_seen) });
 
     if (isSwitch) {
         html += `<div class="side-actions">
-            <a class="btn btn-primary btn-sm" href="/switch/${encodeURIComponent(d.switch_id)}">Открыть коммутатор</a>
+            <a class="btn btn-primary btn-sm" href="/switch/${encodeURIComponent(d.switch_id)}">${t('Открыть коммутатор')}</a>
         </div>`;
     }
     sideContent.innerHTML = html;
@@ -279,8 +281,8 @@ function renderGraph() {
         .attr("class", "node-sub")
         .attr("x", -58)
         .attr("y", 14)
-        .text(d => d.type === "switch" ? (d.ip || "IP не задан") :
-                     d.type === "server" ? (d.ip || `порт ${d.port || "?"}`) :
+        .text(d => d.type === "switch" ? (d.ip || t("IP не задан")) :
+                     d.type === "server" ? (d.ip || t('порт {v}', { v: d.port || "?" })) :
                      (d.chassis || "LLDP"));
 
     svg.on("click", closeSide);
@@ -338,16 +340,16 @@ function fitGraph() {
 }
 
 async function loadTopology() {
-    statusEl.textContent = "Опрос LLDP…";
+    statusEl.textContent = t("Опрос LLDP…");
     try {
         const response = await fetch("/api/topology", {cache:"no-store"});
         const data = await response.json();
-        if (!response.ok || data.error) throw new Error(data.error || "Ошибка API");
+        if (!response.ok || data.error) throw new Error(data.error || t("Ошибка API"));
         graphData = data;
-        statusEl.textContent = `${data.nodes.length} узлов · ${data.links.length} связей`;
+        statusEl.textContent = t('{nodes} узлов · {links} связей', { nodes: data.nodes.length, links: data.links.length });
         renderGraph();
     } catch (e) {
-        statusEl.textContent = "Ошибка: " + e.message;
+        statusEl.textContent = t("Ошибка: ") + e.message;
         graphData = {nodes:[],links:[]};
         renderGraph();
     }

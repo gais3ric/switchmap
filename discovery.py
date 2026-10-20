@@ -12,6 +12,8 @@ import threading
 import uuid
 from datetime import datetime
 
+from i18n import _
+
 MAX_HOSTS = 4096         # адресов за один поиск (≈ сеть /20)
 WORKERS = 32             # одновременных SNMP-запросов
 KEEP_JOBS = 5
@@ -62,9 +64,9 @@ def parse_targets(text, limit=MAX_HOSTS):
             if "/" in token:
                 net = ipaddress.ip_network(token, strict=False)
                 if net.version != 4:
-                    return None, f"Поддерживаются только IPv4-адреса: {token}"
+                    return None, _("Поддерживаются только IPv4-адреса: {token}", token=token)
                 if net.num_addresses > limit * 4:
-                    return None, f"Сеть {token} слишком большая — разбейте её на части до /20"
+                    return None, _("Сеть {token} слишком большая — разбейте её на части до /20", token=token)
                 hosts = list(net.hosts()) if net.num_addresses > 2 else list(net)
                 for ip in hosts:
                     add(ip)
@@ -75,19 +77,19 @@ def parse_targets(text, limit=MAX_HOSTS):
                     end_s = start_s.rsplit(".", 1)[0] + "." + end_s
                 end = ipaddress.IPv4Address(end_s)
                 if end < start:
-                    return None, f"В диапазоне {token} конец меньше начала"
+                    return None, _("В диапазоне {token} конец меньше начала", token=token)
                 if int(end) - int(start) >= limit * 4:
-                    return None, f"Диапазон {token} слишком большой"
+                    return None, _("Диапазон {token} слишком большой", token=token)
                 for n in range(int(start), int(end) + 1):
                     add(ipaddress.IPv4Address(n))
             else:
                 add(ipaddress.IPv4Address(token))
         except (ValueError, ipaddress.AddressValueError):
-            return None, f"Не понимаю адрес «{token}». Примеры: 192.168.1.0/24, 10.0.0.1-10.0.0.50, 10.0.0.7"
+            return None, _("Не понимаю адрес «{token}». Примеры: 192.168.1.0/24, 10.0.0.1-10.0.0.50, 10.0.0.7", token=token)
         if len(ips) > limit:
-            return None, f"Слишком много адресов (больше {limit}). Сузьте диапазон"
+            return None, _("Слишком много адресов (больше {limit}). Сузьте диапазон", limit=limit)
     if not ips:
-        return None, "Укажите, где искать: сеть, диапазон или адреса"
+        return None, _("Укажите, где искать: сеть, диапазон или адреса")
     return ips, None
 
 
@@ -157,7 +159,7 @@ def get_job(job_id):
 def start(targets, creds, labels, probe, follow_lldp=False, actor=""):
     """probe(ip, auth) → dict с ok/… (см. app.probe_switch). Возвращает (job, ошибка)."""
     if running_job():
-        return None, "Поиск уже идёт — дождитесь окончания или остановите его"
+        return None, _("Поиск уже идёт — дождитесь окончания или остановите его")
     job = Job(targets, creds, labels, follow_lldp, actor)
     with _jobs_lock:
         _jobs[job.id] = job
@@ -190,7 +192,7 @@ def _run(job, probe):
     try:
         pending = {pool.submit(_scan, job, ip, probe): ip for ip in job.targets}
         while pending:
-            done, _ = concurrent.futures.wait(pending, timeout=0.5, return_when=concurrent.futures.FIRST_COMPLETED)
+            done, _pending = concurrent.futures.wait(pending, timeout=0.5, return_when=concurrent.futures.FIRST_COMPLETED)
             if job.cancel.is_set():
                 for f in pending:
                     f.cancel()

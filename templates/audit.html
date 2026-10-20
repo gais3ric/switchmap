@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% set active_nav = 'audit' %}
+{% set help_slug = 'backups' %}
 
-{% block title %}Журнал изменений{% endblock %}
-{% block crumbs %}<span class="current">Журнал изменений</span>{% endblock %}
+{% block title %}{{ _('Журнал изменений') }}{% endblock %}
+{% block crumbs %}<span class="current">{{ _('Журнал изменений') }}</span>{% endblock %}
 
 {% block head %}
 <style>
@@ -34,8 +35,8 @@
 {% block content %}
 <div class="page-header">
     <div>
-        <h1>Журнал изменений</h1>
-        <div class="page-sub">Кто, когда и что менял. Правку коммутатора можно откатить, удалённый коммутатор — восстановить.</div>
+        <h1>{{ _('Журнал изменений') }}</h1>
+        <div class="page-sub">{{ _('Кто, когда и что менял. Правку коммутатора можно откатить, удалённый коммутатор — восстановить.') }}</div>
     </div>
     <div class="page-actions">
         <a href="/export/audit.csv" class="btn">{{ icon('download') }} CSV</a>
@@ -44,15 +45,15 @@
 
 <div class="card rise">
     <div class="card-header">
-        <div class="card-title">{{ icon('history') }} Записи</div>
+        <div class="card-title">{{ icon('history') }} {{ _('Записи') }}</div>
         <div class="audit-filters">
-            <select id="filterSwitch" aria-label="Коммутатор">
-                <option value="">Все коммутаторы</option>
+            <select id="filterSwitch" aria-label="{{ _('Коммутатор') }}">
+                <option value="">{{ _('Все коммутаторы') }}</option>
                 {% for sid, name in switches %}<option value="{{ sid }}">{{ name }}</option>{% endfor %}
             </select>
-            <select id="filterAction" aria-label="Действие">
-                <option value="">Все действия</option>
-                {% for key, label in actions.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+            <select id="filterAction" aria-label="{{ _('Действие') }}">
+                <option value="">{{ _('Все действия') }}</option>
+                {% for key, label in actions.items() %}<option value="{{ key }}">{{ _(label) }}</option>{% endfor %}
             </select>
         </div>
     </div>
@@ -60,11 +61,11 @@
         <table class="table" id="auditTable">
             <thead>
                 <tr>
-                    <th>Время</th>
-                    <th>Действие</th>
-                    <th>Коммутатор</th>
-                    <th>Описание</th>
-                    <th class="col-optional">Источник</th>
+                    <th>{{ _('Время') }}</th>
+                    <th>{{ _('Действие') }}</th>
+                    <th>{{ _('Коммутатор') }}</th>
+                    <th>{{ _('Описание') }}</th>
+                    <th class="col-optional">{{ _('Источник') }}</th>
                     <th class="col-actions"></th>
                 </tr>
             </thead>
@@ -73,11 +74,11 @@
     </div>
     <div class="empty" id="auditEmpty" hidden>
         {{ icon('history') }}
-        <h3>Записей нет</h3>
-        <p>Здесь появятся изменения коммутаторов, привязка устройств, смена настроек и восстановления базы.</p>
+        <h3>{{ _('Записей нет') }}</h3>
+        <p>{{ _('Здесь появятся изменения коммутаторов, привязка устройств, смена настроек и восстановления базы.') }}</p>
     </div>
     <div class="load-more" id="loadMore" hidden>
-        <button type="button" class="btn btn-sm" data-click="loadEntries" data-args='[true]'>Показать ещё</button>
+        <button type="button" class="btn btn-sm" data-click="loadEntries" data-args='[true]'>{{ _('Показать ещё') }}</button>
     </div>
 </div>
 {% endblock %}
@@ -102,10 +103,10 @@ function relTime(ts) {
     const d = new Date(String(ts).replace(' ', 'T'));
     const sec = Math.round((Date.now() - d) / 1000);
     if (isNaN(sec)) return ts;
-    if (sec < 60) return 'только что';
-    if (sec < 3600) return `${Math.round(sec / 60)} мин назад`;
-    if (sec < 86400) return `${Math.round(sec / 3600)} ч назад`;
-    return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    if (sec < 60) return t('только что');
+    if (sec < 3600) return t('{v} мин назад', { v: Math.round(sec / 60) });
+    if (sec < 86400) return t('{v} ч назад', { v: Math.round(sec / 3600) });
+    return d.toLocaleDateString(LOCALE, { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function rowHtml(e) {
@@ -114,10 +115,10 @@ function rowHtml(e) {
         : '<span class="muted">—</span>';
     let action = '';
     if (e.revertible) {
-        const label = e.action === 'delete' ? 'Восстановить' : 'Откатить';
+        const label = e.action === 'delete' ? t('Восстановить') : t('Откатить');
         action = `<button type="button" class="btn btn-sm" data-revert="${e.id}" data-kind="${e.action}">${label}</button>`;
     } else if (e.reverted_by) {
-        action = `<span class="badge" title="Отменено записью №${e.reverted_by}">отменено</span>`;
+        action = t('<span class="badge" title="Отменено записью №{reverted_by}">отменено</span>', { reverted_by: e.reverted_by });
     }
     const hasChanges = e.changes && e.changes.length;
     const details = hasChanges ? `
@@ -126,7 +127,7 @@ function rowHtml(e) {
                 <td class="f">${esc(c.field)}</td><td class="b">${esc(c.before)}</td><td class="a">${esc(c.after)}</td></tr>`).join('')}
             </table></td></tr>` : '';
     return `
-        <tr class="audit-row ${e.reverted_by ? 'is-reverted' : ''}" data-id="${e.id}" ${hasChanges ? 'title="Показать изменения"' : ''}>
+        <tr class="audit-row ${e.reverted_by ? 'is-reverted' : ''}" data-id="${e.id}" ${hasChanges ? `title="${esc(t('Показать изменения'))}"` : ''}>
             <td class="audit-time" title="${esc(e.time)}">${relTime(e.time)}<small>${esc(e.time)}</small></td>
             <td><span class="badge act-badge ${ACTION_STYLE[e.action] || ''}">${esc(e.action_label)}</span></td>
             <td>${sw}</td>
@@ -153,7 +154,7 @@ async function loadEntries(more = false) {
         document.getElementById('auditTable').parentElement.hidden = body.children.length === 0;
         document.getElementById('loadMore').hidden = entries.length < PAGE;
     } catch (e) {
-        notify('Не удалось загрузить журнал', 'error');
+        notify(t('Не удалось загрузить журнал'), 'error');
     }
 }
 
@@ -174,20 +175,20 @@ document.getElementById('auditBody').addEventListener('click', async e => {
         e.stopPropagation();
         const isDelete = btn.dataset.kind === 'delete';
         const ok = await confirmDialog(isDelete
-            ? 'Коммутатор будет восстановлен с настройками, подключениями, патч-панелями и привязанными устройствами. История опросов и события не восстанавливаются.'
-            : 'Поля, изменённые этой записью, вернутся к прежним значениям. Более поздние правки тех же полей будут перезаписаны. Откат тоже попадёт в журнал, и его можно будет отменить.',
-            { title: isDelete ? 'Восстановить коммутатор?' : 'Откатить изменение?', okText: isDelete ? 'Восстановить' : 'Откатить' });
+            ? t('Коммутатор будет восстановлен с настройками, подключениями, патч-панелями и привязанными устройствами. История опросов и события не восстанавливаются.')
+            : t('Поля, изменённые этой записью, вернутся к прежним значениям. Более поздние правки тех же полей будут перезаписаны. Откат тоже попадёт в журнал, и его можно будет отменить.'),
+            { title: isDelete ? t('Восстановить коммутатор?') : t('Откатить изменение?'), okText: isDelete ? t('Восстановить') : t('Откатить') });
         if (!ok) return;
         btn.classList.add('is-loading');
         try {
             const r = await (await fetch(`/api/audit/${btn.dataset.revert}/revert`, { method: 'POST' })).json();
             if (!r.ok) throw new Error(r.error);
-            notify(isDelete ? 'Коммутатор восстановлен' : 'Изменение откачено', 'success');
+            notify(isDelete ? t('Коммутатор восстановлен') : t('Изменение откачено'), 'success');
             lastId = null;
             loadEntries();
         } catch (err) {
             btn.classList.remove('is-loading');
-            notify(err.message || 'Не удалось выполнить откат', 'error');
+            notify(err.message || t('Не удалось выполнить откат'), 'error');
         }
         return;
     }

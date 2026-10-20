@@ -17,11 +17,11 @@
 <main style="min-height:100vh;display:grid;place-items:center;padding:24px">
     <div class="empty card" style="max-width:440px;width:100%">
         {{ icon('alert') }}
-        <h3>{{ {403: 'Нет доступа', 404: 'Не найдено', 400: 'Запрос отклонён'}.get(code, 'Ошибка') }} <span class="muted">· {{ code }}</span></h3>
+        <h3>{{ {403: _('Нет доступа'), 404: _('Не найдено'), 400: _('Запрос отклонён')}.get(code, _('Ошибка')) }} <span class="muted">· {{ code }}</span></h3>
         <p>{{ message }}</p>
         <div class="row" style="margin-top:6px">
-            <button type="button" class="btn" data-click="goBack">Назад</button>
-            <a href="/" class="btn btn-primary">На главную</a>
+            <button type="button" class="btn" data-click="goBack">{{ _('Назад') }}</button>
+            <a href="/" class="btn btn-primary">{{ _('На главную') }}</a>
         </div>
     </div>
 </main>

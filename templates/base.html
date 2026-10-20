@@ -1,5 +1,5 @@
-{% from "_icons.html" import icon %}<!DOCTYPE html>
-<html lang="ru" data-theme="dark">
+{% from "_icons.html" import icon %}{% from "_help.html" import tip, help_link %}<!DOCTYPE html>
+<html lang="{{ html_lang }}" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,7 +12,9 @@
     try { t = localStorage.getItem('switchmap.theme'); } catch (e) {}
     document.documentElement.dataset.theme = (t === 'light') ? 'light' : 'dark';
 })();
+window.I18N = {{ js_i18n|tojson }};
 </script>
+<script src="/static/i18n.js"></script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f8cff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='16' y='16' width='6' height='6' rx='1'/%3E%3Crect x='2' y='16' width='6' height='6' rx='1'/%3E%3Crect x='9' y='2' width='6' height='6' rx='1'/%3E%3Cpath d='M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3'/%3E%3Cpath d='M12 12V8'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/static/ui.css">
 <script src="/static/events.js"></script>
@@ -21,23 +23,24 @@
 <body class="{{ 'role-admin' if is_admin else 'role-viewer' }} {% block body_class %}{% endblock %}">
 
 <div class="app">
-    <aside class="rail" aria-label="Навигация">
+    <aside class="rail" aria-label="{{ _('Навигация') }}">
         <a href="/" class="rail-logo" title="SwitchMap">{{ icon('logo') }}</a>
         <nav class="rail-nav">
-            <a href="/" class="rail-item {{ 'is-active' if active_nav == 'switches' }}" data-label="Коммутаторы" aria-label="Коммутаторы">{{ icon('server') }}</a>
-            <a href="/topology" class="rail-item {{ 'is-active' if active_nav == 'topology' }}" data-label="Топология" aria-label="Топология">{{ icon('topology') }}</a>
-            <a href="/audit" class="rail-item {{ 'is-active' if active_nav == 'audit' }}" data-label="Журнал изменений" aria-label="Журнал изменений">{{ icon('history') }}</a>
-            <a href="/maintenance" class="rail-item {{ 'is-active' if active_nav == 'maintenance' }}" data-label="Данные и резервные копии" aria-label="Данные и резервные копии">{{ icon('database') }}</a>
-            {% if is_admin %}<a href="/discover" class="rail-item {{ 'is-active' if active_nav == 'discover' }}" data-label="Поиск в сети и импорт из NetBox" aria-label="Поиск и импорт">{{ icon('radar') }}</a>{% endif %}
-            {% if is_admin %}<a href="/notifications" class="rail-item {{ 'is-active' if active_nav == 'notifications' }}" data-label="Уведомления в Telegram и на почту" aria-label="Уведомления">{{ icon('send') }}</a>{% endif %}
-            <button type="button" class="rail-item" data-label="Поиск устройства  (Ctrl K)" aria-label="Поиск"
+            <a href="/" class="rail-item {{ 'is-active' if active_nav == 'switches' }}" data-label="{{ _('Коммутаторы') }}" aria-label="{{ _('Коммутаторы') }}">{{ icon('server') }}</a>
+            <a href="/topology" class="rail-item {{ 'is-active' if active_nav == 'topology' }}" data-label="{{ _('Топология') }}" aria-label="{{ _('Топология') }}">{{ icon('topology') }}</a>
+            <a href="/audit" class="rail-item {{ 'is-active' if active_nav == 'audit' }}" data-label="{{ _('Журнал изменений') }}" aria-label="{{ _('Журнал изменений') }}">{{ icon('history') }}</a>
+            <a href="/maintenance" class="rail-item {{ 'is-active' if active_nav == 'maintenance' }}" data-label="{{ _('Данные и резервные копии') }}" aria-label="{{ _('Данные и резервные копии') }}">{{ icon('database') }}</a>
+            {% if is_admin %}<a href="/discover" class="rail-item {{ 'is-active' if active_nav == 'discover' }}" data-label="{{ _('Поиск в сети и импорт из NetBox') }}" aria-label="{{ _('Поиск и импорт') }}">{{ icon('radar') }}</a>{% endif %}
+            {% if is_admin %}<a href="/notifications" class="rail-item {{ 'is-active' if active_nav == 'notifications' }}" data-label="{{ _('Уведомления в Telegram и на почту') }}" aria-label="{{ _('Уведомления') }}">{{ icon('send') }}</a>{% endif %}
+            <button type="button" class="rail-item" data-label="{{ _('Поиск устройства  (Ctrl K)') }}" aria-label="{{ _('Поиск') }}"
                     data-click="focusById" data-args='["netSearchInput"]'>{{ icon('search') }}</button>
         </nav>
         <div class="rail-bottom">
-            <button type="button" class="rail-item" id="themeToggle" data-label="Светлая тема" aria-label="Сменить тему" data-click="toggleTheme">
+            <a href="/help" class="rail-item {{ 'is-active' if active_nav == 'help' }}" data-label="{{ _('Справка') }}" aria-label="{{ _('Справка') }}">{{ icon('book') }}</a>
+            <button type="button" class="rail-item" id="themeToggle" data-label="{{ _('Светлая тема') }}" aria-label="{{ _('Сменить тему') }}" data-click="toggleTheme">
                 <span class="icon-sun">{{ icon('sun') }}</span><span class="icon-moon" hidden>{{ icon('moon') }}</span>
             </button>
-            <button type="button" class="rail-item admin-only" data-label="Настройки" aria-label="Настройки" data-click="openSettingsModal">{{ icon('settings') }}</button>
+            <button type="button" class="rail-item admin-only" data-label="{{ _('Настройки') }}" aria-label="{{ _('Настройки') }}" data-click="openSettingsModal">{{ icon('settings') }}</button>
             {% if current_user %}
             <div class="menu-wrap user-menu">
                 <button type="button" class="rail-avatar" data-menu-toggle aria-haspopup="true"
@@ -48,12 +51,21 @@
                         <span class="badge {{ 'badge-accent' if is_admin else 'badge-outline' }}">{{ current_user.role_label }}</span>
                     </div>
                     <hr>
-                    <button type="button" role="menuitem" data-click="openPasswordModal">{{ icon('pencil') }} Сменить пароль</button>
-                    {% if is_admin %}<a href="/users" role="menuitem">{{ icon('server') }} Пользователи</a>{% endif %}
+                    <button type="button" role="menuitem" data-click="openPasswordModal">{{ icon('pencil') }} {{ _('Сменить пароль') }}</button>
+                    {% if is_admin %}<a href="/users" role="menuitem">{{ icon('server') }} {{ _('Пользователи') }}</a>{% endif %}
+                    <a href="/help" role="menuitem">{{ icon('book') }} {{ _('Справка') }}</a>
+                    <hr>
+                    <label class="menu-lang" for="userLangSelect">
+                        {{ icon('globe') }}
+                        <select id="userLangSelect" data-change="setUserLanguage" data-args='["$value"]' aria-label="{{ _('Язык интерфейса') }}">
+                            <option value="" {{ 'selected' if not user_language }}>{{ _('Как в системе ({name})', name=languages[browser_lang]) }}</option>
+                            {% for code, name in languages.items() %}<option value="{{ code }}" {{ 'selected' if code == user_language }}>{{ name }}</option>{% endfor %}
+                        </select>
+                    </label>
                     <hr>
                     <form method="POST" action="/logout" style="margin:0">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <button type="submit" role="menuitem" id="logoutBtn">{{ icon('open') }} Выйти</button>
+                        <button type="submit" role="menuitem" id="logoutBtn">{{ icon('open') }} {{ _('Выйти') }}</button>
                     </form>
                     <hr>
                     <div class="menu-note" id="appVersion">SwitchMap {{ app_version }}</div>
@@ -65,29 +77,30 @@
 
     <div class="main">
         <header class="topbar">
-            <nav class="crumbs" aria-label="Путь">{% block crumbs %}{% endblock %}</nav>
+            <nav class="crumbs" aria-label="{{ _('Путь') }}">{% block crumbs %}{% endblock %}</nav>
             <div class="topbar-spacer"></div>
             <div class="net-search">
                 {{ icon('search', 'search-icon') }}
                 <input type="search" id="netSearchInput" autocomplete="off" spellcheck="false"
-                       placeholder="Найти устройство: MAC, IP, имя, описание порта"
-                       aria-label="Поиск устройства по сети">
+                       placeholder="{{ _('Найти устройство: MAC, IP, имя, описание порта') }}"
+                       aria-label="{{ _('Поиск устройства по сети') }}">
                 <span class="search-kbd"><kbd>Ctrl</kbd><kbd>K</kbd></span>
                 <div id="netSearchResults" class="net-search-results" hidden></div>
             </div>
             <div class="topbar-actions">
                 {% block topbar_actions %}{% endblock %}
-                <button type="button" class="btn btn-ghost btn-icon bell-btn" data-click="toggleEventsPanel" title="События" aria-label="События">
+                {% if help_slug %}<a class="btn btn-ghost btn-icon" href="/help/{{ help_slug }}" id="pageHelp" title="{{ _('Справка по этой странице') }}" aria-label="{{ _('Справка по этой странице') }}">{{ icon('help') }}</a>{% endif %}
+                <button type="button" class="btn btn-ghost btn-icon bell-btn" data-click="toggleEventsPanel" title="{{ _('События') }}" aria-label="{{ _('События') }}">
                     {{ icon('bell') }}<span class="bell-badge" id="bellBadge">0</span>
                 </button>
             </div>
             <div class="events-panel" id="eventsPanel">
                 <div class="events-panel-header">
-                    <span>События</span>
-                    <button type="button" class="btn btn-ghost btn-sm" data-click="markAllEventsRead">Прочитать всё</button>
+                    <span>{{ _('События') }}</span>
+                    <button type="button" class="btn btn-ghost btn-sm" data-click="markAllEventsRead">{{ _('Прочитать всё') }}</button>
                 </div>
                 <div id="eventsList">
-                    <div class="events-empty">Загрузка…</div>
+                    <div class="events-empty">{{ _('Загрузка…') }}</div>
                 </div>
             </div>
         </header>
@@ -102,37 +115,47 @@
 <div id="settingsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <div class="modal-content is-narrow">
         <div class="modal-header">
-            <h2 id="settingsTitle">Настройки</h2>
-            <button type="button" class="modal-close" data-click="closeSettingsModal" aria-label="Закрыть">&times;</button>
+            <h2 id="settingsTitle">{{ _('Настройки') }}</h2>
+            <button type="button" class="modal-close" data-click="closeSettingsModal" aria-label="{{ _('Закрыть') }}">&times;</button>
         </div>
         <div class="modal-body">
-            <div class="modal-section-title">Опрос</div>
+            <div class="modal-section-title">{{ _('Опрос') }}</div>
             <label class="check" style="margin-bottom:14px">
                 <input type="checkbox" id="pollEnabledInput">
-                Периодический опрос коммутаторов по SNMP
+                {{ _('Периодический опрос коммутаторов по SNMP') }}
             </label>
             <div class="field">
-                <label for="pollIntervalInput">Интервал опроса, минут</label>
+                <label for="pollIntervalInput">{{ _('Интервал опроса, минут') }}{{ tip(_('Как часто опрашивать все коммутаторы. 5 минут подходит большинству сетей; меньше — точнее графики, но больше нагрузка на сеть и базу.'), 'monitoring', 'polling') }}</label>
                 <input type="number" id="pollIntervalInput" min="1" value="5">
-                <div class="hint">Опрашиваются все коммутаторы с IP-адресом. Данные опросов нужны для поиска, загрузки портов и оповещений.</div>
+                <div class="hint">{{ _('Опрашиваются все коммутаторы с IP-адресом. Данные опросов нужны для поиска, загрузки портов и оповещений.') }}</div>
             </div>
 
-            <div class="modal-section-title">Пороги оповещений</div>
+            <div class="modal-section-title">{{ _('Пороги оповещений') }}</div>
             <div class="thresholds-grid">
-                <label for="alertUtilInput">Загрузка порта, %</label>
+                <label for="alertUtilInput">{{ _('Загрузка порта, %') }}{{ tip(_('Событие, когда трафик на порту превышает этот процент от его скорости (например, 80% от 1 Гбит/с).'), 'monitoring', 'thresholds') }}</label>
                 <input type="number" id="alertUtilInput" min="0" max="100" value="80">
-                <label for="alertErrorsInput">Ошибок на порту между опросами</label>
+                <label for="alertErrorsInput">{{ _('Ошибок на порту между опросами') }}{{ tip(_('Ошибки приёма и передачи обычно означают плохой кабель, разъём или несовпадение скорости/дуплекса.'), 'troubleshooting', 'port-errors') }}</label>
                 <input type="number" id="alertErrorsInput" min="0" value="10">
-                <label for="alertCpuInput">Загрузка CPU, %</label>
+                <label for="alertCpuInput">{{ _('Загрузка CPU, %') }}</label>
                 <input type="number" id="alertCpuInput" min="0" max="100" value="90">
-                <label for="alertTempInput">Температура, °C</label>
+                <label for="alertTempInput">{{ _('Температура, °C') }}{{ tip(_('Не все коммутаторы сообщают температуру по SNMP — тогда этот порог ни на что не влияет.'), 'monitoring', 'thresholds') }}</label>
                 <input type="number" id="alertTempInput" min="0" max="150" value="70">
             </div>
-            <div class="hint">Событие появляется при превышении порога и ещё одно — при возврате в норму. 0 — оповещение выключено.</div>
+            <div class="hint">{{ _('Событие появляется при превышении порога и ещё одно — при возврате в норму. 0 — оповещение выключено.') }}</div>
+
+            <div class="modal-section-title">{{ _('Язык') }}</div>
+            <div class="field" style="margin-bottom:0">
+                <label for="serverLangInput">{{ _('Язык журнала, событий и уведомлений') }}{{ tip(_('Записи журнала сохраняются на том языке, который был выбран в момент записи. Уже сделанные записи при смене языка не переводятся.')) }}</label>
+                <select id="serverLangInput">
+                    <option value="">{{ _('Как в системе сервера ({name})', name=languages[server_system_lang]) }}</option>
+                    {% for code, name in languages.items() %}<option value="{{ code }}">{{ name }}</option>{% endfor %}
+                </select>
+                <div class="hint">{{ _('На этом языке записываются журнал изменений и события, приходят сообщения в Telegram и на почту. Язык интерфейса каждый пользователь выбирает сам — в своём меню.') }}</div>
+            </div>
         </div>
         <div class="modal-footer">
-            <button type="button" class="btn" data-click="closeSettingsModal">Отмена</button>
-            <button type="button" class="btn btn-primary" data-click="saveSettings">Сохранить</button>
+            <button type="button" class="btn" data-click="closeSettingsModal">{{ _('Отмена') }}</button>
+            <button type="button" class="btn btn-primary" data-click="saveSettings">{{ _('Сохранить') }}</button>
         </div>
     </div>
 </div>
@@ -141,27 +164,27 @@
 <div id="passwordModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="passwordTitle">
     <div class="modal-content is-narrow">
         <div class="modal-header">
-            <h2 id="passwordTitle">Смена пароля</h2>
-            <button type="button" class="modal-close" data-click="closePasswordModal" aria-label="Закрыть">&times;</button>
+            <h2 id="passwordTitle">{{ _('Смена пароля') }}</h2>
+            <button type="button" class="modal-close" data-click="closePasswordModal" aria-label="{{ _('Закрыть') }}">&times;</button>
         </div>
         <form class="modal-body" id="passwordForm" autocomplete="off">
             <div class="field">
-                <label for="pwCurrent">Текущий пароль</label>
+                <label for="pwCurrent">{{ _('Текущий пароль') }}</label>
                 <input type="password" id="pwCurrent" autocomplete="current-password" required>
             </div>
             <div class="field">
-                <label for="pwNew">Новый пароль <span class="muted">(не короче 8 символов)</span></label>
+                <label for="pwNew">{{ _('Новый пароль') }} <span class="muted">{{ _('(не короче 8 символов)') }}</span></label>
                 <input type="password" id="pwNew" autocomplete="new-password" minlength="8" required>
             </div>
             <div class="field" style="margin-bottom:0">
-                <label for="pwNew2">Повторите новый пароль</label>
+                <label for="pwNew2">{{ _('Повторите новый пароль') }}</label>
                 <input type="password" id="pwNew2" autocomplete="new-password" minlength="8" required>
             </div>
-            <div class="hint">После смены пароля другие ваши сессии (на других компьютерах) завершатся.</div>
+            <div class="hint">{{ _('После смены пароля другие ваши сессии (на других компьютерах) завершатся.') }}</div>
         </form>
         <div class="modal-footer">
-            <button type="button" class="btn" data-click="closePasswordModal">Отмена</button>
-            <button type="submit" form="passwordForm" class="btn btn-primary">Сменить пароль</button>
+            <button type="button" class="btn" data-click="closePasswordModal">{{ _('Отмена') }}</button>
+            <button type="submit" form="passwordForm" class="btn btn-primary">{{ _('Сменить пароль') }}</button>
         </div>
     </div>
 </div>
@@ -170,11 +193,11 @@
 <div id="confirmModal" class="modal" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
     <div class="modal-content is-narrow">
         <div class="modal-header">
-            <h2 id="confirmTitle">Подтверждение</h2>
+            <h2 id="confirmTitle">{{ _('Подтверждение') }}</h2>
         </div>
         <div class="modal-body"><p id="confirmText" style="margin:0;color:var(--text-2);white-space:pre-line"></p></div>
         <div class="modal-footer">
-            <button type="button" class="btn" id="confirmCancel">Отмена</button>
+            <button type="button" class="btn" id="confirmCancel">{{ _('Отмена') }}</button>
             <button type="button" class="btn btn-primary" id="confirmOk">OK</button>
         </div>
     </div>

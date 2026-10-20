@@ -37,12 +37,12 @@ function runAction(el, attr, event) {
     const name = el.getAttribute(attr);
     const fn = window[name];
     if (typeof fn !== 'function') {
-        console.warn('Нет действия', name);
+        console.warn('No action', name);
         return;
     }
     let args = [];
     if (el.dataset.args) {
-        try { args = JSON.parse(el.dataset.args); } catch (err) { console.warn('Неверные data-args', el); return; }
+        try { args = JSON.parse(el.dataset.args); } catch (err) { console.warn('Bad data-args', el); return; }
     }
     const special = { $el: el, $form: el.form, $value: el.value, $event: event };
     return fn.apply(el, args.map(a => (typeof a === 'string' && a in special) ? special[a] : a));
@@ -87,7 +87,7 @@ function updateThemeButton() {
     const btn = document.getElementById('themeToggle');
     if (!btn) return;
     const dark = currentTheme() === 'dark';
-    btn.dataset.label = dark ? 'Светлая тема' : 'Тёмная тема';
+    btn.dataset.label = dark ? t('Светлая тема') : t('Тёмная тема');
     btn.querySelector('.icon-sun').hidden = !dark;
     btn.querySelector('.icon-moon').hidden = dark;
 }
@@ -125,7 +125,7 @@ function notify(message, kind = 'info', timeout) {
 }
 
 // ───────── Подтверждение (вместо confirm) ─────────
-function confirmDialog(message, { title = 'Подтверждение', okText = 'OK', danger = false } = {}) {
+function confirmDialog(message, { title = t('Подтверждение'), okText = 'OK', danger = false } = {}) {
     return new Promise(resolve => {
         const modal = document.getElementById('confirmModal');
         modal.querySelector('#confirmTitle').textContent = title;
@@ -170,8 +170,9 @@ function openSettingsModal() {
             Object.entries(THRESHOLD_INPUTS).forEach(([key, id]) => {
                 document.getElementById(id).value = data[key] ?? 0;
             });
+            document.getElementById('serverLangInput').value = data.server_language || '';
         })
-        .catch(() => notify('Не удалось загрузить настройки', 'error'));
+        .catch(() => notify(t('Не удалось загрузить настройки'), 'error'));
     document.getElementById('settingsModal').classList.add('active');
 }
 
@@ -184,7 +185,7 @@ function saveSettings() {
     let poll_interval_minutes = parseInt(document.getElementById('pollIntervalInput').value, 10);
     if (!poll_interval_minutes || poll_interval_minutes < 1) poll_interval_minutes = 1;
 
-    const body = { poll_enabled, poll_interval_minutes };
+    const body = { poll_enabled, poll_interval_minutes, server_language: document.getElementById('serverLangInput').value };
     Object.entries(THRESHOLD_INPUTS).forEach(([key, id]) => {
         const v = parseInt(document.getElementById(id).value, 10);
         body[key] = Number.isFinite(v) && v > 0 ? v : 0;
@@ -197,9 +198,48 @@ function saveSettings() {
         .then(r => { if (!r.ok) throw new Error(); return r.json(); })
         .then(() => {
             closeSettingsModal();
-            notify('Настройки сохранены', 'success');
+            notify(t('Настройки сохранены'), 'success');
         })
-        .catch(() => notify('Не удалось сохранить настройки', 'error'));
+        .catch(() => notify(t('Не удалось сохранить настройки'), 'error'));
+}
+
+// ───────── Подсказки «?» (templates/_help.html) ─────────
+// Наведение и фокус показывают подсказку через CSS; здесь — нажатие (для сенсорных экранов) и выбор стороны,
+// чтобы подсказка не уходила за край окна.
+function placeHelpTip(tip) {
+    tip.classList.remove('pop-below', 'pop-left', 'pop-right');
+    const r = tip.getBoundingClientRect();
+    if (r.top < 140) tip.classList.add('pop-below');
+    if (r.left < 160) tip.classList.add('pop-right');
+    else if (window.innerWidth - r.right < 160) tip.classList.add('pop-left');
+}
+document.addEventListener('mouseover', e => { const tip = e.target.closest('.help-tip'); if (tip) placeHelpTip(tip); });
+document.addEventListener('focusin', e => { const tip = e.target.closest('.help-tip'); if (tip) placeHelpTip(tip); });
+document.addEventListener('click', e => {
+    const tip = e.target.closest('.help-tip');
+    if (tip && !e.target.closest('.help-pop a')) {
+        e.preventDefault();
+        e.stopPropagation();
+        placeHelpTip(tip);
+        tip.classList.toggle('is-open');
+    }
+    document.querySelectorAll('.help-tip.is-open').forEach(x => { if (x !== tip) x.classList.remove('is-open'); });
+}, true);
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('.help-tip.is-open').forEach(x => x.classList.remove('is-open'));
+});
+
+// ───────── Язык интерфейса (меню пользователя) ─────────
+// "" — как в системе (язык браузера); иначе код языка. Сохраняется в профиле, страница перезагружается.
+async function setUserLanguage(language) {
+    try {
+        const r = await fetch('/api/language', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ language }) });
+        if (!r.ok) throw new Error();
+        location.reload();
+    } catch (err) {
+        notify(t('Не удалось сменить язык'), 'error');
+    }
 }
 
 // ───────── Смена своего пароля ─────────
@@ -219,7 +259,7 @@ document.getElementById('passwordForm')?.addEventListener('submit', async e => {
     const current = document.getElementById('pwCurrent').value;
     const password = document.getElementById('pwNew').value;
     if (password !== document.getElementById('pwNew2').value) {
-        notify('Новые пароли не совпадают', 'error');
+        notify(t('Новые пароли не совпадают'), 'error');
         return;
     }
     try {
@@ -229,9 +269,9 @@ document.getElementById('passwordForm')?.addEventListener('submit', async e => {
         })).json();
         if (!r.ok) throw new Error(r.error);
         closePasswordModal();
-        notify('Пароль изменён', 'success');
+        notify(t('Пароль изменён'), 'success');
     } catch (err) {
-        notify(err.message || 'Не удалось сменить пароль', 'error');
+        notify(err.message || t('Не удалось сменить пароль'), 'error');
     }
 });
 document.getElementById('passwordModal')?.addEventListener('click', e => {
@@ -257,14 +297,14 @@ document.getElementById('passwordModal')?.addEventListener('click', e => {
             extra.push(esc(r.source));
         } else {
             title = [r.hostname, r.ip, r.mac].filter(Boolean).map(esc).join(' · ') || '—';
-            if (r.kind === 'device') extra.push('привязано вручную' + (r.notes ? `: ${esc(r.notes)}` : ''));
+            if (r.kind === 'device') extra.push(t('привязано вручную') + (r.notes ? `: ${esc(r.notes)}` : ''));
             if (r.vlan) extra.push(`VLAN ${esc(r.vlan)}`);
-            if (r.last_seen) extra.push(`видели ${esc(r.last_seen)}`);
+            if (r.last_seen) extra.push(t('видели {last_seen}', { last_seen: esc(r.last_seen) }));
         }
-        const where = `${esc(r.switch_name)} → ${r.port ? `порт ${esc(r.port)}` : 'порт не сопоставлен'}` +
+        const where = `${esc(r.switch_name)} → ${r.port ? esc(t('порт {port}', { port: r.port })) : t('порт не сопоставлен')}` +
                       (r.port_name ? ` (${esc(r.port_name)})` : '');
         const uplink = r.uplink
-            ? `<span class="ns-badge ns-uplink" title="На этом порту видно много MAC-адресов или он помечен как транк — устройство подключено не сюда, а дальше по сети">uplink${r.mac_count ? ` · ${esc(r.mac_count)} MAC` : ''}</span>`
+            ? `<span class="ns-badge ns-uplink" title="${esc(t('На этом порту видно много MAC-адресов или он помечен как транк — устройство подключено не сюда, а дальше по сети'))}">uplink${r.mac_count ? ` · ${esc(r.mac_count)} MAC` : ''}</span>`
             : '';
         return `<a class="ns-item${r.uplink ? ' is-uplink' : ''}" href="${href}">
                     <div class="ns-title">${title} ${uplink}</div>
@@ -290,12 +330,12 @@ document.getElementById('passwordModal')?.addEventListener('click', e => {
                 if (q !== lastQuery) return;  // пришёл ответ на устаревший запрос
                 box.innerHTML = results.length
                     ? results.map(resultHtml).join('')
-                    : '<div class="ns-empty">Ничего не найдено. Поиск идёт по данным SNMP-опросов — опросите коммутаторы или включите периодический опрос в настройках.</div>';
+                    : `<div class="ns-empty">${t('Ничего не найдено. Поиск идёт по данным SNMP-опросов — опросите коммутаторы или включите периодический опрос в настройках.')}</div>`;
                 focused = -1;
                 box.hidden = false;
             })
             .catch(() => {
-                box.innerHTML = '<div class="ns-empty">Ошибка поиска</div>';
+                box.innerHTML = `<div class="ns-empty">${t('Ошибка поиска')}</div>`;
                 box.hidden = false;
             });
     }
@@ -327,7 +367,8 @@ document.getElementById('passwordModal')?.addEventListener('click', e => {
     // Ctrl+K / Cmd+K или «/» — перейти к поиску
     document.addEventListener('keydown', e => {
         const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
-        if ((e.key === 'k' || e.key === 'K' || e.key === 'л' || e.key === 'Л') && (e.ctrlKey || e.metaKey)) {
+        // «л» — та же клавиша K в русской раскладке
+        if ((e.key === 'k' || e.key === 'K' || e.key === 'л' || e.key === 'Л') && (e.ctrlKey || e.metaKey)) {  // i18n: ignore
             e.preventDefault();
             input.focus();
             input.select();
@@ -371,7 +412,7 @@ function loadScript(src, integrity) {
             const existing = [...document.scripts].find(s => s.src === src);
             const el = existing || document.createElement('script');
             const done = () => resolve();
-            const fail = () => { delete _scriptPromises[src]; reject(new Error('Не удалось загрузить ' + src)); };
+            const fail = () => { delete _scriptPromises[src]; reject(new Error(t('Не удалось загрузить {src}', { src }))); };
             if (existing && existing.dataset.loaded) return resolve();
             el.addEventListener('load', () => { el.dataset.loaded = '1'; done(); });
             el.addEventListener('error', fail);
@@ -405,8 +446,8 @@ function waitForGlobal(name, timeoutMs = 15000) {
 
 // Размер в байтах → «1.4 МБ»
 function formatBytes(n) {
-    if (!n) return '0 Б';
-    const units = ['Б', 'КБ', 'МБ', 'ГБ'];
+    const units = [t('Б'), t('КБ'), t('МБ'), t('ГБ')];
+    if (!n) return '0 ' + units[0];
     const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
     return `${(n / 1024 ** i).toFixed(i ? 1 : 0)} ${units[i]}`;
 }
@@ -446,9 +487,9 @@ function snmpValues(root) {
 // Ошибка настроек SNMPv3 до отправки на сервер — те же правила, что на сервере
 function snmpValidationError(values) {
     if (values.snmp_version !== '3') return '';
-    if (!values.snmp_v3_user) return 'SNMPv3: укажите пользователя';
-    if (values.snmp_v3_auth_proto !== 'none' && (values.snmp_v3_auth_key || '').length < 8) return 'SNMPv3: пароль аутентификации — не короче 8 символов';
-    if (values.snmp_v3_priv_proto && values.snmp_v3_priv_proto !== 'none' && (values.snmp_v3_priv_key || '').length < 8) return 'SNMPv3: пароль шифрования — не короче 8 символов';
+    if (!values.snmp_v3_user) return t('SNMPv3: укажите пользователя');
+    if (values.snmp_v3_auth_proto !== 'none' && (values.snmp_v3_auth_key || '').length < 8) return t('SNMPv3: пароль аутентификации — не короче 8 символов');
+    if (values.snmp_v3_priv_proto && values.snmp_v3_priv_proto !== 'none' && (values.snmp_v3_priv_key || '').length < 8) return t('SNMPv3: пароль шифрования — не короче 8 символов');
     return '';
 }
 
@@ -458,26 +499,26 @@ async function probeSwitchForm(form, btn) {
     const box = form.querySelector('[data-probe-result]');
     const values = { ip_address: field('ip_address').value.trim(), ...snmpValues(form.querySelector('[data-snmp]')) };
     const show = (cls, html) => { box.className = 'probe-result ' + cls; box.innerHTML = html; box.hidden = false; };
-    if (!values.ip_address) { show('is-error', 'Сначала укажите IP-адрес.'); field('ip_address').focus(); return; }
+    if (!values.ip_address) { show('is-error', t('Сначала укажите IP-адрес.')); field('ip_address').focus(); return; }
     const invalid = snmpValidationError(values);
     if (invalid) { show('is-error', eventsEscape(invalid)); return; }
     btn.classList.add('is-loading');
     try {
         const r = await (await fetch('/api/snmp_probe', { method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(values) })).json();
-        if (!r.ok) { show('is-error', `<b>Нет ответа по SNMP.</b> ${eventsEscape(r.error)}`); return; }
+        if (!r.ok) { show('is-error', `<b>${t('Нет ответа по SNMP.')}</b> ${eventsEscape(r.error)}`); return; }
         const filled = [];
-        if (r.sys_name && !field('name').value.trim()) { field('name').value = r.sys_name; filled.push('название'); }
-        if (r.ports) { field('ports').value = Math.min(96, r.ports); filled.push('число портов'); }
+        if (r.sys_name && !field('name').value.trim()) { field('name').value = r.sys_name; filled.push(t('название')); }
+        if (r.ports) { field('ports').value = Math.min(96, r.ports); filled.push(t('число портов')); }
         if (field('model')) field('model').value = r.model_label || '';
         show(r.existing ? 'is-warning' : 'is-ok', `
-            <b>${eventsEscape(r.sys_name || values.ip_address)}</b> отвечает (${eventsEscape(r.auth)})
+            ${t('<b>{name}</b> отвечает ({auth})', { name: eventsEscape(r.sys_name || values.ip_address), auth: eventsEscape(r.auth) })}
             ${r.model_label ? `<div class="muted">${eventsEscape(r.model_label)}</div>` : ''}
-            <div class="muted">Ethernet-портов: ${r.ports || '—'}${r.location ? ' · ' + eventsEscape(r.location) : ''}</div>
-            ${filled.length ? `<div>Заполнено: ${filled.join(', ')}.</div>` : ''}
-            ${r.existing ? `<div><b>Этот IP уже добавлен:</b> <a href="/switch/${r.existing.id}">${eventsEscape(r.existing.name)}</a></div>` : ''}`);
+            <div class="muted">${t('Ethernet-портов: {n}', { n: r.ports || '—' })}${r.location ? ' · ' + eventsEscape(r.location) : ''}</div>
+            ${filled.length ? `<div>${t('Заполнено: {fields}.', { fields: filled.join(', ') })}</div>` : ''}
+            ${r.existing ? `<div><b>${t('Этот IP уже добавлен:')}</b> <a href="/switch/${r.existing.id}">${eventsEscape(r.existing.name)}</a></div>` : ''}`);
     } catch (err) {
-        show('is-error', 'Не удалось связаться с сервером');
+        show('is-error', t('Не удалось связаться с сервером'));
     } finally {
         btn.classList.remove('is-loading');
     }

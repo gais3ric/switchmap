@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% set active_nav = 'help' %}
+
+{% block title %}{{ article.title }} · {{ _('Справка') }}{% endblock %}
+{% block crumbs %}<a href="/help">{{ _('Справка') }}</a><span class="sep">/</span><span class="current">{{ article.title }}</span>{% endblock %}
+
+{% block head %}
+<style>
+.help-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr) 200px; gap: 28px; align-items: start; }
+.help-side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 100px); overflow: auto; }
+.help-search { position: relative; }
+.help-search .ic { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-3); }
+.help-search input { padding-left: 30px; height: 34px; }
+.help-cat { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); margin: 6px 0 4px; }
+.help-nav a { display: block; padding: 6px 10px; border-radius: var(--r); color: var(--text-2); font-size: 13px; }
+.help-nav a:hover { background: var(--surface-2); color: var(--text); }
+.help-nav a.is-active { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.help-results a { display: block; padding: 8px 10px; border-radius: var(--r); }
+.help-results a:hover { background: var(--surface-2); }
+.help-results b { display: block; color: var(--text); font-size: 13px; }
+.help-results span { font-size: 12px; color: var(--text-3); }
+.help-article { max-width: 780px; }
+.help-article h1 { font-size: 26px; margin: 0 0 6px; }
+.help-article .help-summary { color: var(--text-2); font-size: 15px; margin: 0 0 22px; }
+.help-body { font-size: 14.5px; line-height: 1.7; color: var(--text); }
+.help-body h2 { font-size: 19px; margin: 30px 0 10px; padding-top: 6px; scroll-margin-top: 16px; }
+.help-body h3 { font-size: 16px; margin: 22px 0 8px; scroll-margin-top: 16px; }
+.help-body h4 { font-size: 14px; margin: 18px 0 6px; }
+.help-body p { margin: 0 0 12px; }
+.help-body ul, .help-body ol { margin: 0 0 14px; padding-left: 22px; }
+.help-body li { margin: 4px 0; }
+.help-body code { font-family: var(--font-mono, monospace); font-size: 13px; padding: 1px 5px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border); }
+.help-body pre { margin: 0 0 16px; padding: 12px 14px; border-radius: var(--r); background: var(--surface-2); border: 1px solid var(--border); overflow-x: auto; }
+.help-body pre code { padding: 0; border: 0; background: none; font-size: 12.5px; line-height: 1.55; white-space: pre; }
+.help-body kbd { font-size: 12px; padding: 1px 6px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; background: var(--surface); }
+.help-body .table-wrap { margin: 0 0 16px; }
+.help-body table td, .help-body table th { font-size: 13px; vertical-align: top; }
+.callout { margin: 0 0 16px; padding: 10px 14px; border-radius: var(--r); border-left: 3px solid var(--accent); background: var(--accent-soft); font-size: 14px; }
+.callout-warning { border-left-color: var(--warning, #e0a21b); background: var(--warning-soft, rgba(224,162,27,.12)); }
+.callout-tip { border-left-color: var(--success); background: var(--success-soft); }
+.help-toc { position: sticky; top: 16px; font-size: 12.5px; }
+.help-toc b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); margin-bottom: 6px; }
+.help-toc a { display: block; padding: 3px 0; color: var(--text-2); }
+.help-toc a:hover { color: var(--accent-text); }
+.help-foot { margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text-3); display: flex; gap: 16px; flex-wrap: wrap; }
+.help-lang-note { margin-bottom: 18px; }
+@media (max-width: 1200px) { .help-layout { grid-template-columns: 240px minmax(0, 1fr); } .help-toc { display: none; } }
+@media (max-width: 800px) { .help-layout { grid-template-columns: 1fr; } .help-side { position: static; max-height: none; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="help-layout">
+    <aside class="help-side">
+        <div class="help-search">
+            {{ icon('search') }}
+            <input type="search" id="helpSearch" placeholder="{{ _('Поиск по справке') }}" autocomplete="off" aria-label="{{ _('Поиск по справке') }}">
+        </div>
+        <div class="help-results" id="helpResults" hidden></div>
+        <nav class="help-nav" id="helpNav" aria-label="{{ _('Разделы справки') }}">
+            {% for cat in nav %}
+            <div class="help-cat">{{ cat.label }}</div>
+            {% for a in cat.articles %}<a href="/help/{{ a.slug }}" class="{{ 'is-active' if a.slug == article.slug }}">{{ a.title }}</a>{% endfor %}
+            {% endfor %}
+        </nav>
+    </aside>
+
+    <article class="help-article">
+        <h1>{{ article.title }}</h1>
+        {% if article.summary %}<p class="help-summary">{{ article.summary }}</p>{% endif %}
+        {% if other_lang %}<div class="callout help-lang-note">{{ _('Эта статья пока есть только на языке: {name}.', name=other_lang) }}</div>{% endif %}
+        <div class="help-body">{{ body|safe }}</div>
+        <div class="help-foot">
+            <a href="/help/troubleshooting">{{ icon('alert') }} {{ _('Не получается? Решение типичных проблем') }}</a>
+            <a href="/help/glossary">{{ icon('book') }} {{ _('Словарь терминов') }}</a>
+        </div>
+    </article>
+
+    {% if toc|length > 1 %}
+    <nav class="help-toc" aria-label="{{ _('На этой странице') }}">
+        <b>{{ _('На этой странице') }}</b>
+        {% for anchor, title in toc %}<a href="#{{ anchor }}">{{ title }}</a>{% endfor %}
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+const HELP_INDEX = {{ search_index|tojson }};
+(function () {
+    const input = document.getElementById('helpSearch');
+    const results = document.getElementById('helpResults');
+    const nav = document.getElementById('helpNav');
+    const esc = eventsEscape;
+    input.addEventListener('input', () => {
+        const words = input.value.trim().toLowerCase().split(/\s+/).filter(w => w.length > 1);
+        if (!words.length) { results.hidden = true; nav.hidden = false; return; }
+        const found = HELP_INDEX
+            .map(a => ({ a, score: words.reduce((s, w) => s + (a.text.includes(w) ? 1 : 0) + (a.title.toLowerCase().includes(w) ? 3 : 0), 0),
+                         all: words.every(w => a.text.includes(w)) }))
+            .filter(x => x.all)
+            .sort((x, y) => y.score - x.score);
+        results.innerHTML = found.length
+            ? found.map(({ a }) => `<a href="/help/${encodeURIComponent(a.slug)}"><b>${esc(a.title)}</b><span>${esc(a.summary)}</span></a>`).join('')
+            : `<div class="muted" style="padding:8px 10px;font-size:13px">${t('Ничего не найдено. Попробуйте другие слова.')}</div>`;
+        results.hidden = false;
+        nav.hidden = true;
+    });
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { const first = results.querySelector('a'); if (first) location.href = first.href; }
+        if (e.key === 'Escape') { input.value = ''; input.dispatchEvent(new Event('input')); }
+    });
+})();
+</script>
+{% endblock %}
