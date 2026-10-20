@@ -144,6 +144,13 @@ jobs:
           if ($svc.StartMode -ne 'Auto') { throw "Служба не в автозапуске" }
           Get-Content C:\ProgramData\SwitchMap\switchmap.conf
           icacls C:\ProgramData\SwitchMap
+      - name: Диагностика SNMP (та же программа от пользователя runner)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          python packaging/smoke.py --exe "C:\Program Files\SwitchMap\switchmap.exe" --snmp | Select-String "SNMP|ИТОГО"
+          Get-NetUDPEndpoint -LocalPort 161 | Format-Table LocalAddress, OwningProcess
+          Get-Content sim.log, sim.err -Tail 15
       - name: Проверка установленной службы
         run: python packaging/smoke.py --url http://127.0.0.1:5000 --snmp --expect-version ${{ needs.version.outputs.version }}
       - name: Обновление поверх (данные и настройки остаются)
@@ -220,7 +227,7 @@ jobs:
           sudo apt-get install -y --reinstall ./switchmap_*_amd64.deb
           sleep 5
           systemctl is-active switchmap
-          grep -q "своя строка" /etc/switchmap/switchmap.conf
+          sudo grep -q "своя строка" /etc/switchmap/switchmap.conf
           python3 packaging/smoke.py --url http://127.0.0.1:5000
       - name: Команда от root работает от имени службы
         run: |
