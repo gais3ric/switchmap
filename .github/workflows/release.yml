@@ -127,6 +127,7 @@ jobs:
           if (-not $p.WaitForExit(300000)) { Get-Content install.log -Tail 40; throw "Установка не завершилась за 5 минут" }
           "Код установщика: $($p.ExitCode)"
           if ($p.ExitCode -ne 0) { Get-Content install.log -Tail 40; throw "Установщик завершился с ошибкой" }
+          for ($i = 0; $i -lt 30 -and (Get-Service SwitchMap -ErrorAction SilentlyContinue).Status -ne 'Running'; $i++) { Start-Sleep 1 }
           $svc = Get-CimInstance Win32_Service -Filter "Name='SwitchMap'"
           $svc | Format-List Name, State, StartMode, StartName, PathName
           if ($svc.State -ne 'Running') { Get-Content install.log -Tail 40; throw "Служба не запущена" }
@@ -147,6 +148,8 @@ jobs:
           $db = (Get-Item C:\ProgramData\SwitchMap\switches.db).Length
           $p = Start-Process (Get-ChildItem SwitchMap-Setup-*.exe).FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LOG=upgrade.log' -PassThru
           if (-not $p.WaitForExit(300000) -or $p.ExitCode -ne 0) { Get-Content upgrade.log -Tail 40; throw "Обновление не прошло" }
+          # служба может быть ещё в состоянии «запускается» — ждём до 30 с
+          for ($i = 0; $i -lt 30 -and (Get-Service SwitchMap).Status -ne 'Running'; $i++) { Start-Sleep 1 }
           if ((Get-Service SwitchMap).Status -ne 'Running') { Get-Content upgrade.log -Tail 40; throw "Служба не запустилась после обновления" }
           if (-not (Test-Path C:\ProgramData\SwitchMap\switchmap.secret)) { throw "Ключи пропали" }
       - name: Вход после обновления
