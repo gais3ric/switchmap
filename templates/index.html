@@ -1,0 +1,445 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_snmp.html" import snmp_fields %}
+{% set active_nav = 'switches' %}
+
+{% block title %}Коммутаторы{% endblock %}
+
+{% block crumbs %}<span class="current">Коммутаторы</span>{% endblock %}
+
+{% block head %}
+<style>
+.filter-input { position: relative; width: 260px; }
+.filter-input .ic { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-3); pointer-events: none; }
+.filter-input input { padding-left: 30px; height: 30px; }
+.sw-name { display: flex; flex-direction: column; gap: 2px; }
+.sw-name a { color: var(--text); font-weight: 600; }
+.sw-name a:hover { color: var(--accent-text); }
+.sw-model { font-family: var(--font); }
+.status-cell { display: flex; align-items: center; gap: 9px; white-space: nowrap; }
+.status-text { font-size: 12px; color: var(--text-3); }
+.ports-cell, .util-cell { display: flex; flex-direction: column; gap: 6px; min-width: 96px; }
+.ports-cell .num, .util-cell .num { font-size: 12.5px; color: var(--text); }
+.util-cell .meter > span.lvl-2 { background: var(--load-2); }
+.util-cell .meter > span.lvl-3 { background: var(--load-3); }
+.util-cell .meter > span.lvl-4 { background: var(--load-4); }
+.row-actions { display: inline-flex; gap: 4px; opacity: .55; transition: opacity var(--dur-1) var(--ease); }
+tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
+.btn-delete:hover { color: var(--danger); background: var(--danger-soft); }
+.no-results td { text-align: center; color: var(--text-3); padding: 28px; }
+
+/* Окно добавления: патч-панели */
+.patch-panel-field {
+    position: relative; padding: 14px 14px 2px; margin-bottom: 10px;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r);
+    animation: fade-down var(--dur-2) var(--ease-out) both;
+}
+.patch-panel-field h4 { font-size: 12px; font-weight: 600; color: var(--text-2); margin: 0 0 10px; }
+.patch-panel-field .remove-btn { position: absolute; top: 8px; right: 8px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-group { margin-bottom: 12px; }
+
+@media (max-width: 900px) {
+    .col-optional { display: none; }
+    .filter-input { width: 100%; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Коммутаторы</h1>
+        <div class="page-sub">Инвентарь, доступность и загрузка сети</div>
+    </div>
+    <div class="page-actions">
+        <div class="menu-wrap">
+            <button type="button" class="btn" data-menu-toggle aria-haspopup="true">{{ icon('download') }} Экспорт {{ icon('chevron') }}</button>
+            <div class="dropdown" role="menu">
+                <div class="dropdown-title">Excel</div>
+                <a href="/export/inventory.xlsx" role="menuitem">{{ icon('sheet') }} Инвентарь целиком <small>4 листа</small></a>
+                <hr>
+                <div class="dropdown-title">CSV</div>
+                <a href="/export/switches.csv" role="menuitem">{{ icon('server') }} Коммутаторы</a>
+                <a href="/export/macs.csv" role="menuitem">{{ icon('search') }} MAC-адреса</a>
+                <a href="/export/events.csv" role="menuitem">{{ icon('bell') }} События</a>
+                <a href="/export/audit.csv" role="menuitem">{{ icon('history') }} Журнал изменений</a>
+            </div>
+        </div>
+        <a href="/topology" class="btn">{{ icon('topology') }} Топология</a>
+        <a href="/discover" class="btn admin-only">{{ icon('radar') }} Найти в сети</a>
+        <button type="button" class="btn btn-primary admin-only" onclick="openModal()">{{ icon('plus') }} Добавить коммутатор</button>
+    </div>
+</div>
+
+<div class="kpis">
+    <div class="kpi">
+        <div class="kpi-label">{{ icon('server') }} Коммутаторы</div>
+        <div class="kpi-value num">{{ summary.total }}</div>
+        <div class="kpi-foot">с IP-адресом: {{ summary.with_ip }}</div>
+    </div>
+    <div class="kpi" id="kpiOnlineCard">
+        <div class="kpi-label">{{ icon('activity') }} Доступны</div>
+        <div class="kpi-value num"><span id="kpiOnline">—</span><small>/ {{ summary.with_ip }}</small></div>
+        <div class="kpi-foot" id="kpiOnlineFoot">проверка ping…</div>
+    </div>
+    <div class="kpi">
+        <div class="kpi-label">{{ icon('plug') }} Активные порты</div>
+        {% if summary.ports_seen %}
+        <div class="kpi-value num">{{ summary.ports_up }}<small>/ {{ summary.ports_seen }}</small></div>
+        <div class="kpi-foot">по данным SNMP-опросов</div>
+        {% else %}
+        <div class="kpi-value num">—</div>
+        <div class="kpi-foot">опросите коммутаторы по SNMP</div>
+        {% endif %}
+    </div>
+    <div class="kpi {{ 'is-danger' if summary.alerts }}">
+        <div class="kpi-label">{{ icon('alert') }} Активные оповещения</div>
+        <div class="kpi-value num">{{ summary.alerts }}</div>
+        <div class="kpi-foot">непрочитанных событий: {{ summary.unread }}</div>
+    </div>
+</div>
+
+<div class="card rise">
+    <div class="card-header">
+        <div class="card-title">Все коммутаторы <span class="badge">{{ summary.total }}</span></div>
+        {% if switches %}
+        <div class="filter-input">
+            {{ icon('filter') }}
+            <input type="text" id="switchFilter" placeholder="Фильтр по названию или IP" autocomplete="off" aria-label="Фильтр">
+        </div>
+        {% endif %}
+    </div>
+
+    {% if switches %}
+    <div class="table-wrap">
+        <table class="table" id="switchTable">
+            <thead>
+                <tr>
+                    <th>Коммутатор</th>
+                    <th>Статус</th>
+                    <th class="col-optional">SNMP</th>
+                    <th>Порты</th>
+                    <th class="col-optional">Пиковая загрузка</th>
+                    <th>Оповещения</th>
+                    <th class="col-optional">Последний опрос</th>
+                    <th class="col-actions"></th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for sw in switches %}
+                <tr class="is-link" id="sw-row-{{ sw.id }}" data-href="/switch/{{ sw.id }}" data-ip="{{ sw.ip }}"
+                    data-search="{{ (sw.name ~ ' ' ~ sw.ip)|lower }}">
+                    <td>
+                        <div class="sw-name">
+                            <a href="/switch/{{ sw.id }}">{{ sw.name }}</a>
+                            <span class="mono muted" style="font-size:12px">{{ sw.ip or 'IP не задан' }}{% if sw.model %} <span class="sw-model">· {{ sw.model }}</span>{% endif %}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="status-cell">
+                            <span class="status-dot dot {{ 'checking' if sw.ip else 'unknown' }}" id="status-{{ sw.id }}"></span>
+                            <span class="status-text" id="status-text-{{ sw.id }}">{{ 'Проверка…' if sw.ip else 'Нет IP' }}</span>
+                        </div>
+                    </td>
+                    <td class="col-optional"><span class="badge {{ 'badge-accent' if sw.snmp == 'v3' else 'badge-outline' }}">{{ sw.snmp }}</span></td>
+                    <td>
+                        {% if sw.polled %}
+                        <div class="ports-cell">
+                            <span class="num">{{ sw.ports_up }} / {{ sw.ports_seen }} up</span>
+                            <div class="meter"><span style="width: {{ (100 * sw.ports_up / sw.ports_seen)|round(1) }}%"></span></div>
+                        </div>
+                        {% else %}
+                        <span class="muted num">{{ sw.ports }} портов</span>
+                        {% endif %}
+                    </td>
+                    <td class="col-optional">
+                        {% if sw.max_util is not none %}
+                        {% set lvl = 4 if (util_threshold and sw.max_util >= util_threshold) else 3 if sw.max_util >= 60 else 2 if sw.max_util >= 30 else 1 %}
+                        <div class="util-cell">
+                            <span class="num">{{ '%.1f'|format(sw.max_util) }}%</span>
+                            <div class="meter"><span class="lvl-{{ lvl }}" style="width: {{ [sw.max_util, 100]|min }}%"></span></div>
+                        </div>
+                        {% else %}<span class="muted">—</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if sw.alerts %}<span class="badge badge-danger">{{ icon('alert') }} {{ sw.alerts }}</span>
+                        {% elif sw.polled %}<span class="badge badge-success">{{ icon('check') }} норма</span>
+                        {% else %}<span class="muted">—</span>{% endif %}
+                        {% if sw.unread %}<span class="badge badge-outline" title="Непрочитанные события">{{ sw.unread }} нов.</span>{% endif %}
+                    </td>
+                    <td class="col-optional"><span class="muted num rel-time" data-time="{{ sw.last_poll or '' }}">{{ sw.last_poll or 'не опрашивался' }}</span></td>
+                    <td class="col-actions">
+                        <div class="row-actions">
+                            <a href="/switch/{{ sw.id }}" class="btn btn-sm" onclick="event.stopPropagation()">Открыть</a>
+                            <button type="button" class="btn btn-ghost btn-icon btn-sm btn-delete admin-only" data-name="{{ sw.name }}"
+                                    title="Удалить" aria-label="Удалить {{ sw.name }}"
+                                    onclick="event.stopPropagation(); deleteSwitch({{ sw.id }}, this.dataset.name)">{{ icon('trash') }}</button>
+                        </div>
+                    </td>
+                </tr>
+            {% endfor %}
+                <tr class="no-results" id="noResults" hidden><td colspan="8">Нет коммутаторов, подходящих под фильтр</td></tr>
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        {{ icon('server') }}
+        <h3>Пока нет коммутаторов</h3>
+        <p>Добавьте первый коммутатор — укажите IP и параметры SNMP, чтобы видеть состояние портов, загрузку и устройства.</p>
+        <button type="button" class="btn btn-primary admin-only" onclick="openModal()">{{ icon('plus') }} Добавить коммутатор</button>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Добавление коммутатора -->
+<div id="addSwitchModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="addTitle">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="addTitle">Новый коммутатор</h2>
+            <button type="button" class="modal-close" onclick="closeModal()" aria-label="Закрыть">&times;</button>
+        </div>
+        <form method="POST" action="/add" id="addSwitchForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="modal-body">
+                <div class="modal-section-title">Основное</div>
+                <div class="form-group">
+                    <label class="label" for="name">Название</label>
+                    <input type="text" id="name" name="name" required placeholder="Например: 4 этаж">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="label" for="ports">Портов</label>
+                        <input type="number" id="ports" name="ports" value="24" min="1" max="96" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="label" for="switch_layout">Расположение портов</label>
+                        <select id="switch_layout" name="switch_layout">
+                            <option value="single">1 строка</option>
+                            <option value="double">2 строки (шахматно)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="modal-section-title">Мониторинг</div>
+                <div class="probe-row">
+                    <div class="field">
+                        <label for="ip_address">IP-адрес</label>
+                        <input type="text" id="ip_address" name="ip_address" placeholder="192.168.1.1" autocomplete="off">
+                    </div>
+                    <button type="button" class="btn" onclick="probeSwitchForm(this.form, this)" title="Опросить по SNMP и подставить название, число портов и модель">{{ icon('plug') }} Проверить и заполнить</button>
+                </div>
+                {{ snmp_fields('add') }}
+                <div class="probe-result" data-probe-result hidden></div>
+                <input type="hidden" name="model">
+                <div class="hint" style="margin:-6px 0 6px">Много коммутаторов сразу — <a href="/discover">поиск в сети или импорт из NetBox</a>.</div>
+
+                <div class="modal-section-title row" style="justify-content:space-between">
+                    <span>Патч-панели</span>
+                    <button type="button" class="btn btn-sm" onclick="addPatchPanelField()">{{ icon('plus') }} Добавить</button>
+                </div>
+                <div id="patchPanelsList"></div>
+            </div>
+            <input type="hidden" name="patch_panels_data" id="patchPanelsData">
+            <div class="form-actions">
+                <button type="button" class="btn btn-cancel" onclick="closeModal()">Отмена</button>
+                <button type="submit" class="btn btn-primary btn-submit">Создать коммутатор</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ───────── Добавление коммутатора ─────────
+let patchPanelCounter = 0;
+
+function openModal() {
+    document.getElementById('addSwitchModal').classList.add('active');
+    if (patchPanelCounter === 0) addPatchPanelField();
+    setTimeout(() => document.getElementById('name').focus(), 120);
+}
+
+function closeModal() {
+    document.getElementById('addSwitchModal').classList.remove('active');
+    const form = document.getElementById('addSwitchForm');
+    form.reset();
+    syncSnmpFields(form.querySelector('[data-snmp]'));
+    form.querySelector('[data-probe-result]').hidden = true;
+    document.getElementById('patchPanelsList').innerHTML = '';
+    patchPanelCounter = 0;
+}
+
+function addPatchPanelField() {
+    patchPanelCounter++;
+    const panelDiv = document.createElement('div');
+    panelDiv.className = 'patch-panel-field';
+    panelDiv.id = `panel-${patchPanelCounter}`;
+    panelDiv.innerHTML = `
+        <button type="button" class="btn btn-ghost btn-icon btn-sm remove-btn" onclick="removePatchPanel(${patchPanelCounter})" title="Удалить панель" aria-label="Удалить панель">&times;</button>
+        <h4>Патч-панель ${patchPanelCounter}</h4>
+        <div class="form-group">
+            <label class="label">Название</label>
+            <input type="text" class="panel-name" value="Patch Panel ${patchPanelCounter}" required>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="label">Портов</label>
+                <input type="number" class="panel-ports" value="24" min="1" max="96" required>
+            </div>
+            <div class="form-group">
+                <label class="label">Расположение</label>
+                <select class="panel-layout">
+                    <option value="single">1 строка</option>
+                    <option value="double">2 строки</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="label">Позиция</label>
+            <select class="panel-position">
+                <option value="below">Под коммутатором</option>
+                <option value="above">Над коммутатором</option>
+            </select>
+        </div>`;
+    document.getElementById('patchPanelsList').appendChild(panelDiv);
+}
+
+function removePatchPanel(id) {
+    document.getElementById(`panel-${id}`)?.remove();
+}
+
+function collectPatchPanelsData() {
+    return [...document.querySelectorAll('.patch-panel-field')].map((field, index) => ({
+        id: index + 1,
+        name: field.querySelector('.panel-name').value,
+        ports: parseInt(field.querySelector('.panel-ports').value),
+        layout: field.querySelector('.panel-layout').value,
+        position: field.querySelector('.panel-position').value
+    }));
+}
+
+document.getElementById('addSwitchForm').addEventListener('submit', e => {
+    const form = e.currentTarget;
+    const invalid = snmpValidationError(snmpValues(form.querySelector('[data-snmp]')));
+    if (invalid) {
+        e.preventDefault();
+        notify(invalid, 'error');
+        return;
+    }
+    document.getElementById('patchPanelsData').value = JSON.stringify(collectPatchPanelsData());
+});
+document.getElementById('addSwitchModal').addEventListener('click', function (e) {
+    if (e.target === this) closeModal();
+});
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+});
+
+// ───────── Удаление ─────────
+async function deleteSwitch(id, name) {
+    const ok = await confirmDialog(
+        `Коммутатор «${name}» будет удалён вместе с подключениями, историей опросов и событиями.`,
+        { title: 'Удалить коммутатор?', okText: 'Удалить', danger: true });
+    if (!ok) return;
+    try {
+        const response = await fetch(`/delete/${id}`, { method: 'POST' });
+        if (!response.ok) throw new Error();
+        const row = document.getElementById(`sw-row-${id}`);
+        if (row) {
+            row.style.transition = 'opacity .2s, transform .2s';
+            row.style.opacity = '0';
+            row.style.transform = 'translateX(8px)';
+        }
+        notify(`Коммутатор «${name}» удалён`, 'success');
+        setTimeout(() => window.location.reload(), 350);
+    } catch (e) {
+        notify('Ошибка при удалении коммутатора', 'error');
+    }
+}
+
+// ───────── Таблица: клик по строке, фильтр, относительное время ─────────
+document.querySelectorAll('#switchTable tr.is-link').forEach(row => {
+    row.addEventListener('click', e => {
+        if (!e.target.closest('a, button')) window.location.href = row.dataset.href;
+    });
+});
+
+const filterInput = document.getElementById('switchFilter');
+if (filterInput) {
+    filterInput.addEventListener('input', () => {
+        const q = filterInput.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('#switchTable tr.is-link').forEach(row => {
+            const match = !q || row.dataset.search.includes(q);
+            row.hidden = !match;
+            if (match) shown++;
+        });
+        document.getElementById('noResults').hidden = shown > 0;
+    });
+}
+
+function relativeTime(ts) {
+    const date = new Date(String(ts).replace(' ', 'T'));
+    if (isNaN(date)) return ts;
+    const sec = Math.round((Date.now() - date) / 1000);
+    if (sec < 60) return 'только что';
+    if (sec < 3600) return `${Math.round(sec / 60)} мин назад`;
+    if (sec < 86400) return `${Math.round(sec / 3600)} ч назад`;
+    return date.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+function updateRelativeTimes() {
+    document.querySelectorAll('.rel-time[data-time]').forEach(el => {
+        if (el.dataset.time) {
+            el.textContent = relativeTime(el.dataset.time);
+            el.title = el.dataset.time;
+        }
+    });
+}
+
+// ───────── Доступность коммутаторов (ping) ─────────
+function checkSwitchStatuses() {
+    const switches = [...document.querySelectorAll('#switchTable tr.is-link')]
+        .filter(row => row.dataset.ip)
+        .map(row => ({ id: parseInt(row.id.replace('sw-row-', '')), ip: row.dataset.ip }));
+    if (!switches.length) {
+        document.getElementById('kpiOnlineFoot').textContent = 'нет коммутаторов с IP';
+        return;
+    }
+    fetch('/api/status_bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ switches })
+    })
+        .then(r => r.json())
+        .then(data => {
+            let online = 0;
+            Object.entries(data).forEach(([id, status]) => {
+                const dot = document.getElementById('status-' + id);
+                const text = document.getElementById('status-text-' + id);
+                if (status === 'online') online++;
+                if (dot) dot.className = 'status-dot dot ' + status;
+                if (text) text.textContent = status === 'online' ? 'Онлайн' : status === 'offline' ? 'Недоступен' : 'Нет IP';
+            });
+            document.getElementById('kpiOnline').textContent = online;
+            const card = document.getElementById('kpiOnlineCard');
+            card.classList.toggle('is-success', online === switches.length);
+            card.classList.toggle('is-danger', online < switches.length);
+            document.getElementById('kpiOnlineFoot').textContent =
+                online === switches.length ? 'все отвечают на ping' : `не отвечают: ${switches.length - online}`;
+        })
+        .catch(() => {
+            document.getElementById('kpiOnlineFoot').textContent = 'ошибка проверки';
+        });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    updateRelativeTimes();
+    setInterval(updateRelativeTimes, 30000);
+    checkSwitchStatuses();
+    setInterval(checkSwitchStatuses, 30000);
+});
+</script>
+{% endblock %}

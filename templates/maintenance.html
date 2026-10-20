@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% set active_nav = 'maintenance' %}
+
+{% block title %}Данные и резервные копии{% endblock %}
+{% block crumbs %}<span class="current">Данные и резервные копии</span>{% endblock %}
+
+{% block head %}
+<style>
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 16px; align-items: start; }
+.form-inline { display: grid; grid-template-columns: 1fr 110px; gap: 10px 14px; align-items: center; }
+.form-inline label { font-size: 13px; color: var(--text-2); }
+.form-inline .hint { grid-column: 1 / -1; margin-top: -6px; }
+.card-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
+.tables-list { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; font-size: 13px; }
+.tables-list span:nth-child(odd) { color: var(--text-2); }
+.tables-list span:nth-child(even) { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.backup-name { font-family: var(--font-mono); font-size: 12px; color: var(--text-2); }
+#backupsTable td { white-space: nowrap; }
+.kpi-value.sm { font-size: 18px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Данные и резервные копии</h1>
+        <div class="page-sub">Объём истории, сроки хранения и копии базы</div>
+    </div>
+</div>
+
+<div class="kpis">
+    <div class="kpi">
+        <div class="kpi-label">{{ icon('database') }} Размер базы</div>
+        <div class="kpi-value num" id="kpiSize">—</div>
+        <div class="kpi-foot" id="kpiSizeFoot">&nbsp;</div>
+    </div>
+    <div class="kpi">
+        <div class="kpi-label">{{ icon('activity') }} Подробная история</div>
+        <div class="kpi-value num" id="kpiRaw">—</div>
+        <div class="kpi-foot" id="kpiRawFoot">&nbsp;</div>
+    </div>
+    <div class="kpi">
+        <div class="kpi-label">{{ icon('chart') }} Почасовая история</div>
+        <div class="kpi-value num" id="kpiHourly">—</div>
+        <div class="kpi-foot" id="kpiHourlyFoot">&nbsp;</div>
+    </div>
+    <div class="kpi">
+        <div class="kpi-label">{{ icon('history') }} Резервные копии</div>
+        <div class="kpi-value num" id="kpiBackups">—</div>
+        <div class="kpi-foot" id="kpiBackupsFoot">&nbsp;</div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="card rise">
+        <div class="card-header"><div class="card-title">{{ icon('sliders') }} Хранение данных</div></div>
+        <div class="card-body">
+            <div class="form-inline">
+                <label for="retRaw">Подробная история (каждый опрос), дней</label>
+                <input type="number" id="retRaw" min="1" max="90">
+                <label for="retHourly">Почасовая история, дней</label>
+                <input type="number" id="retHourly" min="7" max="3650">
+                <label for="retEvents">События, дней</label>
+                <input type="number" id="retEvents" min="7" max="3650">
+                <div class="hint">Опросы старше первого срока сворачиваются в почасовые средние и пики — графики за 30 дней и год строятся по ним. Обслуживание запускается автоматически раз в час.</div>
+            </div>
+            <div class="card-actions">
+                <button type="button" class="btn btn-primary admin-only" id="saveRetention">{{ icon('check') }} Сохранить</button>
+                <button type="button" class="btn admin-only" id="runMaintenance">{{ icon('refresh') }} Обслужить сейчас</button>
+                <label class="check admin-only"><input type="checkbox" id="vacuum"> сжать файл базы</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="card rise">
+        <div class="card-header"><div class="card-title">{{ icon('database') }} Состав базы</div></div>
+        <div class="card-body"><div class="tables-list" id="tablesList"></div></div>
+    </div>
+</div>
+
+<div class="card rise" style="margin-top:16px">
+    <div class="card-header">
+        <div class="card-title">{{ icon('history') }} Резервные копии</div>
+        <div class="toolbar admin-only">
+            <button type="button" class="btn btn-primary btn-sm" id="createBackup">{{ icon('plus') }} Создать копию</button>
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('restoreFile').click()">{{ icon('upload') }} Восстановить из файла</button>
+            <input type="file" id="restoreFile" accept=".db,.sqlite,.sqlite3" hidden>
+        </div>
+    </div>
+    <div class="card-body" style="border-bottom:1px solid var(--border)">
+        <div class="form-inline" style="max-width:560px">
+            <label class="check" for="backupAuto" style="grid-column:1/2"><input type="checkbox" id="backupAuto"> Ежедневная автоматическая копия</label>
+            <span></span>
+            <label for="backupKeep">Сколько копий хранить</label>
+            <input type="number" id="backupKeep" min="1" max="365">
+            <div class="hint">Копия также создаётся при запуске (раз в сутки), перед обновлением схемы базы и перед каждым восстановлением. Файлы лежат в папке <code>backups</code> рядом с базой.</div>
+        </div>
+        <div class="card-actions" style="margin-top:10px">
+            <button type="button" class="btn btn-sm admin-only" id="saveBackupSettings">{{ icon('check') }} Сохранить</button>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table class="table" id="backupsTable">
+            <thead><tr><th>Создана</th><th>Причина</th><th>Размер</th><th class="col-optional">Файл</th><th class="col-actions"></th></tr></thead>
+            <tbody id="backupsBody"></tbody>
+        </table>
+    </div>
+    <div class="empty" id="backupsEmpty" hidden>
+        {{ icon('database') }}
+        <h3>Копий пока нет</h3>
+        <p>Нажмите «Создать копию» — или дождитесь автоматической.</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const esc = eventsEscape;
+const ICONS = { download: {{ icon('download')|tojson }}, undo: {{ icon('undo')|tojson }}, trash: {{ icon('trash')|tojson }} };
+const TABLE_LABELS = {
+    switches: 'Коммутаторы', port_traffic: 'Опросы трафика (подробно)', port_traffic_hourly: 'Трафик по часам',
+    switch_health: 'CPU/RAM/температура (подробно)', switch_health_hourly: 'CPU/RAM/температура по часам',
+    port_events: 'События', mac_table: 'MAC-адреса', audit_log: 'Журнал изменений', devices: 'Привязанные устройства',
+};
+const num = n => Number(n || 0).toLocaleString('ru-RU');
+const day = ts => ts ? ts.slice(0, 10).split('-').reverse().join('.') : '';
+
+async function load() {
+    const s = await (await fetch('/api/maintenance/stats')).json();
+    const t = s.tables;
+    document.getElementById('kpiSize').textContent = formatBytes(s.file_size);
+    document.getElementById('kpiSizeFoot').textContent = `${num(t.switches)} коммутаторов`;
+    document.getElementById('kpiRaw').textContent = num(t.port_traffic);
+    document.getElementById('kpiRawFoot').textContent = s.raw_range && s.raw_range[0]
+        ? `записей · ${day(s.raw_range[0])} — ${day(s.raw_range[1])}` : 'записей · пока пусто';
+    document.getElementById('kpiHourly').textContent = num(t.port_traffic_hourly);
+    document.getElementById('kpiHourlyFoot').textContent = s.hourly_range && s.hourly_range[0]
+        ? `часов · ${day(s.hourly_range[0])} — ${day(s.hourly_range[1])}` : 'часов · появятся после свёртки';
+    document.getElementById('kpiBackups').textContent = s.backups.length;
+    document.getElementById('kpiBackupsFoot').textContent = s.backups.length ? `последняя: ${s.backups[0].time}` : 'копий нет';
+
+    document.getElementById('tablesList').innerHTML = Object.entries(t)
+        .map(([k, v]) => `<span>${esc(TABLE_LABELS[k] || k)}</span><span>${num(v)}</span>`).join('');
+
+    const st = s.settings;
+    document.getElementById('retRaw').value = st.retention_raw_days;
+    document.getElementById('retHourly').value = st.retention_hourly_days;
+    document.getElementById('retEvents').value = st.retention_events_days;
+    document.getElementById('backupAuto').checked = !!st.backup_auto;
+    document.getElementById('backupKeep').value = st.backup_keep;
+    renderBackups(s.backups);
+}
+
+function renderBackups(list) {
+    document.getElementById('backupsBody').innerHTML = list.map(b => `
+        <tr>
+            <td class="num">${esc(b.time)}</td>
+            <td><span class="badge ${b.reason === 'вручную' ? 'badge-accent' : 'badge-outline'}">${esc(b.reason)}</span></td>
+            <td class="num">${formatBytes(b.size)}</td>
+            <td class="col-optional backup-name">${esc(b.name)}</td>
+            <td class="col-actions"><div class="row admin-only" style="justify-content:flex-end">
+                <a class="btn btn-sm" href="/api/backups/${encodeURIComponent(b.name)}" title="Скачать">${ICONS.download} Скачать</a>
+                <button type="button" class="btn btn-sm" data-restore="${esc(b.name)}" data-time="${esc(b.time)}">${ICONS.undo} Восстановить</button>
+                <button type="button" class="btn btn-ghost btn-icon btn-sm" data-delete="${esc(b.name)}" title="Удалить" aria-label="Удалить">${ICONS.trash}</button>
+            </div></td>
+        </tr>`).join('');
+    document.getElementById('backupsEmpty').hidden = list.length > 0;
+    document.getElementById('backupsTable').parentElement.hidden = list.length === 0;
+}
+
+async function saveSettingsPart(body, message) {
+    const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error();
+    notify(message, 'success');
+    load();
+}
+
+document.getElementById('saveRetention').addEventListener('click', () => saveSettingsPart({
+    retention_raw_days: +document.getElementById('retRaw').value,
+    retention_hourly_days: +document.getElementById('retHourly').value,
+    retention_events_days: +document.getElementById('retEvents').value,
+}, 'Сроки хранения сохранены').catch(() => notify('Не удалось сохранить', 'error')));
+
+document.getElementById('saveBackupSettings').addEventListener('click', () => saveSettingsPart({
+    backup_auto: document.getElementById('backupAuto').checked ? 1 : 0,
+    backup_keep: +document.getElementById('backupKeep').value,
+}, 'Настройки копий сохранены').catch(() => notify('Не удалось сохранить', 'error')));
+
+document.getElementById('runMaintenance').addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    btn.classList.add('is-loading');
+    try {
+        const r = await (await fetch('/api/maintenance/run', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vacuum: document.getElementById('vacuum').checked }) })).json();
+        if (r.skipped) notify(r.skipped, 'warning');
+        else notify(`Готово: свёрнуто ${num(r.traffic_raw_deleted + r.health_raw_deleted)} записей в ${num(r.traffic_hours + r.health_hours)} часовых, удалено событий: ${num(r.events_deleted)}`, 'success', 6000);
+        load();
+    } catch (err) {
+        notify('Ошибка обслуживания', 'error');
+    } finally {
+        btn.classList.remove('is-loading');
+    }
+});
+
+document.getElementById('createBackup').addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    btn.classList.add('is-loading');
+    try {
+        const r = await (await fetch('/api/backups', { method: 'POST' })).json();
+        notify(`Копия создана: ${r.name}`, 'success');
+        load();
+    } catch (err) {
+        notify('Не удалось создать копию', 'error');
+    } finally {
+        btn.classList.remove('is-loading');
+    }
+});
+
+async function afterRestore(r) {
+    if (!r.ok) throw new Error(r.error);
+    notify(`База восстановлена. Прежнее состояние сохранено в копии ${r.safety_backup}`, 'success', 8000);
+    setTimeout(() => location.reload(), 1500);
+}
+
+document.getElementById('backupsBody').addEventListener('click', async e => {
+    const restore = e.target.closest('[data-restore]');
+    const del = e.target.closest('[data-delete]');
+    if (restore) {
+        const ok = await confirmDialog(
+            `Все данные будут заменены состоянием на ${restore.dataset.time}. Текущая база перед этим автоматически сохранится в новую копию.`,
+            { title: 'Восстановить базу из копии?', okText: 'Восстановить', danger: true });
+        if (!ok) return;
+        restore.classList.add('is-loading');
+        try {
+            await afterRestore(await (await fetch(`/api/backups/${encodeURIComponent(restore.dataset.restore)}/restore`, { method: 'POST' })).json());
+        } catch (err) {
+            restore.classList.remove('is-loading');
+            notify(err.message || 'Не удалось восстановить', 'error');
+        }
+    } else if (del) {
+        const ok = await confirmDialog(`Файл ${del.dataset.delete} будет удалён без возможности восстановления.`,
+            { title: 'Удалить копию?', okText: 'Удалить', danger: true });
+        if (!ok) return;
+        const r = await (await fetch(`/api/backups/${encodeURIComponent(del.dataset.delete)}`, { method: 'DELETE' })).json();
+        if (r.ok) { notify('Копия удалена', 'success'); load(); } else notify(r.error, 'error');
+    }
+});
+
+document.getElementById('restoreFile').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const ok = await confirmDialog(
+        `Все данные будут заменены содержимым файла «${file.name}». Текущая база перед этим автоматически сохранится в новую копию.`,
+        { title: 'Восстановить базу из файла?', okText: 'Восстановить', danger: true });
+    if (!ok) return;
+    const form = new FormData();
+    form.append('file', file);
+    try {
+        await afterRestore(await (await fetch('/api/backups/upload', { method: 'POST', body: form })).json());
+    } catch (err) {
+        notify(err.message || 'Не удалось восстановить', 'error', 8000);
+    }
+});
+
+load();
+</script>
+{% endblock %}

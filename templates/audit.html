@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% set active_nav = 'audit' %}
+
+{% block title %}Журнал изменений{% endblock %}
+{% block crumbs %}<span class="current">Журнал изменений</span>{% endblock %}
+
+{% block head %}
+<style>
+.audit-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.audit-filters select { width: auto; min-width: 200px; height: 30px; }
+.audit-time { white-space: nowrap; font-size: 12.5px; color: var(--text-2); }
+.audit-time small { display: block; color: var(--text-3); font-size: 11.5px; }
+.audit-actor { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.audit-summary { color: var(--text); }
+.audit-row { cursor: pointer; }
+.audit-row.is-open td { border-bottom-color: transparent; }
+.audit-row .chev { display: inline-flex; color: var(--text-3); transition: transform var(--dur-2) var(--ease); }
+.audit-row.is-open .chev { transform: rotate(180deg); }
+.audit-row.is-reverted .audit-summary { color: var(--text-3); text-decoration: line-through; text-decoration-color: var(--border-strong); }
+.audit-details td { padding-top: 0; background: var(--surface-2); }
+.changes { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 4px 0 6px; }
+.changes td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; background: transparent; }
+.changes tr:last-child td { border-bottom: 0; }
+.changes .f { color: var(--text-2); width: 32%; }
+.changes .b { color: var(--danger); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--danger) 50%, transparent); width: 30%; word-break: break-word; }
+.changes .a { color: var(--success); word-break: break-word; }
+.act-badge { white-space: nowrap; }
+.load-more { display: flex; justify-content: center; padding: 14px; border-top: 1px solid var(--border); }
+@media (max-width: 900px) { .col-optional { display: none; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Журнал изменений</h1>
+        <div class="page-sub">Кто, когда и что менял. Правку коммутатора можно откатить, удалённый коммутатор — восстановить.</div>
+    </div>
+    <div class="page-actions">
+        <a href="/export/audit.csv" class="btn">{{ icon('download') }} CSV</a>
+    </div>
+</div>
+
+<div class="card rise">
+    <div class="card-header">
+        <div class="card-title">{{ icon('history') }} Записи</div>
+        <div class="audit-filters">
+            <select id="filterSwitch" aria-label="Коммутатор">
+                <option value="">Все коммутаторы</option>
+                {% for sid, name in switches %}<option value="{{ sid }}">{{ name }}</option>{% endfor %}
+            </select>
+            <select id="filterAction" aria-label="Действие">
+                <option value="">Все действия</option>
+                {% for key, label in actions.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table class="table" id="auditTable">
+            <thead>
+                <tr>
+                    <th>Время</th>
+                    <th>Действие</th>
+                    <th>Коммутатор</th>
+                    <th>Описание</th>
+                    <th class="col-optional">Источник</th>
+                    <th class="col-actions"></th>
+                </tr>
+            </thead>
+            <tbody id="auditBody"></tbody>
+        </table>
+    </div>
+    <div class="empty" id="auditEmpty" hidden>
+        {{ icon('history') }}
+        <h3>Записей нет</h3>
+        <p>Здесь появятся изменения коммутаторов, привязка устройств, смена настроек и восстановления базы.</p>
+    </div>
+    <div class="load-more" id="loadMore" hidden>
+        <button type="button" class="btn btn-sm" onclick="loadEntries(true)">Показать ещё</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PAGE = 50;
+const ACTION_STYLE = {
+    create: 'badge-success', restore_switch: 'badge-success', db_restore: 'badge-warning',
+    update: 'badge-accent', revert: 'badge-warning', delete: 'badge-danger',
+    device_assign: 'badge-outline', device_remove: 'badge-outline', vlan_color: 'badge-outline', settings: 'badge-outline',
+};
+const esc = eventsEscape;
+const CHEVRON = {{ icon('chevron')|tojson }};
+let lastId = null;
+
+const params = new URLSearchParams(location.search);
+if (params.get('switch')) document.getElementById('filterSwitch').value = params.get('switch');
+if (params.get('action')) document.getElementById('filterAction').value = params.get('action');
+
+function relTime(ts) {
+    const d = new Date(String(ts).replace(' ', 'T'));
+    const sec = Math.round((Date.now() - d) / 1000);
+    if (isNaN(sec)) return ts;
+    if (sec < 60) return 'только что';
+    if (sec < 3600) return `${Math.round(sec / 60)} мин назад`;
+    if (sec < 86400) return `${Math.round(sec / 3600)} ч назад`;
+    return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function rowHtml(e) {
+    const sw = e.switch_id
+        ? `<a href="/switch/${encodeURIComponent(e.switch_id)}" onclick="event.stopPropagation()">${esc(e.switch_name || '#' + e.switch_id)}</a>`
+        : '<span class="muted">—</span>';
+    let action = '';
+    if (e.revertible) {
+        const label = e.action === 'delete' ? 'Восстановить' : 'Откатить';
+        action = `<button type="button" class="btn btn-sm" data-revert="${e.id}" data-kind="${e.action}">${label}</button>`;
+    } else if (e.reverted_by) {
+        action = `<span class="badge" title="Отменено записью №${e.reverted_by}">отменено</span>`;
+    }
+    const hasChanges = e.changes && e.changes.length;
+    const details = hasChanges ? `
+        <tr class="audit-details" data-for="${e.id}" hidden><td colspan="6">
+            <table class="changes">${e.changes.map(c => `<tr>
+                <td class="f">${esc(c.field)}</td><td class="b">${esc(c.before)}</td><td class="a">${esc(c.after)}</td></tr>`).join('')}
+            </table></td></tr>` : '';
+    return `
+        <tr class="audit-row ${e.reverted_by ? 'is-reverted' : ''}" data-id="${e.id}" ${hasChanges ? 'title="Показать изменения"' : ''}>
+            <td class="audit-time" title="${esc(e.time)}">${relTime(e.time)}<small>${esc(e.time)}</small></td>
+            <td><span class="badge act-badge ${ACTION_STYLE[e.action] || ''}">${esc(e.action_label)}</span></td>
+            <td>${sw}</td>
+            <td class="audit-summary">${esc(e.summary)} ${hasChanges ? '<span class="chev">' + CHEVRON + '</span>' : ''}</td>
+            <td class="col-optional audit-actor">${esc(e.actor || '—')}</td>
+            <td class="col-actions">${action}</td>
+        </tr>${details}`;
+}
+
+async function loadEntries(more = false) {
+    const q = new URLSearchParams({ limit: PAGE });
+    const sw = document.getElementById('filterSwitch').value;
+    const act = document.getElementById('filterAction').value;
+    if (sw) q.set('switch_id', sw);
+    if (act) q.set('action', act);
+    if (more && lastId) q.set('before_id', lastId);
+    try {
+        const entries = await (await fetch('/api/audit?' + q)).json();
+        const body = document.getElementById('auditBody');
+        if (!more) body.innerHTML = '';
+        body.insertAdjacentHTML('beforeend', entries.map(rowHtml).join(''));
+        if (entries.length) lastId = entries[entries.length - 1].id;
+        document.getElementById('auditEmpty').hidden = body.children.length > 0;
+        document.getElementById('auditTable').parentElement.hidden = body.children.length === 0;
+        document.getElementById('loadMore').hidden = entries.length < PAGE;
+    } catch (e) {
+        notify('Не удалось загрузить журнал', 'error');
+    }
+}
+
+function syncUrl() {
+    const q = new URLSearchParams();
+    const sw = document.getElementById('filterSwitch').value, act = document.getElementById('filterAction').value;
+    if (sw) q.set('switch', sw);
+    if (act) q.set('action', act);
+    history.replaceState(null, '', '/audit' + (q.toString() ? '?' + q : ''));
+}
+['filterSwitch', 'filterAction'].forEach(id => document.getElementById(id).addEventListener('change', () => {
+    lastId = null; syncUrl(); loadEntries();
+}));
+
+document.getElementById('auditBody').addEventListener('click', async e => {
+    const btn = e.target.closest('[data-revert]');
+    if (btn) {
+        e.stopPropagation();
+        const isDelete = btn.dataset.kind === 'delete';
+        const ok = await confirmDialog(isDelete
+            ? 'Коммутатор будет восстановлен с настройками, подключениями, патч-панелями и привязанными устройствами. История опросов и события не восстанавливаются.'
+            : 'Поля, изменённые этой записью, вернутся к прежним значениям. Более поздние правки тех же полей будут перезаписаны. Откат тоже попадёт в журнал, и его можно будет отменить.',
+            { title: isDelete ? 'Восстановить коммутатор?' : 'Откатить изменение?', okText: isDelete ? 'Восстановить' : 'Откатить' });
+        if (!ok) return;
+        btn.classList.add('is-loading');
+        try {
+            const r = await (await fetch(`/api/audit/${btn.dataset.revert}/revert`, { method: 'POST' })).json();
+            if (!r.ok) throw new Error(r.error);
+            notify(isDelete ? 'Коммутатор восстановлен' : 'Изменение откачено', 'success');
+            lastId = null;
+            loadEntries();
+        } catch (err) {
+            btn.classList.remove('is-loading');
+            notify(err.message || 'Не удалось выполнить откат', 'error');
+        }
+        return;
+    }
+    const row = e.target.closest('.audit-row');
+    if (!row || e.target.closest('a')) return;
+    const details = document.querySelector(`.audit-details[data-for="${row.dataset.id}"]`);
+    if (!details) return;
+    details.hidden = !details.hidden;
+    row.classList.toggle('is-open', !details.hidden);
+});
+
+loadEntries();
+</script>
+{% endblock %}

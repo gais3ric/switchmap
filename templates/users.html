@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% set active_nav = 'users' %}
+
+{% block title %}Пользователи{% endblock %}
+{% block crumbs %}<span class="current">Пользователи</span>{% endblock %}
+
+{% block head %}
+<style>
+.u-name { display: flex; align-items: center; gap: 10px; }
+.u-avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font-size: 11px; font-weight: 700;
+            color: var(--accent-text); background: var(--accent-soft); flex-shrink: 0; }
+.u-name b { color: var(--text); }
+.u-me { font-size: 11px; color: var(--text-3); }
+#usersTable select { width: auto; height: 28px; font-size: 12px; }
+.roles-note { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; color: var(--text-2); }
+.roles-note b { color: var(--text); white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Пользователи</h1>
+        <div class="page-sub">Доступ к приложению и роли</div>
+    </div>
+    <div class="page-actions">
+        <button type="button" class="btn btn-primary" onclick="openUserModal()">{{ icon('plus') }} Добавить пользователя</button>
+    </div>
+</div>
+
+<div class="card rise">
+    <div class="table-wrap">
+        <table class="table" id="usersTable">
+            <thead><tr><th>Пользователь</th><th>Роль</th><th>Статус</th><th class="col-optional">Последний вход</th><th class="col-optional">Пароль изменён</th><th class="col-actions"></th></tr></thead>
+            <tbody id="usersBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card rise" style="margin-top:16px">
+    <div class="card-header"><div class="card-title">{{ icon('alert') }} Роли</div></div>
+    <div class="card-body roles-note">
+        <b>Администратор</b><span>Всё: изменение коммутаторов, настройки, резервные копии и восстановление, откат изменений, пользователи.</span>
+        <b>Наблюдатель</b><span>Просмотр всех данных, поиск, экспорт, опрос по SNMP и проверка доступности, отметка событий прочитанными. Изменять ничего не может.</span>
+    </div>
+</div>
+
+<!-- Новый пользователь / новый пароль -->
+<div id="userModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="userModalTitle">
+    <div class="modal-content is-narrow">
+        <div class="modal-header">
+            <h2 id="userModalTitle">Новый пользователь</h2>
+            <button type="button" class="modal-close" onclick="closeUserModal()" aria-label="Закрыть">&times;</button>
+        </div>
+        <form class="modal-body" id="userForm" autocomplete="off">
+            <div class="field" id="fName">
+                <label for="uName">Имя пользователя</label>
+                <input id="uName" autocomplete="off" autocapitalize="off" spellcheck="false">
+            </div>
+            <div class="field" id="fRole">
+                <label for="uRole">Роль</label>
+                <select id="uRole">{% for key, label in roles.items() %}<option value="{{ key }}" {{ 'selected' if key == 'viewer' }}>{{ label }}</option>{% endfor %}</select>
+            </div>
+            <div class="field" style="margin-bottom:0">
+                <label for="uPass">Пароль <span class="muted">(не короче 8 символов)</span></label>
+                <input id="uPass" type="password" autocomplete="new-password" minlength="8" required>
+            </div>
+            <div class="hint" id="uHint">Сообщите пароль пользователю — он сможет сменить его сам в меню профиля.</div>
+        </form>
+        <div class="modal-footer">
+            <button type="button" class="btn" onclick="closeUserModal()">Отмена</button>
+            <button type="submit" form="userForm" class="btn btn-primary" id="uSubmit">Создать</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ME = {{ current_user.id|tojson }};
+const ROLES = {{ roles|tojson }};
+const esc = eventsEscape;
+const TRASH = {{ icon('trash')|tojson }};
+let editingId = null;  // null — создание, число — задание пароля
+
+async function api(url, method = 'GET', body) {
+    const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+    const data = await r.json();
+    if (!r.ok || data.ok === false) throw new Error(data.error || 'Ошибка');
+    return data;
+}
+
+async function load() {
+    const users = await api('/api/users');
+    document.getElementById('usersBody').innerHTML = users.map(u => {
+        const me = u.id === ME;
+        return `<tr data-id="${u.id}">
+            <td><div class="u-name"><span class="u-avatar">${esc(u.username.slice(0, 2).toUpperCase())}</span>
+                <div><b>${esc(u.username)}</b>${me ? '<div class="u-me">это вы</div>' : ''}</div></div></td>
+            <td><select data-role ${me ? 'disabled title="Свою роль изменить нельзя"' : ''}>
+                ${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${k === u.role ? 'selected' : ''}>${esc(v)}</option>`).join('')}
+            </select></td>
+            <td>${u.disabled ? '<span class="badge badge-danger">заблокирован</span>' : '<span class="badge badge-success">активен</span>'}</td>
+            <td class="col-optional muted num">${esc(u.last_login || 'не входил')}</td>
+            <td class="col-optional muted num">${esc(u.password_changed || '—')}</td>
+            <td class="col-actions"><div class="row" style="justify-content:flex-end">
+                <button type="button" class="btn btn-sm" data-password>Задать пароль</button>
+                ${me ? '' : `<button type="button" class="btn btn-sm" data-toggle>${u.disabled ? 'Разблокировать' : 'Заблокировать'}</button>
+                <button type="button" class="btn btn-ghost btn-icon btn-sm btn-delete" data-delete title="Удалить" aria-label="Удалить">${TRASH}</button>`}
+            </div></td>
+        </tr>`;
+    }).join('');
+}
+
+function openUserModal(userId = null, username = '') {
+    editingId = userId;
+    document.getElementById('userForm').reset();
+    document.getElementById('userModalTitle').textContent = userId ? `Новый пароль для «${username}»` : 'Новый пользователь';
+    document.getElementById('fName').hidden = !!userId;
+    document.getElementById('fRole').hidden = !!userId;
+    document.getElementById('uSubmit').textContent = userId ? 'Задать пароль' : 'Создать';
+    document.getElementById('uHint').textContent = userId
+        ? 'Все текущие сессии пользователя завершатся — ему нужно будет войти с новым паролем.'
+        : 'Сообщите пароль пользователю — он сможет сменить его сам в меню профиля.';
+    document.getElementById('userModal').classList.add('active');
+    setTimeout(() => document.getElementById(userId ? 'uPass' : 'uName').focus(), 80);
+}
+function closeUserModal() { document.getElementById('userModal').classList.remove('active'); }
+
+document.getElementById('userForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    try {
+        if (editingId) {
+            await api(`/api/users/${editingId}/password`, 'POST', { password: document.getElementById('uPass').value });
+            notify('Пароль задан', 'success');
+        } else {
+            const r = await api('/api/users', 'POST', { username: document.getElementById('uName').value,
+                role: document.getElementById('uRole').value, password: document.getElementById('uPass').value });
+            notify(`Пользователь «${r.user.username}» создан`, 'success');
+        }
+        closeUserModal();
+        load();
+    } catch (err) {
+        notify(err.message, 'error');
+    }
+});
+document.getElementById('userModal').addEventListener('click', e => { if (e.target.id === 'userModal') closeUserModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeUserModal(); });
+
+document.getElementById('usersBody').addEventListener('change', async e => {
+    if (!e.target.matches('[data-role]')) return;
+    const id = +e.target.closest('tr').dataset.id;
+    try {
+        await api(`/api/users/${id}`, 'PATCH', { role: e.target.value });
+        notify('Роль изменена', 'success');
+    } catch (err) {
+        notify(err.message, 'error');
+    }
+    load();
+});
+
+document.getElementById('usersBody').addEventListener('click', async e => {
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr) return;
+    const id = +tr.dataset.id, name = tr.querySelector('b').textContent;
+    try {
+        if (e.target.closest('[data-password]')) {
+            openUserModal(id, name);
+        } else if (e.target.closest('[data-toggle]')) {
+            const block = e.target.closest('[data-toggle]').textContent.trim() === 'Заблокировать';
+            if (block && !await confirmDialog(`«${name}» не сможет войти, его текущие сессии завершатся.`,
+                    { title: 'Заблокировать пользователя?', okText: 'Заблокировать', danger: true })) return;
+            await api(`/api/users/${id}`, 'PATCH', { disabled: block });
+            notify(block ? 'Пользователь заблокирован' : 'Пользователь разблокирован', 'success');
+            load();
+        } else if (e.target.closest('[data-delete]')) {
+            if (!await confirmDialog(`Учётная запись «${name}» будет удалена. Записи журнала с её именем останутся.`,
+                    { title: 'Удалить пользователя?', okText: 'Удалить', danger: true })) return;
+            await api(`/api/users/${id}`, 'DELETE');
+            notify('Пользователь удалён', 'success');
+            load();
+        }
+    } catch (err) {
+        notify(err.message, 'error');
+    }
+});
+
+load();
+</script>
+{% endblock %}

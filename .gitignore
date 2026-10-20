@@ -1,0 +1,28 @@
+# Рабочие данные — не для репозитория
+switches.db
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+backups/
+# Ключи шифрования и подписи сессий: НИКОГДА не выкладывать
+switchmap.secret
+*.secret
+
+# Окружения и служебные файлы
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.log
+.env
+
+# Тесты: зависимости и симулятор SNMP ставятся локально
+tests/browser/node_modules/
+tests/.snmpsim/
+
+# Редакторы и система
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

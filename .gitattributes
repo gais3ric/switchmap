@@ -1,0 +1,4 @@
+# Единые переводы строк (LF) в репозитории и в рабочей папке
+* text=auto eol=lf
+*.png binary
+*.ico binary

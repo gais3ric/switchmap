@@ -1,0 +1,549 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_snmp.html" import snmp_fields %}
+{% set active_nav = 'discover' %}
+
+{% block title %}Поиск и импорт{% endblock %}
+{% block crumbs %}<a href="/">Коммутаторы</a><span class="sep">/</span><span class="current">Поиск и импорт</span>{% endblock %}
+
+{% block head %}
+<style>
+.tabs-bar { margin-bottom: 18px; }
+.disc-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 24px; }
+@media (max-width: 900px) { .disc-grid { grid-template-columns: 1fr; } }
+#ranges { min-height: 128px; font-family: var(--font-mono); font-size: 13px; }
+.card + .card { margin-top: 16px; }
+.card-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.progress { height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; margin: 4px 0 10px; }
+.progress > i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: inherit; transition: width .4s var(--ease-out); }
+.progress.is-running > i { background: linear-gradient(90deg, var(--accent), var(--accent-text), var(--accent)); background-size: 200% 100%;
+                           animation: progress-shine 1.4s linear infinite; }
+@keyframes progress-shine { from { background-position: 200% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .progress.is-running > i { animation: none; } }
+.progress-text { font-size: 13px; color: var(--text-2); display: flex; gap: 14px; flex-wrap: wrap; }
+.progress-text b { color: var(--text); font-variant-numeric: tabular-nums; }
+.res-table td { vertical-align: middle; }
+.res-table td.ip { font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
+.res-table .via { display: block; font-family: var(--font); font-size: 11px; color: var(--text-3); }
+.res-table input[type=text] { min-width: 150px; height: 30px; }
+.res-table input[type=number] { width: 72px; height: 30px; }
+.res-table .model { max-width: 320px; font-size: 12px; color: var(--text-2); }
+.res-table .model b { color: var(--text); font-weight: 500; }
+.res-table tr.is-muted td { opacity: .55; }
+.res-table .col-check { width: 34px; }
+.toolbar-spacer { flex: 1; }
+.match-changes { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+.nb-status { font-size: 13px; color: var(--text-2); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.nb-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 14px; }
+@media (max-width: 760px) { .nb-filters { grid-template-columns: 1fr; } }
+.import-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 24px; align-items: end; padding: 16px 18px;
+              border-top: 1px solid var(--border); }
+@media (max-width: 760px) { .import-bar { grid-template-columns: 1fr; } }
+.empty.compact { padding: 28px 16px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Поиск и импорт коммутаторов</h1>
+        <div class="page-sub">Найдите коммутаторы в сети по SNMP или загрузите их из NetBox — и добавьте нужные в один клик.</div>
+    </div>
+</div>
+
+<div class="segmented tabs-bar" role="tablist">
+    <button type="button" role="tab" data-tab="scan" class="is-active">{{ icon('radar') }} Поиск в сети</button>
+    <button type="button" role="tab" data-tab="netbox">{{ icon('database') }} NetBox</button>
+</div>
+
+<!-- ═════════════ Поиск в сети ═════════════ -->
+<section id="tab-scan">
+    <form class="card rise" id="scanForm" autocomplete="off">
+        <div class="card-header"><div class="card-title">{{ icon('radar') }} Где и как искать</div></div>
+        <div class="card-body">
+            <div class="disc-grid">
+                <div class="field">
+                    <label for="ranges">Сети и адреса</label>
+                    <textarea id="ranges" spellcheck="false" placeholder="192.168.1.0/24&#10;10.0.0.1-10.0.0.50&#10;10.0.5.7"></textarea>
+                    <div class="hint">Сеть (<code>192.168.1.0/24</code>), диапазон (<code>10.0.0.1-50</code>) или отдельные адреса — по одному в строке. До 4096 адресов за раз.</div>
+                </div>
+                <div>
+                    {{ snmp_fields('scan', multi=True) }}
+                    <label class="check" style="margin:2px 0 6px"><input type="checkbox" id="followLldp" checked> Идти по соседям LLDP</label>
+                    <div class="hint" style="margin:0 0 14px 28px">Найденные коммутаторы сообщают адреса соседей — их тоже проверим, даже если они вне указанных сетей.</div>
+                </div>
+            </div>
+            <div class="card-actions">
+                <button type="submit" class="btn btn-primary" id="scanStart">{{ icon('search') }} Начать поиск</button>
+                <button type="button" class="btn" id="scanStop" hidden>{{ icon('x') }} Остановить</button>
+                <span class="hint" style="margin:0">Каждый адрес опрашивается по SNMP; недоступные отсеиваются за 1–2 секунды, проверяется до 32 адресов одновременно.</span>
+            </div>
+        </div>
+    </form>
+
+    <div class="card rise" id="scanProgressCard" hidden>
+        <div class="card-body">
+            <div class="progress" id="scanBar"><i></i></div>
+            <div class="progress-text" id="scanProgress"></div>
+        </div>
+    </div>
+
+    <div class="card rise" id="scanResultsCard" hidden>
+        <div class="card-header">
+            <div class="card-title">{{ icon('server') }} Найдено <span class="badge" id="foundCount">0</span></div>
+            <div class="toolbar">
+                <div class="segmented" id="scanFilter">
+                    <button type="button" data-filter="switch" class="is-active">Коммутаторы</button>
+                    <button type="button" data-filter="all">Все устройства</button>
+                </div>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="table res-table">
+                <thead><tr>
+                    <th class="col-check"><input type="checkbox" id="scanAll" aria-label="Выбрать все"></th>
+                    <th>Адрес</th><th>Название</th><th>Устройство</th><th>Портов</th><th>SNMP</th><th>В SwitchMap</th>
+                </tr></thead>
+                <tbody id="scanBody"></tbody>
+            </table>
+        </div>
+        <div class="empty compact" id="scanEmpty" hidden>
+            {{ icon('radar') }}
+            <h3 id="scanEmptyTitle">Пока ничего не найдено</h3>
+            <p id="scanEmptyText">Устройства появятся здесь по мере поиска.</p>
+        </div>
+        <div class="import-bar">
+            <div class="hint" style="margin:0">Название и число портов можно поправить прямо в таблице. Коммутаторы добавятся с учётными данными SNMP, которые подошли при поиске.</div>
+            <button type="button" class="btn btn-primary" id="scanAdd" disabled>{{ icon('plus') }} Добавить выбранные</button>
+        </div>
+    </div>
+</section>
+
+<!-- ═════════════ NetBox ═════════════ -->
+<section id="tab-netbox" hidden>
+    <form class="card rise" id="nbForm" autocomplete="off">
+        <div class="card-header">
+            <div class="card-title">{{ icon('link') }} Подключение к NetBox</div>
+            <div class="nb-status" id="nbStatus"></div>
+        </div>
+        <div class="card-body">
+            <div class="disc-grid">
+                <div class="field">
+                    <label for="nbUrl">Адрес NetBox</label>
+                    <input type="text" id="nbUrl" placeholder="https://netbox.company.local" spellcheck="false">
+                </div>
+                <div class="field">
+                    <label for="nbToken">API-токен</label>
+                    <input type="password" id="nbToken" autocomplete="new-password" spellcheck="false">
+                    <div class="hint" id="nbTokenHint">В NetBox: меню пользователя → API Tokens → Add a token. Достаточно токена только для чтения.</div>
+                </div>
+            </div>
+            <label class="check" style="margin-bottom:14px"><input type="checkbox" id="nbVerify" checked> Проверять сертификат сервера</label>
+            <div class="card-actions">
+                <button type="submit" class="btn btn-primary" id="nbTest">{{ icon('plug') }} Проверить и сохранить</button>
+            </div>
+        </div>
+    </form>
+
+    <div class="card rise" id="nbImportCard" hidden>
+        <div class="card-header"><div class="card-title">{{ icon('download') }} Импорт устройств</div></div>
+        <div class="card-body" style="padding-bottom:4px">
+            <div class="nb-filters">
+                <div class="field"><label for="nbSite">Сайт</label><select id="nbSite"><option value="">Все сайты</option></select></div>
+                <div class="field"><label for="nbRole">Роль</label><select id="nbRole"><option value="">Все роли</option></select></div>
+                <div class="field"><label for="nbTag">Тег</label><select id="nbTag"><option value="">Любой</option></select></div>
+            </div>
+            <div class="card-actions" style="margin-bottom:14px">
+                <label class="check"><input type="checkbox" id="nbActive" checked> Только в статусе «Active»</label>
+                <span class="toolbar-spacer"></span>
+                <button type="button" class="btn" id="nbLoad">{{ icon('refresh') }} Показать устройства</button>
+            </div>
+        </div>
+        <div class="table-wrap" id="nbTableWrap" hidden>
+            <table class="table res-table">
+                <thead><tr>
+                    <th class="col-check"><input type="checkbox" id="nbAll" aria-label="Выбрать все"></th>
+                    <th>Устройство</th><th>IP</th><th>Сайт · роль</th><th>Модель</th><th>Интерфейсов</th><th>В SwitchMap</th>
+                </tr></thead>
+                <tbody id="nbBody"></tbody>
+            </table>
+        </div>
+        <div class="empty compact" id="nbEmpty" hidden>
+            {{ icon('database') }}
+            <h3>Устройств не найдено</h3>
+            <p>Измените фильтры: сайт, роль или тег.</p>
+        </div>
+        <div class="import-bar" id="nbImportBar" hidden>
+            <div>
+                <div class="modal-section-title" style="margin-top:0">SNMP для новых коммутаторов</div>
+                {{ snmp_fields('nb') }}
+                <label class="check"><input type="checkbox" id="nbUpdate" checked> У уже добавленных — обновить название и IP из NetBox</label>
+            </div>
+            <button type="button" class="btn btn-primary" id="nbImport" disabled>{{ icon('download') }} Импортировать выбранные</button>
+        </div>
+    </div>
+
+    <div class="card rise" id="nbSyncCard" hidden>
+        <div class="card-header"><div class="card-title">{{ icon('refresh') }} Связанные коммутаторы</div></div>
+        <div class="card-body">
+            <p style="margin:0 0 12px;color:var(--text-2);font-size:13px" id="nbLinked"></p>
+            <div class="card-actions">
+                <button type="button" class="btn" id="nbSync">{{ icon('refresh') }} Синхронизировать сейчас</button>
+                <label class="check"><input type="checkbox" id="nbAuto"> Автоматически раз в час</label>
+            </div>
+            <div class="hint">Синхронизация обновляет названия и IP-адреса связанных коммутаторов по данным NetBox. NetBox при этом не изменяется. Все правки видны в журнале и откатываются.</div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const esc = eventsEscape;
+const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+    .then(async r => ({ status: r.status, data: await r.json() }));
+const plural = (n, a, b, c) => (n % 10 === 1 && n % 100 !== 11) ? a : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? b : c;
+
+// ───────── Вкладки ─────────
+function showTab(name) {
+    document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('is-active', b.dataset.tab === name));
+    document.getElementById('tab-scan').hidden = name !== 'scan';
+    document.getElementById('tab-netbox').hidden = name !== 'netbox';
+    history.replaceState(null, '', name === 'netbox' ? '#netbox' : location.pathname);
+    if (name === 'netbox') nbInit();
+}
+document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+// ═════════════ Поиск в сети ═════════════
+let job = null, pollTimer = null, scanFilter = 'switch';
+const edits = {};          // ip → {name, ports, checked} — правки пользователя переживают обновления таблицы
+const JOB_KEY = 'switchmap.discoveryJob';
+
+function renderJob() {
+    if (!job) return;
+    const running = job.status === 'running';
+    document.getElementById('scanStart').hidden = running;
+    document.getElementById('scanStop').hidden = !running;
+    document.getElementById('scanProgressCard').hidden = false;
+    document.getElementById('scanResultsCard').hidden = false;
+    const pct = job.total ? Math.round(job.done / job.total * 100) : 0;
+    const bar = document.getElementById('scanBar');
+    bar.classList.toggle('is-running', running);
+    bar.firstElementChild.style.width = pct + '%';
+    const switches = job.found.filter(f => f.is_switch).length;
+    const state = { running: 'Идёт поиск…', done: 'Поиск завершён', cancelled: 'Поиск остановлен', error: 'Ошибка поиска: ' + (job.error || '') }[job.status];
+    document.getElementById('scanProgress').innerHTML = `<span><b>${esc(state)}</b></span>
+        <span>проверено <b>${job.done}</b> из <b>${job.total}</b></span>
+        <span>отвечают по SNMP: <b>${job.found.length}</b>, из них коммутаторов: <b>${switches}</b></span>
+        ${job.follow_lldp ? '<span>с соседями LLDP</span>' : ''}`;
+    renderFound();
+}
+
+function renderFound() {
+    const rows = job.found.filter(f => scanFilter === 'all' || f.is_switch);
+    document.getElementById('foundCount').textContent = rows.length;
+    document.getElementById('scanBody').innerHTML = rows.map(f => {
+        const e = edits[f.ip] || (edits[f.ip] = { name: f.sys_name || f.ip, ports: Math.min(96, f.ports || 24), checked: !!f.is_switch && !f.existing });
+        const blocked = !!f.existing || e.added;
+        // «Cisco · Cisco IOS Software…» — производитель уже есть в описании, не повторяем
+        const vendorInModel = f.vendor && f.model && f.model.toLowerCase().includes(f.vendor.split(' ')[0].toLowerCase());
+        const device = (vendorInModel ? [f.model] : [f.vendor, f.model]).filter(Boolean);
+        return `<tr data-ip="${esc(f.ip)}" class="${blocked ? 'is-muted' : ''}">
+            <td class="col-check"><input type="checkbox" data-pick ${e.checked && !blocked ? 'checked' : ''} ${blocked ? 'disabled' : ''} aria-label="Выбрать ${esc(f.ip)}"></td>
+            <td class="ip">${esc(f.ip)}${f.via ? `<span class="via">сосед ${esc(f.via)}</span>` : ''}</td>
+            <td><input type="text" data-name value="${esc(e.name)}" ${blocked ? 'disabled' : ''} aria-label="Название"></td>
+            <td class="model">${device.length ? `<b>${esc(device[0])}</b>${device[1] ? ' · ' + esc(device[1]) : ''}` : '—'}
+                ${f.location ? `<div class="muted">${esc(f.location)}</div>` : ''}
+                ${f.is_switch ? '' : '<div><span class="badge badge-outline">не коммутатор?</span></div>'}</td>
+            <td><input type="number" data-ports min="1" max="96" value="${e.ports}" ${blocked ? 'disabled' : ''} aria-label="Портов"></td>
+            <td><span class="badge badge-outline">${esc(f.cred_label)}</span></td>
+            <td>${e.added ? `<a class="badge badge-success" href="/switch/${e.added}">добавлен</a>`
+                : f.existing ? `<a href="/switch/${f.existing.id}">уже есть: ${esc(f.existing.name)}</a>` : '<span class="badge badge-accent">новый</span>'}</td>
+        </tr>`;
+    }).join('');
+    const empty = rows.length === 0;
+    document.getElementById('scanEmpty').hidden = !empty;
+    if (empty && job.status !== 'running') {
+        document.getElementById('scanEmptyTitle').textContent = job.found.length ? 'Коммутаторов не найдено' : 'Ничего не найдено';
+        document.getElementById('scanEmptyText').textContent = job.found.length
+            ? `Отвечают по SNMP: ${job.found.length}, но ни одно устройство не похоже на коммутатор. Переключитесь на «Все устройства».`
+            : 'Ни один адрес не ответил по SNMP. Проверьте диапазон, community или учётную запись v3 и что UDP 161 доступен с этого сервера.';
+    }
+    updateScanButton();
+}
+
+function updateScanButton() {
+    const n = Object.entries(edits).filter(([ip, e]) => e.checked && !e.added && job.found.some(f => f.ip === ip && !f.existing
+        && (scanFilter === 'all' || f.is_switch))).length;
+    const btn = document.getElementById('scanAdd');
+    btn.disabled = n === 0;
+    btn.lastChild.textContent = n ? ` Добавить выбранные (${n})` : ' Добавить выбранные';
+}
+
+document.getElementById('scanBody').addEventListener('input', e => {
+    const tr = e.target.closest('tr'); if (!tr) return;
+    const ed = edits[tr.dataset.ip];
+    if (e.target.matches('[data-pick]')) ed.checked = e.target.checked;
+    if (e.target.matches('[data-name]')) ed.name = e.target.value;
+    if (e.target.matches('[data-ports]')) ed.ports = +e.target.value;
+    updateScanButton();
+});
+document.getElementById('scanAll').addEventListener('change', e => {
+    job.found.filter(f => !f.existing && (scanFilter === 'all' || f.is_switch)).forEach(f => { edits[f.ip].checked = e.target.checked; });
+    renderFound();
+});
+document.getElementById('scanFilter').addEventListener('click', e => {
+    const b = e.target.closest('[data-filter]'); if (!b) return;
+    scanFilter = b.dataset.filter;
+    document.querySelectorAll('#scanFilter button').forEach(x => x.classList.toggle('is-active', x === b));
+    renderFound();
+});
+
+async function pollJob() {
+    clearTimeout(pollTimer);
+    if (!job) return;
+    const r = await fetch(`/api/discovery/${job.id}`);
+    if (!r.ok) { try { sessionStorage.removeItem(JOB_KEY); } catch (e) {} return; }
+    const wasRunning = job.status === 'running';
+    job = await r.json();
+    renderJob();
+    if (job.status === 'running') pollTimer = setTimeout(pollJob, 1000);
+    else if (wasRunning && job.status === 'done') notify(`Поиск завершён: отвечают по SNMP ${job.found.length}`, 'success');
+}
+
+document.getElementById('scanForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const snmp = snmpValues(document.querySelector('#scanForm [data-snmp]'));
+    const invalid = snmpValidationError(snmp);
+    if (invalid) { notify(invalid, 'error'); return; }
+    const btn = document.getElementById('scanStart');
+    btn.classList.add('is-loading');
+    try {
+        const { status, data } = await post('/api/discovery/start', { ranges: document.getElementById('ranges').value,
+            follow_lldp: document.getElementById('followLldp').checked, ...snmp });
+        if (status !== 200) { notify(data.error, 'error', 8000); return; }
+        Object.keys(edits).forEach(k => delete edits[k]);
+        job = data;
+        try { sessionStorage.setItem(JOB_KEY, job.id); localStorage.setItem('switchmap.discoveryRanges', document.getElementById('ranges').value); } catch (err) {}
+        renderJob();
+        pollTimer = setTimeout(pollJob, 800);
+    } finally {
+        btn.classList.remove('is-loading');
+    }
+});
+
+document.getElementById('scanStop').addEventListener('click', async () => {
+    if (job) await post(`/api/discovery/${job.id}/cancel`);
+});
+
+document.getElementById('scanAdd').addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    const items = job.found.filter(f => !f.existing && edits[f.ip] && edits[f.ip].checked && !edits[f.ip].added
+        && (scanFilter === 'all' || f.is_switch)).map(f => ({ ip: f.ip, name: edits[f.ip].name.trim(), ports: edits[f.ip].ports }));
+    if (items.some(i => !i.name)) { notify('У каждого коммутатора должно быть название', 'error'); return; }
+    btn.classList.add('is-loading');
+    try {
+        const { status, data } = await post(`/api/discovery/${job.id}/add`, { items });
+        if (status !== 200) { notify(data.error, 'error'); return; }
+        data.added.forEach(a => { edits[a.ip].added = a.id; edits[a.ip].checked = false; });
+        if (data.added.length) notify(`Добавлено ${data.added.length} ${plural(data.added.length, 'коммутатор', 'коммутатора', 'коммутаторов')}`, 'success');
+        if (data.skipped.length) notify('Пропущены: ' + data.skipped.join('; '), 'warning', 8000);
+        await pollJob();
+    } finally {
+        btn.classList.remove('is-loading');
+    }
+});
+
+(async function restoreScan() {
+    try { const saved = localStorage.getItem('switchmap.discoveryRanges'); if (saved) document.getElementById('ranges').value = saved; } catch (e) {}
+    let current = await (await fetch('/api/discovery/current')).json();
+    if (!current) {
+        let id = null;
+        try { id = sessionStorage.getItem(JOB_KEY); } catch (e) {}
+        if (id) { const r = await fetch(`/api/discovery/${id}`); if (r.ok) current = await r.json(); }
+    }
+    if (current) { job = current; renderJob(); if (job.status === 'running') pollTimer = setTimeout(pollJob, 1000); }
+})();
+
+// ═════════════ NetBox ═════════════
+let nb = null, nbDevices = [], nbReady = false, nbInitDone = false;
+const nbPicked = new Set();
+
+function nbFormConfig() {
+    return {
+        url: document.getElementById('nbUrl').value.trim(), token: document.getElementById('nbToken').value.trim(),
+        verify: document.getElementById('nbVerify').checked,
+        site: document.getElementById('nbSite').value, role: document.getElementById('nbRole').value,
+        tag: document.getElementById('nbTag').value, only_active: document.getElementById('nbActive').checked,
+        update_existing: document.getElementById('nbUpdate').checked,
+    };
+}
+
+function nbRenderState(payload) {
+    nb = payload;
+    const c = payload.config;
+    document.getElementById('nbUrl').value = c.url;
+    document.getElementById('nbVerify').checked = c.verify;
+    document.getElementById('nbActive').checked = c.only_active;
+    document.getElementById('nbUpdate').checked = c.update_existing;
+    document.getElementById('nbAuto').checked = c.auto_sync;
+    document.getElementById('nbToken').value = '';
+    document.getElementById('nbToken').placeholder = c.has_token ? 'Токен сохранён — введите новый, чтобы заменить' : '';
+    document.getElementById('nbSyncCard').hidden = !(c.url && c.has_token);
+    document.getElementById('nbLinked').innerHTML = `Связано с NetBox: <b>${payload.linked}</b> ${plural(payload.linked, 'коммутатор', 'коммутатора', 'коммутаторов')}.`
+        + (c.last_sync ? ` Последняя синхронизация: ${esc(c.last_sync)} — ${esc(c.last_sync_result)}.` : '');
+}
+
+function fillSelect(id, items, current, emptyLabel) {
+    const sel = document.getElementById(id);
+    sel.innerHTML = `<option value="">${emptyLabel}</option>` + items.map(o => `<option value="${esc(o.slug)}">${esc(o.name)}</option>`).join('');
+    sel.value = items.some(o => o.slug === current) ? current : '';
+}
+
+function nbShowConnected(r) {
+    nbReady = true;
+    document.getElementById('nbStatus').innerHTML = `<span class="dot online"></span> NetBox ${esc(r.version)} · устройств: ${r.devices}`;
+    fillSelect('nbSite', r.options.sites, nb.config.site, 'Все сайты');
+    fillSelect('nbRole', r.options.roles, nb.config.role, 'Все роли');
+    fillSelect('nbTag', r.options.tags, nb.config.tag, 'Любой');
+    document.getElementById('nbImportCard').hidden = false;
+}
+
+async function nbConnect(save) {
+    const btn = document.getElementById('nbTest');
+    btn.classList.add('is-loading');
+    try {
+        const cfg = nbFormConfig();
+        const { data: r } = await post('/api/netbox/test', { config: cfg });
+        if (!r.ok) {
+            document.getElementById('nbStatus').innerHTML = `<span class="dot offline"></span> нет подключения`;
+            notify(r.error, 'error', 10000);
+            return false;
+        }
+        if (save) {
+            const { status, data } = await post('/api/netbox', cfg);
+            if (status !== 200) { notify(data.error, 'error'); return false; }
+            nbRenderState(data);
+            notify('Подключение к NetBox работает, настройки сохранены', 'success');
+        }
+        nbShowConnected(r);
+        return true;
+    } catch (err) {
+        notify('Не удалось связаться с сервером', 'error');
+        return false;
+    } finally {
+        btn.classList.remove('is-loading');
+    }
+}
+
+async function nbInit() {
+    if (nbInitDone) return;
+    nbInitDone = true;
+    nbRenderState(await (await fetch('/api/netbox')).json());
+    if (nb.config.url && nb.config.has_token) nbConnect(false);
+    else document.getElementById('nbStatus').innerHTML = '<span class="dot unknown"></span> не настроено';
+}
+
+document.getElementById('nbForm').addEventListener('submit', e => { e.preventDefault(); nbConnect(true); });
+
+const MATCH_LABEL = { netbox: 'связан', ip: 'совпал по IP', name: 'совпал по названию' };
+
+function nbRenderDevices() {
+    document.getElementById('nbBody').innerHTML = nbDevices.map(d => {
+        const m = d.match;
+        const state = m
+            ? `<a href="/switch/${m.switch_id}">${esc(MATCH_LABEL[m.by])}: ${esc(m.switch_name)}</a>
+               ${m.changes.length ? `<div class="match-changes">будет обновлено: ${m.changes.map(c => `${esc(c.field.toLowerCase())} ${esc(c.before)} → ${esc(c.after)}`).join('; ')}</div>` : ''}`
+            : '<span class="badge badge-accent">новый</span>';
+        return `<tr data-id="${d.id}">
+            <td class="col-check"><input type="checkbox" data-pick ${nbPicked.has(d.id) ? 'checked' : ''} aria-label="Выбрать ${esc(d.name)}"></td>
+            <td><a href="${esc(d.url)}" target="_blank" rel="noopener"><b>${esc(d.name)}</b></a>${d.status ? `<div class="muted" style="font-size:12px">${esc(d.status)}</div>` : ''}</td>
+            <td class="ip">${d.ip ? esc(d.ip) : '<span class="muted">нет IP</span>'}</td>
+            <td style="font-size:12px">${esc(d.site || '—')}${d.role ? ` · ${esc(d.role)}` : ''}</td>
+            <td class="model">${d.manufacturer ? `<b>${esc(d.manufacturer)}</b> · ` : ''}${esc(d.model || '—')}</td>
+            <td class="num">${d.interfaces ?? '—'}</td>
+            <td>${state}</td>
+        </tr>`;
+    }).join('');
+    const btn = document.getElementById('nbImport');
+    btn.disabled = nbPicked.size === 0;
+    btn.lastChild.textContent = nbPicked.size ? ` Импортировать выбранные (${nbPicked.size})` : ' Импортировать выбранные';
+    document.getElementById('nbAll').checked = nbDevices.length > 0 && nbDevices.every(d => nbPicked.has(d.id));
+}
+
+async function nbLoadDevices() {
+    const btn = document.getElementById('nbLoad');
+    btn.classList.add('is-loading');
+    try {
+        const { data: r } = await post('/api/netbox/preview', { config: nbFormConfig() });
+        if (!r.ok) { notify(r.error, 'error', 10000); return; }
+        nbDevices = r.devices;
+        nbPicked.clear();
+        nbDevices.filter(d => !d.match && d.ip).forEach(d => nbPicked.add(d.id));  // по умолчанию — новые с IP
+        document.getElementById('nbTableWrap').hidden = nbDevices.length === 0;
+        document.getElementById('nbImportBar').hidden = nbDevices.length === 0;
+        document.getElementById('nbEmpty').hidden = nbDevices.length > 0;
+        nbRenderDevices();
+    } finally {
+        btn.classList.remove('is-loading');
+    }
+}
+document.getElementById('nbLoad').addEventListener('click', nbLoadDevices);
+
+document.getElementById('nbBody').addEventListener('change', e => {
+    if (!e.target.matches('[data-pick]')) return;
+    const id = +e.target.closest('tr').dataset.id;
+    if (e.target.checked) nbPicked.add(id); else nbPicked.delete(id);
+    nbRenderDevices();
+});
+document.getElementById('nbAll').addEventListener('change', e => {
+    nbDevices.forEach(d => { if (e.target.checked) nbPicked.add(d.id); else nbPicked.delete(d.id); });
+    nbRenderDevices();
+});
+
+document.getElementById('nbImport').addEventListener('click', async e => {
+    const snmp = snmpValues(document.querySelector('#nbImportBar [data-snmp]'));
+    const invalid = snmpValidationError(snmp);
+    if (invalid) { notify(invalid, 'error'); return; }
+    const btn = e.currentTarget;
+    btn.classList.add('is-loading');
+    try {
+        const { data: r } = await post('/api/netbox/import', { ids: [...nbPicked], snmp,
+            update_existing: document.getElementById('nbUpdate').checked });
+        if (!r.ok) { notify(r.error, 'error', 8000); return; }
+        const parts = [];
+        if (r.created.length) parts.push(`добавлено ${r.created.length}`);
+        if (r.updated.length) parts.push(`обновлено ${r.updated.length}`);
+        if (r.linked.length) parts.push(`связано ${r.linked.length}`);
+        notify('Импорт из NetBox: ' + (parts.join(', ') || 'без изменений'), 'success', 6000);
+        nbRenderState(await (await fetch('/api/netbox')).json());
+        await nbLoadDevices();
+    } finally {
+        btn.classList.remove('is-loading');
+    }
+});
+
+document.getElementById('nbSync').addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    btn.classList.add('is-loading');
+    try {
+        const { data: r } = await post('/api/netbox/sync');
+        if (!r.ok) { notify(r.error, 'error', 8000); return; }
+        nbRenderState(r);
+        let msg = `Проверено ${r.checked}, обновлено ${r.updated.length}`;
+        if (r.missing.length) msg += `. Нет в NetBox: ${r.missing.map(m => m.name).join(', ')}`;
+        notify(msg, r.missing.length ? 'warning' : 'success', 8000);
+        if (nbDevices.length) nbLoadDevices();
+    } finally {
+        btn.classList.remove('is-loading');
+    }
+});
+
+document.getElementById('nbAuto').addEventListener('change', async e => {
+    const { status, data } = await post('/api/netbox', { auto_sync: e.target.checked });
+    if (status === 200) { nbRenderState(data); notify(e.target.checked ? 'Синхронизация раз в час включена' : 'Автосинхронизация выключена', 'success'); }
+});
+
+if (location.hash === '#netbox') showTab('netbox');
+</script>
+{% endblock %}

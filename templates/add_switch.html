@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_snmp.html" import snmp_fields %}
+{% set active_nav = 'switches' %}
+
+{% block title %}Новый коммутатор{% endblock %}
+{% block crumbs %}<a href="/">Коммутаторы</a><span class="sep">/</span><span class="current">Новый коммутатор</span>{% endblock %}
+
+{% block head %}
+<style>
+.form-card { max-width: 640px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.form-grid .span-2 { grid-column: span 2; }
+#patchSettings { animation: fade-down var(--dur-2) var(--ease-out) both; }
+@media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } .form-grid .span-2 { grid-column: auto; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Новый коммутатор</h1>
+        <div class="page-sub">Основные параметры, мониторинг и патч-панель</div>
+    </div>
+</div>
+
+<form method="POST" id="mainForm" class="card form-card rise">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="card-body">
+        <div class="modal-section-title">Основное</div>
+        <div class="form-grid">
+            <div class="field span-2">
+                <label for="f-name">Название</label>
+                <input id="f-name" name="name" required placeholder="например: SW-Floor2">
+            </div>
+            <div class="field">
+                <label for="f-ports">Портов</label>
+                <input id="f-ports" type="number" name="ports" value="24" min="1" max="96">
+            </div>
+            <div class="field">
+                <label for="f-layout">Расположение портов</label>
+                <select id="f-layout" name="switch_layout">
+                    <option value="single">В одну строку</option>
+                    <option value="double">В две строки</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="modal-section-title">Мониторинг</div>
+        <div class="probe-row">
+            <div class="field">
+                <label for="f-ip">IP-адрес</label>
+                <input id="f-ip" type="text" name="ip_address" placeholder="192.168.1.1" autocomplete="off">
+            </div>
+            <button type="button" class="btn" onclick="probeSwitchForm(this.form, this)">{{ icon('plug') }} Проверить и заполнить</button>
+        </div>
+        {{ snmp_fields('page') }}
+        <div class="probe-result" data-probe-result hidden></div>
+        <input type="hidden" name="model">
+
+        <div class="modal-section-title">Патч-панель</div>
+        <label class="check" style="margin-bottom:14px">
+            <input type="checkbox" id="hasPatchPanel" checked onchange="togglePatch(this)">
+            Добавить патч-панель
+        </label>
+        <input type="hidden" name="has_patch_panel" id="hasPatchInput" value="1">
+
+        <div id="patchSettings" class="form-grid">
+            <div class="field">
+                <label for="f-patch-ports">Портов на панели</label>
+                <input id="f-patch-ports" type="number" name="patch_ports" value="24" min="1" max="96">
+            </div>
+            <div class="field">
+                <label for="f-patch-pos">Расположение</label>
+                <select id="f-patch-pos" name="patch_position">
+                    <option value="above">Над коммутатором</option>
+                    <option value="below" selected>Под коммутатором</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <a href="/" class="btn">Отмена</a>
+        <button type="submit" class="btn btn-primary">{{ icon('plus') }} Создать</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('mainForm').addEventListener('submit', e => {
+    const invalid = snmpValidationError(snmpValues(e.currentTarget.querySelector('[data-snmp]')));
+    if (invalid) { e.preventDefault(); notify(invalid, 'error'); }
+});
+
+function togglePatch(cb) {
+    document.getElementById('hasPatchInput').value = cb.checked ? '1' : '0';
+    document.getElementById('patchSettings').hidden = !cb.checked;
+}
+</script>
+{% endblock %}

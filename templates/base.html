@@ -1,0 +1,184 @@
+{% from "_icons.html" import icon %}<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{ csrf_token }}">
+<title>{% block title %}SwitchMap{% endblock %} · SwitchMap</title>
+<script>
+// Тема — до отрисовки страницы, чтобы не было вспышки другой темы
+(function () {
+    var t = null;
+    try { t = localStorage.getItem('switchmap.theme'); } catch (e) {}
+    document.documentElement.dataset.theme = (t === 'light') ? 'light' : 'dark';
+})();
+</script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f8cff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='16' y='16' width='6' height='6' rx='1'/%3E%3Crect x='2' y='16' width='6' height='6' rx='1'/%3E%3Crect x='9' y='2' width='6' height='6' rx='1'/%3E%3Cpath d='M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3'/%3E%3Cpath d='M12 12V8'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/ui.css">
+<script src="/static/events.js"></script>
+{% block head %}{% endblock %}
+</head>
+<body class="{{ 'role-admin' if is_admin else 'role-viewer' }} {% block body_class %}{% endblock %}">
+
+<div class="app">
+    <aside class="rail" aria-label="Навигация">
+        <a href="/" class="rail-logo" title="SwitchMap">{{ icon('logo') }}</a>
+        <nav class="rail-nav">
+            <a href="/" class="rail-item {{ 'is-active' if active_nav == 'switches' }}" data-label="Коммутаторы" aria-label="Коммутаторы">{{ icon('server') }}</a>
+            <a href="/topology" class="rail-item {{ 'is-active' if active_nav == 'topology' }}" data-label="Топология" aria-label="Топология">{{ icon('topology') }}</a>
+            <a href="/audit" class="rail-item {{ 'is-active' if active_nav == 'audit' }}" data-label="Журнал изменений" aria-label="Журнал изменений">{{ icon('history') }}</a>
+            <a href="/maintenance" class="rail-item {{ 'is-active' if active_nav == 'maintenance' }}" data-label="Данные и резервные копии" aria-label="Данные и резервные копии">{{ icon('database') }}</a>
+            {% if is_admin %}<a href="/discover" class="rail-item {{ 'is-active' if active_nav == 'discover' }}" data-label="Поиск в сети и импорт из NetBox" aria-label="Поиск и импорт">{{ icon('radar') }}</a>{% endif %}
+            {% if is_admin %}<a href="/notifications" class="rail-item {{ 'is-active' if active_nav == 'notifications' }}" data-label="Уведомления в Telegram и на почту" aria-label="Уведомления">{{ icon('send') }}</a>{% endif %}
+            <button type="button" class="rail-item" data-label="Поиск устройства  (Ctrl K)" aria-label="Поиск"
+                    onclick="document.getElementById('netSearchInput').focus()">{{ icon('search') }}</button>
+        </nav>
+        <div class="rail-bottom">
+            <button type="button" class="rail-item" id="themeToggle" data-label="Светлая тема" aria-label="Сменить тему" onclick="toggleTheme()">
+                <span class="icon-sun">{{ icon('sun') }}</span><span class="icon-moon" hidden>{{ icon('moon') }}</span>
+            </button>
+            <button type="button" class="rail-item admin-only" data-label="Настройки" aria-label="Настройки" onclick="openSettingsModal()">{{ icon('settings') }}</button>
+            {% if current_user %}
+            <div class="menu-wrap user-menu">
+                <button type="button" class="rail-avatar" data-menu-toggle aria-haspopup="true"
+                        title="{{ current_user.username }} · {{ current_user.role_label }}">{{ current_user.username[:2]|upper }}</button>
+                <div class="dropdown" role="menu">
+                    <div class="user-card">
+                        <b>{{ current_user.username }}</b>
+                        <span class="badge {{ 'badge-accent' if is_admin else 'badge-outline' }}">{{ current_user.role_label }}</span>
+                    </div>
+                    <hr>
+                    <button type="button" role="menuitem" onclick="openPasswordModal()">{{ icon('pencil') }} Сменить пароль</button>
+                    {% if is_admin %}<a href="/users" role="menuitem">{{ icon('server') }} Пользователи</a>{% endif %}
+                    <hr>
+                    <form method="POST" action="/logout" style="margin:0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" role="menuitem" id="logoutBtn">{{ icon('open') }} Выйти</button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </aside>
+
+    <div class="main">
+        <header class="topbar">
+            <nav class="crumbs" aria-label="Путь">{% block crumbs %}{% endblock %}</nav>
+            <div class="topbar-spacer"></div>
+            <div class="net-search">
+                {{ icon('search', 'search-icon') }}
+                <input type="search" id="netSearchInput" autocomplete="off" spellcheck="false"
+                       placeholder="Найти устройство: MAC, IP, имя, описание порта"
+                       aria-label="Поиск устройства по сети">
+                <span class="search-kbd"><kbd>Ctrl</kbd><kbd>K</kbd></span>
+                <div id="netSearchResults" class="net-search-results" hidden></div>
+            </div>
+            <div class="topbar-actions">
+                {% block topbar_actions %}{% endblock %}
+                <button type="button" class="btn btn-ghost btn-icon bell-btn" onclick="toggleEventsPanel()" title="События" aria-label="События">
+                    {{ icon('bell') }}<span class="bell-badge" id="bellBadge">0</span>
+                </button>
+            </div>
+            <div class="events-panel" id="eventsPanel">
+                <div class="events-panel-header">
+                    <span>События</span>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="markAllEventsRead()">Прочитать всё</button>
+                </div>
+                <div id="eventsList">
+                    <div class="events-empty">Загрузка…</div>
+                </div>
+            </div>
+        </header>
+
+        <main class="content {% block content_class %}{% endblock %}">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</div>
+
+<!-- Настройки (доступны на всех страницах) -->
+<div id="settingsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-content is-narrow">
+        <div class="modal-header">
+            <h2 id="settingsTitle">Настройки</h2>
+            <button type="button" class="modal-close" onclick="closeSettingsModal()" aria-label="Закрыть">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-section-title">Опрос</div>
+            <label class="check" style="margin-bottom:14px">
+                <input type="checkbox" id="pollEnabledInput">
+                Периодический опрос коммутаторов по SNMP
+            </label>
+            <div class="field">
+                <label for="pollIntervalInput">Интервал опроса, минут</label>
+                <input type="number" id="pollIntervalInput" min="1" value="5">
+                <div class="hint">Опрашиваются все коммутаторы с IP-адресом. Данные опросов нужны для поиска, загрузки портов и оповещений.</div>
+            </div>
+
+            <div class="modal-section-title">Пороги оповещений</div>
+            <div class="thresholds-grid">
+                <label for="alertUtilInput">Загрузка порта, %</label>
+                <input type="number" id="alertUtilInput" min="0" max="100" value="80">
+                <label for="alertErrorsInput">Ошибок на порту между опросами</label>
+                <input type="number" id="alertErrorsInput" min="0" value="10">
+                <label for="alertCpuInput">Загрузка CPU, %</label>
+                <input type="number" id="alertCpuInput" min="0" max="100" value="90">
+                <label for="alertTempInput">Температура, °C</label>
+                <input type="number" id="alertTempInput" min="0" max="150" value="70">
+            </div>
+            <div class="hint">Событие появляется при превышении порога и ещё одно — при возврате в норму. 0 — оповещение выключено.</div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn" onclick="closeSettingsModal()">Отмена</button>
+            <button type="button" class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
+        </div>
+    </div>
+</div>
+
+<!-- Смена своего пароля -->
+<div id="passwordModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="passwordTitle">
+    <div class="modal-content is-narrow">
+        <div class="modal-header">
+            <h2 id="passwordTitle">Смена пароля</h2>
+            <button type="button" class="modal-close" onclick="closePasswordModal()" aria-label="Закрыть">&times;</button>
+        </div>
+        <form class="modal-body" id="passwordForm" autocomplete="off">
+            <div class="field">
+                <label for="pwCurrent">Текущий пароль</label>
+                <input type="password" id="pwCurrent" autocomplete="current-password" required>
+            </div>
+            <div class="field">
+                <label for="pwNew">Новый пароль <span class="muted">(не короче 8 символов)</span></label>
+                <input type="password" id="pwNew" autocomplete="new-password" minlength="8" required>
+            </div>
+            <div class="field" style="margin-bottom:0">
+                <label for="pwNew2">Повторите новый пароль</label>
+                <input type="password" id="pwNew2" autocomplete="new-password" minlength="8" required>
+            </div>
+            <div class="hint">После смены пароля другие ваши сессии (на других компьютерах) завершатся.</div>
+        </form>
+        <div class="modal-footer">
+            <button type="button" class="btn" onclick="closePasswordModal()">Отмена</button>
+            <button type="submit" form="passwordForm" class="btn btn-primary">Сменить пароль</button>
+        </div>
+    </div>
+</div>
+
+<!-- Подтверждение действий -->
+<div id="confirmModal" class="modal" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="modal-content is-narrow">
+        <div class="modal-header">
+            <h2 id="confirmTitle">Подтверждение</h2>
+        </div>
+        <div class="modal-body"><p id="confirmText" style="margin:0;color:var(--text-2);white-space:pre-line"></p></div>
+        <div class="modal-footer">
+            <button type="button" class="btn" id="confirmCancel">Отмена</button>
+            <button type="button" class="btn btn-primary" id="confirmOk">OK</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/app.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

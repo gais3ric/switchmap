@@ -1,0 +1,711 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% set active_nav = 'switches' %}
+
+{% block title %}{{ switch['name'] }}{% endblock %}
+
+{% block crumbs %}
+<a href="/">Коммутаторы</a><span class="sep">/</span><span class="current">{{ switch['name'] }}</span>
+{% endblock %}
+
+{% block head %}
+<style>
+/* ═══ Страница коммутатора ═══ */
+
+/* Статус коммутатора */
+.status-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--text-3); }
+.status-indicator.online  { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+.status-indicator.offline { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+.status-indicator.checking { background: var(--warning); animation: pulse-dot 1.2s ease-in-out infinite; }
+
+.meta-sep { color: var(--border-strong); }
+
+/* Режим редактирования */
+.edit-badge {
+    display: none; align-items: center; gap: 7px;
+    height: 24px; padding: 0 10px;
+    font-size: 12px; font-weight: 600; color: var(--warning);
+    background: var(--warning-soft); border-radius: 99px;
+}
+.edit-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse-dot 1.4s ease-in-out infinite; }
+.edit-badge.active { display: inline-flex; animation: pop-in var(--dur-2) var(--ease-out) both; }
+
+/* Когда открыта панель параметров — на широком экране схема сдвигается, а не перекрывается */
+@media (min-width: 1280px) {
+    .content { transition: padding-right var(--dur-3) var(--ease-out); }
+    .main:has(#sidebar.open) .content { padding-right: calc(var(--drawer-w) + 28px); }
+}
+
+/* ═══ Схема стойки ═══ */
+.schema-card { overflow: hidden; }
+.ports-card { margin-top: 16px; overflow: hidden; }
+.table-compact td { padding: 9px 14px; white-space: nowrap; }
+.table-compact td.desc { white-space: normal; min-width: 160px; }
+.table-compact .port-no { font-family: var(--font-mono); font-weight: 600; color: var(--text); }
+.table-compact .ifname { font-family: var(--font-mono); font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.table-compact .desc { color: var(--text); max-width: 280px; }
+.table-compact .desc small { display: block; color: var(--text-3); font-size: 11.5px; }
+.util-inline { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+.util-inline .meter { flex: 1; }
+.util-inline .num { width: 44px; text-align: right; font-size: 12px; color: var(--text); }
+.vlan-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.vlan-chip i { width: 8px; height: 8px; border-radius: 50%; }
+#portsTable tbody tr { cursor: pointer; }
+@media (max-width: 900px) { .col-optional { display: none; } }
+.schema-toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.load-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--text-3); }
+.load-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.load-legend i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; }
+.load-legend-time { color: var(--text-3); }
+.schema-hint {
+    display: none; padding: 9px 18px; font-size: 12px; color: var(--text-2);
+    background: var(--warning-soft); border-bottom: 1px solid var(--border);
+}
+.schema-card:has(~ * #editIndicator.active) .schema-hint,
+body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-down var(--dur-2) var(--ease-out) both; }
+
+.rack {
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    padding: 32px 24px 36px;
+    min-height: 280px;
+    overflow-x: auto;
+    background-color: var(--bg);
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size: 18px 18px;
+    background-position: -9px -9px;
+}
+.device {
+    position: relative;
+    width: fit-content; max-width: 100%; min-width: 280px;
+    padding: 12px 18px 10px 22px;
+    background: var(--chassis);
+    border: 1px solid var(--chassis-border);
+    border-radius: 10px;
+    box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.03);
+    animation: rise var(--dur-3) var(--ease-out) both;
+}
+.device::before {
+    content: ""; position: absolute; left: 8px; top: 14px; bottom: 14px; width: 3px;
+    border-radius: 3px; background: var(--border-strong);
+}
+.device.switch { background: var(--chassis-switch); }
+.device.switch::before { background: linear-gradient(var(--chassis-accent), #7c5cff); }
+.device h3 {
+    display: flex; align-items: center; gap: 8px;
+    margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-3);
+}
+.ports-row { display: flex; flex-wrap: wrap; align-items: flex-end; width: 100%; }
+.port-container { display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-end; margin: 1px 3px; }
+.port-label {
+    height: 15px; line-height: 15px; padding: 1px 0;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; color: var(--port-label);
+    text-align: center; white-space: nowrap;
+}
+.trunk-label { margin-left: 2px; color: var(--warning); font-weight: 700; }
+
+/* Порт RJ-45 */
+.port {
+    position: relative;
+    width: 42px; height: 30px; margin: 6px 0;
+    background: var(--port-body);
+    border: 1px solid var(--port-border);
+    border-radius: 3px 3px 6px 6px;
+    box-shadow: inset 0 -7px 0 rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.05);
+    cursor: pointer;
+    transition: background-color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), filter var(--dur-2) var(--ease), opacity var(--dur-2) var(--ease);
+}
+.port::before {   /* защёлка */
+    content: ""; position: absolute; top: -5px; left: 50%; transform: translateX(-50%);
+    width: 16px; height: 5px; background: var(--port-latch);
+    border: 1px solid var(--port-border); border-bottom: 0; border-radius: 2px 2px 0 0;
+}
+.port::after {    /* контакты */
+    content: ""; position: absolute; left: 8px; right: 8px; bottom: 5px; height: 4px;
+    border-radius: 2px; background: var(--port-slot);
+}
+.port:hover { background-color: var(--port-hover); transform: translateY(-1px); }
+
+/* Порт SFP */
+.port.sfp {
+    height: 24px; margin: 8px 0 10px;
+    background: var(--sfp-body); border-color: var(--sfp-border);
+    border-radius: 3px 3px 5px 5px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.55);
+}
+.port.sfp::before { display: none; }
+.port.sfp::after { left: 12px; right: 12px; bottom: -6px; height: 5px; border-radius: 0 0 3px 3px; background: var(--sfp-tab); }
+
+/* Загрузка, линк, выделение, подсветка */
+.load-bar { position: absolute; left: 2px; bottom: 2px; height: 3px; border-radius: 2px; z-index: 3; pointer-events: none; transition: width var(--dur-3) var(--ease); }
+.port.load-high { outline: 2px solid var(--load-4); outline-offset: 1px; }
+.port.link-down { opacity: .5; filter: saturate(.3); }
+.port.port-selected { outline: 2px solid var(--accent); outline-offset: 2px; }
+.port.port-highlight { animation: port-pulse 1s ease-in-out infinite; outline-offset: 2px; z-index: 5; }
+@keyframes port-pulse { 0%, 100% { outline: 3px solid var(--accent); } 50% { outline: 3px solid var(--text); } }
+.port.vlan-dimmed { opacity: .18; filter: grayscale(70%); }
+
+.vlan-tag {
+    position: absolute; top: 3px; right: 3px; z-index: 2;
+    width: 7px; height: 7px; border-radius: 50%;
+    box-shadow: 0 0 0 1.5px rgba(0,0,0,.45);
+    pointer-events: none;
+}
+.port-device-badge {
+    position: absolute; z-index: 10; top: 50%; left: 50%; transform: translate(-50%, -60%);
+    max-width: 40px; padding: 1px 4px;
+    font-size: 9px; font-weight: 600; line-height: 1.4; color: #fff;
+    background: var(--accent); border-radius: 3px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    cursor: help;
+}
+.port-device-badge.offline { background: var(--text-3); }
+
+/* ═══ Панель параметров (drawer) ═══ */
+.drawer .label { margin-top: 12px; }
+.drawer .field-name { margin-bottom: 14px; }
+.drawer .stack-btns { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.snmp-test-result {
+    margin-top: 2px; padding: 8px 10px;
+    font-size: 12px; color: var(--text-2); word-break: break-word;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm);
+    animation: fade-down var(--dur-2) var(--ease-out) both;
+}
+.snmp-test-result.ok { color: var(--success); background: var(--success-soft); border-color: transparent; }
+.snmp-test-result.fail { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
+.subtle-note { font-size: 12px; color: var(--text-3); margin-top: 8px; }
+.empty-note { font-size: 12px; color: var(--text-3); padding: 8px 0; }
+
+/* Элементы, которые рисует JS */
+.connection-item, .patch-panel-item {
+    padding: 10px 12px; margin: 8px 0;
+    background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--border-strong);
+    border-radius: var(--r);
+    animation: fade-down var(--dur-2) var(--ease-out) both;
+}
+.patch-panel-item { border-left-color: var(--accent); }
+.connection-header, .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.connection-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.connection-details, .panel-meta { font-size: 12px; color: var(--text-2); }
+.connection-details .muted { color: var(--text-3); }
+.connection-actions { display: flex; gap: 6px; margin-top: 8px; }
+.color-preview { display: inline-block; width: 10px; height: 10px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
+.drawer button.small {
+    display: inline-flex; align-items: center; justify-content: center; flex: 1;
+    height: 28px; padding: 0 10px; margin-top: 8px;
+    font: inherit; font-size: 12px; font-weight: 500;
+    color: var(--text); background: var(--surface-3); border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+    cursor: pointer; transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.connection-actions button.small { margin-top: 0; }
+.drawer button.small:hover { background: var(--surface-2); }
+.drawer button.small.delete { color: var(--danger); background: transparent; }
+.drawer button.small.delete:hover { background: var(--danger-soft); }
+.drawer button.small:disabled { opacity: .5; cursor: not-allowed; }
+
+.vlan-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 12.5px; color: var(--text-2); }
+.vlan-swatch { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; cursor: pointer; box-shadow: 0 0 0 1px rgba(0,0,0,.25); transition: transform var(--dur-1) var(--ease); }
+.vlan-swatch:hover { transform: scale(1.15); }
+.vlan-label { flex: 1; word-break: break-word; }
+
+/* ═══ Панель результатов SNMP ═══ */
+#snmpPanel {
+    position: fixed; z-index: 1550;
+    top: calc(var(--topbar-h) + 8px); right: 12px;
+    width: 420px; max-width: calc(100vw - 24px); max-height: calc(100vh - var(--topbar-h) - 24px);
+    display: flex; flex-direction: column;
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+    opacity: 0; visibility: hidden; transform: translateX(12px);
+    transition: opacity var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out), visibility 0s linear var(--dur-2);
+}
+#snmpPanel.visible { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+.snmp-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.snmp-header h3 { font-size: 13px; }
+#snmpContent { flex: 1; overflow-y: auto; padding: 8px; }
+.snmp-summary { font-size: 12px; color: var(--text-3); padding: 4px 8px 8px; }
+.snmp-message { padding: 28px 12px; text-align: center; font-size: 13px; color: var(--text-3); }
+.snmp-message.is-error { color: var(--danger); }
+.snmp-port-item { border-radius: var(--r); }
+.snmp-port-header { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: var(--r); cursor: pointer; transition: background-color var(--dur-1) var(--ease); }
+.snmp-port-header:hover { background: var(--surface-2); }
+.port-status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.port-status-dot.up { background: var(--success); }
+.port-status-dot.down { background: var(--text-3); }
+.port-name { flex: 1; font-size: 12.5px; color: var(--text); }
+.port-device-count { font-size: 11.5px; color: var(--text-3); }
+.snmp-port-no {
+    min-width: 24px; padding: 0 5px; text-align: center;
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-2);
+    background: var(--surface-3); border-radius: var(--r-xs);
+}
+.snmp-port-alias { display: block; font-size: 11.5px; color: var(--accent-text); }
+.snmp-state { font-size: 11px; color: var(--text-3); }
+.snmp-devices { display: none; padding: 4px 10px 10px 42px; }
+.snmp-devices.visible { display: block; animation: fade-down var(--dur-2) var(--ease-out) both; }
+.snmp-device { padding: 8px 10px; margin-bottom: 6px; font-size: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); }
+.snmp-device .dev-mac { font-family: var(--font-mono); color: var(--text-2); }
+.snmp-device .dev-ip { color: var(--accent-text); }
+.snmp-device .dev-host { color: var(--text-2); }
+.assign-btn {
+    width: 100%; height: 26px; margin-top: 6px;
+    font: inherit; font-size: 11.5px; font-weight: 500;
+    color: var(--accent-text); background: var(--accent-soft); border: 0; border-radius: var(--r-sm);
+    cursor: pointer; transition: background-color var(--dur-1) var(--ease);
+}
+.assign-btn:hover { background: var(--accent); color: #fff; }
+
+/* ═══ Контекстное меню порта ═══ */
+#portTypeMenu {
+    position: fixed; z-index: 9999; display: none;
+    min-width: 200px; padding: 5px;
+    background: var(--surface-3); border: 1px solid var(--border-strong);
+    border-radius: var(--r); box-shadow: var(--shadow-lg);
+    animation: pop-in var(--dur-1) var(--ease-out) both;
+}
+#portTypeMenu .menu-title { padding: 5px 9px 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+#portTypeMenu button {
+    display: block; width: 100%; padding: 7px 9px; text-align: left;
+    font: inherit; font-size: 13px; color: var(--text); background: none; border: 0; border-radius: var(--r-sm);
+    cursor: pointer;
+}
+#portTypeMenu button:hover { background: var(--surface-2); }
+#portTypeMenu button.active { color: var(--accent-text); font-weight: 600; }
+#portTypeMenu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 2px; }
+
+/* ═══ Окно статистики ═══ */
+#statsModal {
+    position: fixed; inset: 0; z-index: 4000;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 5vh 16px 16px;
+    background: var(--overlay); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    opacity: 0; visibility: hidden;
+    transition: opacity var(--dur-2) var(--ease), visibility 0s linear var(--dur-2);
+}
+#statsModal.visible { opacity: 1; visibility: visible; transition-delay: 0s; }
+.stats-modal-content {
+    position: relative; width: 100%; max-width: 1240px; max-height: 90vh; overflow-y: auto;
+    background: var(--bg); border: 1px solid var(--border-strong); border-radius: var(--r-xl);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(10px) scale(.985); transition: transform var(--dur-3) var(--ease-out);
+}
+#statsModal.visible .stats-modal-content { transform: none; }
+.stats-modal-header {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 20px; background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.stats-modal-header h2 { font-size: 16px; display: flex; align-items: center; gap: 10px; }
+.stats-modal-close { display: grid; place-items: center; width: 30px; height: 30px; font-size: 20px; line-height: 1; color: var(--text-3); background: none; border: 0; border-radius: var(--r-sm); cursor: pointer; }
+.stats-modal-close:hover { color: var(--text); background: var(--surface-2); }
+.stats-modal-body { padding: 20px; }
+.stats-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 16px; }
+.stats-last-poll { font-size: 12px; color: var(--text-3); }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-card { padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
+.stat-card h3 { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 500; color: var(--text-3); margin: 0 0 6px; }
+.stat-card h3 .ic { width: 14px; height: 14px; }
+.stat-value { font-size: 26px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.stat-label { font-size: 12px; color: var(--text-3); }
+.chart-container { padding: 16px 18px; margin-bottom: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
+.chart-container h3 { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 0 0 12px; }
+.chart-container h3 .ic { width: 15px; height: 15px; color: var(--text-3); }
+.chart-wrapper { position: relative; height: 300px; }
+.port-selector { margin-bottom: 12px; max-width: 520px; }
+.stats-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 0 16px; text-align: center; font-size: 13px; color: var(--text-3); }
+.traffic-summary { margin-top: 10px; font-size: 12.5px; }
+.traffic-summary:empty { display: none; }
+.alert-box { padding: 12px 14px; margin-bottom: 14px; background: var(--danger-soft); border: 1px solid transparent; border-radius: var(--r-lg); }
+.alert-box h4 { margin: 0 0 6px; font-size: 13px; color: var(--danger); }
+.alert-item { padding: 4px 0; font-size: 12.5px; color: var(--text); }
+.poe-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); gap: 10px; }
+.poe-port { padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r); }
+.poe-port.active { border-color: var(--success); }
+.poe-port-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.poe-port-name { font-size: 12.5px; font-weight: 600; }
+.poe-status { height: 20px; padding: 0 7px; display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; border-radius: var(--r-xs); }
+.poe-status.delivering { color: var(--success); background: var(--success-soft); }
+.poe-status.searching { color: var(--warning); background: var(--warning-soft); }
+.poe-status.fault { color: var(--danger); background: var(--danger-soft); }
+.poe-status.disabled { color: var(--text-3); background: var(--neutral-soft); }
+.poe-power { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 640px) {
+    #statsModal { padding: 8px; }
+    .stats-modal-body { padding: 14px; }
+    .chart-wrapper { height: 240px; }
+    .rack { padding: 20px 12px; align-items: flex-start; }
+    #snmpPanel { right: 8px; left: 8px; width: auto; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="POST" action="/update/{{ switch['id'] }}" id="mainForm">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+<div class="page-header">
+    <div>
+        <div class="page-title">
+            <h1>{{ switch['name'] }}</h1>
+            <span class="edit-badge" id="editIndicator">Режим редактирования</span>
+        </div>
+        <div class="page-sub">
+            <span class="status-pill"><span id="switchStatusDot" class="status-indicator unknown"></span><span id="switchStatusText">Нет IP</span></span>
+            <span class="mono">{{ switch['ip_address'] or 'IP не задан' }}</span>
+            <span class="meta-sep">·</span>
+            <span class="badge {{ 'badge-accent' if switch['snmp_version'] == '3' else 'badge-outline' }}">SNMP {{ 'v3' if switch['snmp_version'] == '3' else 'v2c' }}</span>
+            <span class="meta-sep">·</span>
+            <span class="num">{{ switch['ports'] }} портов</span>
+            {% if switch['model'] %}<span class="meta-sep">·</span><span id="switchModel">{{ switch['model'] }}</span>{% endif %}
+            <span class="meta-sep">·</span>
+            <span>опрос: {{ switch['last_poll_time'] or 'ещё не было' }}</span>
+            {% if netbox_link %}<span class="meta-sep">·</span><a href="{{ netbox_link }}" target="_blank" rel="noopener" id="netboxLink">{{ icon('open') }} NetBox</a>{% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <button type="button" class="btn" onclick="pollSNMP()" id="snmpBtn">{{ icon('refresh') }} <span class="btn-text">Опросить по SNMP</span></button>
+        <button type="button" class="btn" onclick="openStatsModal()">{{ icon('chart') }} Статистика</button>
+        <div class="menu-wrap">
+            <button type="button" class="btn" data-menu-toggle aria-haspopup="true" title="Экспорт и история">{{ icon('download') }} Экспорт {{ icon('chevron') }}</button>
+            <div class="dropdown" role="menu">
+                <div class="dropdown-title">Документы</div>
+                <a href="/export/switch/{{ switch['id'] }}.xlsx" role="menuitem">{{ icon('sheet') }} Excel <small>порты, подключения, панели, устройства</small></a>
+                <button type="button" onclick="exportToPDF()" role="menuitem">{{ icon('file') }} PDF-паспорт</button>
+                <hr>
+                <div class="dropdown-title">CSV</div>
+                <a href="/export/switch/{{ switch['id'] }}/ports.csv" role="menuitem">{{ icon('plug') }} Порты</a>
+                <a href="/export/switch/{{ switch['id'] }}/connections.csv" role="menuitem">{{ icon('link') }} Подключения</a>
+                <a href="/export/switch/{{ switch['id'] }}/devices.csv" role="menuitem">{{ icon('server') }} Устройства и MAC</a>
+                <hr>
+                <a href="/audit?switch={{ switch['id'] }}" role="menuitem">{{ icon('history') }} История изменений</a>
+            </div>
+        </div>
+        <button type="button" class="btn menu-toggle" onclick="toggleMenu()" title="Параметры коммутатора">{{ icon('sliders') }} Параметры</button>
+        <button type="button" class="btn btn-primary admin-only" onclick="toggleEdit()" id="editBtn">{{ icon('pencil') }} Редактировать</button>
+        <button type="button" class="btn" onclick="cancelEdit()" id="cancelBtn" hidden>Отмена</button>
+        <button type="button" class="btn btn-primary save" onclick="saveChanges()" id="saveBtn" hidden>{{ icon('check') }} Сохранить</button>
+    </div>
+</div>
+
+<div class="card schema-card rise">
+    <div class="card-header">
+        <div class="card-title">{{ icon('panel') }} Схема стойки</div>
+        <div class="schema-toolbar">
+            <label class="check load-toggle">
+                <input type="checkbox" id="loadToggle" checked onchange="onLoadToggle()">
+                Загрузка портов
+            </label>
+            <div class="load-legend" id="loadLegend">
+                <span><i style="background:var(--load-1)"></i>&lt;30%</span>
+                <span><i style="background:var(--load-2)"></i>&lt;60%</span>
+                <span><i style="background:var(--load-3)"></i><span>&lt;<b id="loadLegendThreshold">80</b>%</span></span>
+                <span><i style="background:var(--load-4)"></i>выше порога</span>
+                <span id="loadLegendTime" class="load-legend-time"></span>
+            </div>
+        </div>
+    </div>
+    <div class="schema-hint">
+        Клик по порту коммутатора, затем по порту патч-панели — подключение. Правый клик по порту — тип порта, транк, прямое назначение.
+    </div>
+    <div class="rack" id="rackContainer"></div>
+</div>
+
+<div class="card ports-card rise">
+    <div class="card-header">
+        <div class="card-title">{{ icon('plug') }} Порты <span class="badge" id="portsCount">0</span></div>
+        <div class="segmented" id="portsFilter" role="tablist" aria-label="Фильтр портов">
+            <button type="button" class="is-active" data-filter="all">Все</button>
+            <button type="button" data-filter="up">Активные</button>
+            <button type="button" data-filter="down">Без линка</button>
+            <button type="button" data-filter="alerts">С оповещениями</button>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table class="table table-compact" id="portsTable">
+            <thead>
+                <tr>
+                    <th class="num">Порт</th>
+                    <th>Интерфейс</th>
+                    <th>Описание / подключение</th>
+                    <th>Статус</th>
+                    <th class="col-optional">Скорость</th>
+                    <th>Загрузка</th>
+                    <th class="col-optional">↓ Вход</th>
+                    <th class="col-optional">↑ Выход</th>
+                    <th class="col-optional">Ошибки</th>
+                    <th class="col-optional">VLAN</th>
+                </tr>
+            </thead>
+            <tbody id="portsTableBody"></tbody>
+        </table>
+    </div>
+    <div class="empty" id="portsEmpty">
+        {{ icon('activity') }}
+        <h3>Нет данных о портах</h3>
+        <p>Нажмите «Опросить по SNMP» или включите периодический опрос в настройках.</p>
+    </div>
+</div>
+
+<!-- Параметры коммутатора -->
+<aside class="drawer sidebar" id="sidebar" aria-label="Параметры коммутатора">
+    <div class="drawer-header">
+        <h2 style="font-size:15px">Параметры</h2>
+        <button type="button" class="modal-close" onclick="toggleMenu()" aria-label="Закрыть">&times;</button>
+    </div>
+    <div class="drawer-body sidebar-content">
+        <div class="field-name">
+            <label class="label" for="nameInput" style="margin-top:0">Название</label>
+            <input type="text" name="name" id="nameInput" value="{{ switch['name'] }}" readonly>
+        </div>
+
+        <div class="section">
+            <div class="section-header" onclick="toggleSection('switch')">
+                <span class="section-title">{{ icon('server') }} Коммутатор</span>
+                <span class="section-arrow" id="arrow-switch">▼</span>
+            </div>
+            <div class="section-content" id="content-switch">
+                <label class="label" for="portCountInput">Количество портов</label>
+                <input type="number" name="port_count" id="portCountInput" value="{{ switch['ports'] }}" min="1" max="96" readonly>
+
+                <label class="label" for="layoutSelect">Расположение портов</label>
+                <select id="layoutSelect" disabled>
+                    <option value="single">1 строка</option>
+                    <option value="double">2 строки (шахматно)</option>
+                </select>
+
+                <label class="label">Подключения портов</label>
+                <div id="connectionsList"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header" onclick="toggleSection('patch')">
+                <span class="section-title">{{ icon('panel') }} Патч-панели</span>
+                <span class="section-arrow" id="arrow-patch">▼</span>
+            </div>
+            <div class="section-content" id="content-patch">
+                <div id="patchPanelsList"></div>
+                <button type="button" onclick="addPatchPanel()" id="addPatchPanelBtn" class="btn btn-sm btn-block" style="margin-top:8px" disabled>
+                    {{ icon('plus') }} Добавить патч-панель
+                </button>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header" onclick="toggleSection('monitor')">
+                <span class="section-title">{{ icon('activity') }} Мониторинг и SNMP</span>
+                <span class="section-arrow" id="arrow-monitor">▼</span>
+            </div>
+            <div class="section-content" id="content-monitor">
+                <label class="label" for="ipInput">IP-адрес</label>
+                <input type="text" id="ipInput" value="{{ switch['ip_address'] or '' }}" placeholder="192.168.1.1" readonly>
+
+                <label class="label" for="snmpVersionSelect">Версия SNMP</label>
+                <select id="snmpVersionSelect" disabled onchange="updateSnmpFieldsVisibility()">
+                    <option value="2c">v2c (community)</option>
+                    <option value="3">v3 (пользователь и пароли)</option>
+                </select>
+
+                <div id="snmpV2Fields">
+                    <label class="label" for="snmpInput">Community</label>
+                    <input type="text" id="snmpInput" value="{{ switch['snmp_community'] or 'public' }}" placeholder="public" readonly>
+                </div>
+
+                <div id="snmpV3Fields" hidden>
+                    <label class="label" for="snmpV3User">Пользователь</label>
+                    <input type="text" id="snmpV3User" value="{{ switch['snmp_v3_user'] or '' }}" readonly autocomplete="off">
+
+                    <label class="label" for="snmpV3AuthProto">Аутентификация</label>
+                    <select id="snmpV3AuthProto" disabled>
+                        {% for p in ['none', 'MD5', 'SHA', 'SHA224', 'SHA256', 'SHA384', 'SHA512'] %}
+                        <option value="{{ p }}">{{ 'нет' if p == 'none' else p }}</option>
+                        {% endfor %}
+                    </select>
+                    <input type="password" id="snmpV3AuthKey" readonly autocomplete="new-password" style="margin-top:6px"
+                           placeholder="{{ 'сохранён — оставьте пустым' if switch['snmp_v3_auth_key'] else 'пароль, не менее 8 символов' }}">
+
+                    <label class="label" for="snmpV3PrivProto">Шифрование</label>
+                    <select id="snmpV3PrivProto" disabled>
+                        {% for p in ['none', 'DES', '3DES', 'AES128', 'AES192', 'AES256'] %}
+                        <option value="{{ p }}">{{ 'нет' if p == 'none' else p }}</option>
+                        {% endfor %}
+                    </select>
+                    <input type="password" id="snmpV3PrivKey" readonly autocomplete="new-password" style="margin-top:6px"
+                           placeholder="{{ 'сохранён — оставьте пустым' if switch['snmp_v3_priv_key'] else 'пароль, не менее 8 символов' }}">
+
+                    <label class="label" for="snmpV3Context">Контекст <span class="muted">(обычно пусто)</span></label>
+                    <input type="text" id="snmpV3Context" value="{{ switch['snmp_v3_context'] or '' }}" readonly
+                           placeholder="например, vlan-10 для Cisco">
+                </div>
+
+                <div class="stack-btns">
+                    <button type="button" class="btn btn-sm btn-block" onclick="checkSwitchStatus()" id="pingBtn">{{ icon('activity') }} Проверить доступность</button>
+                    <button type="button" class="btn btn-sm btn-block" onclick="testSNMP()" id="snmpTestBtn">{{ icon('plug') }} Проверить SNMP</button>
+                    <div id="snmpTestResult" class="snmp-test-result" hidden></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header" onclick="toggleSection('vlan')">
+                <span class="section-title">{{ icon('tag') }} VLAN</span>
+                <span class="section-arrow" id="arrow-vlan">▼</span>
+            </div>
+            <div class="section-content" id="content-vlan">
+                <label class="label" for="vlanFilterSelect">Показать на схеме</label>
+                <select id="vlanFilterSelect" onchange="onVlanFilterChange()">
+                    <option value="">Все порты</option>
+                </select>
+
+                <label class="label">Обнаруженные VLAN</label>
+                <div id="vlanList"><div class="empty-note">Нет данных. Опросите коммутатор по SNMP.</div></div>
+                <div class="subtle-note">Клик по цветному квадрату — назначить цвет VLAN.</div>
+            </div>
+        </div>
+    </div>
+</aside>
+
+<input type="hidden" name="connections" id="connectionsInput">
+<input type="hidden" name="layout" id="layoutHidden">
+<input type="hidden" name="patch_panels" id="patchPanelsInput">
+<input type="hidden" name="port_types" id="portTypesInput">
+<input type="hidden" name="trunk_ports" id="trunkPortsInput">
+</form>
+
+<!-- Статистика -->
+<div id="statsModal" role="dialog" aria-modal="true" aria-labelledby="statsTitle">
+    <div class="stats-modal-content">
+        <div class="stats-modal-header">
+            <h2 id="statsTitle">{{ icon('chart') }} Статистика · {{ switch['name'] }}</h2>
+            <button type="button" class="stats-modal-close" onclick="closeStatsModal()" title="Закрыть" aria-label="Закрыть">&times;</button>
+        </div>
+        <div class="stats-modal-body">
+            <div class="stats-toolbar">
+                <button type="button" class="btn btn-primary btn-sm refresh-stats-btn" onclick="refreshStatsData()" id="refreshStatsBtn" title="Выполнить SNMP-опрос коммутатора">{{ icon('refresh') }} Обновить данные</button>
+                <span class="stats-last-poll" id="statsLastPoll"></span>
+                <span class="grow"></span>
+                <div class="segmented" id="statsPeriod" role="tablist" aria-label="Период графиков">
+                    <button type="button" data-period="1h">1 ч</button>
+                    <button type="button" data-period="6h">6 ч</button>
+                    <button type="button" data-period="24h">24 ч</button>
+                    <button type="button" data-period="7d">7 д</button>
+                    <button type="button" data-period="30d">30 д</button>
+                    <button type="button" data-period="1y">1 г</button>
+                </div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>{{ icon('cpu') }} CPU</h3>
+                    <div class="stat-value" id="cpuValue">—</div>
+                    <div class="stat-label">Загрузка процессора</div>
+                </div>
+                <div class="stat-card">
+                    <h3>{{ icon('memory') }} RAM</h3>
+                    <div class="stat-value" id="ramValue">—</div>
+                    <div class="stat-label">Использование памяти</div>
+                </div>
+                <div class="stat-card">
+                    <h3>{{ icon('thermo') }} Температура</h3>
+                    <div class="stat-value" id="tempValue">—</div>
+                    <div class="stat-label">Датчики устройства</div>
+                </div>
+            </div>
+
+            <div id="duplicateAlert" style="display:none;" class="alert-box">
+                <h4>Обнаружены дублирующиеся MAC-адреса — возможна петля в сети</h4>
+                <div id="duplicateList"></div>
+            </div>
+
+            <div class="chart-container">
+                <h3>{{ icon('activity') }} Состояние коммутатора</h3>
+                <div class="chart-wrapper">
+                    <canvas id="healthChart"></canvas>
+                    <div class="stats-empty" id="healthEmpty" hidden>Истории пока нет — нажмите «Обновить данные», чтобы опросить коммутатор.</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3>{{ icon('chart') }} Скорость трафика порта</h3>
+                <div class="port-selector">
+                    <select id="portSelectStats" onchange="loadPortTraffic()">
+                        <option value="">Выберите порт...</option>
+                    </select>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="trafficChart"></canvas>
+                    <div class="stats-empty" id="trafficEmpty">Выберите порт, чтобы увидеть скорость трафика.</div>
+                </div>
+                <div class="stats-last-poll traffic-summary" id="trafficSummary"></div>
+            </div>
+
+            <div class="chart-container" id="poeContainer" style="display:none;">
+                <h3>{{ icon('zap') }} PoE</h3>
+                <div class="poe-grid" id="poeGrid"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Результаты SNMP-опроса -->
+<div id="snmpPanel" aria-label="Результаты SNMP-опроса">
+    <div class="snmp-header">
+        <h3>Порты и устройства (SNMP)</h3>
+        <button type="button" class="modal-close" onclick="document.getElementById('snmpPanel').classList.remove('visible')" aria-label="Закрыть">&times;</button>
+    </div>
+    <div id="snmpContent">
+        <div class="snmp-message">Нажмите «Опросить по SNMP»</div>
+    </div>
+</div>
+
+<!-- Контекстное меню порта -->
+<div id="portTypeMenu">
+    <div class="menu-title">Тип порта</div>
+    <button type="button" id="menuRJ45" onclick="setPortType('rj45')">RJ-45 (медь)</button>
+    <button type="button" id="menuSFP" onclick="setPortType('sfp')">SFP (оптика)</button>
+    <hr>
+    <button type="button" id="menuTrunk" onclick="toggleTrunk()">Назначить транк</button>
+    <hr>
+    <button type="button" id="menuAssignDirect" onclick="assignDirectPort()">Назначить напрямую…</button>
+</div>
+
+<div id="tooltip" class="tooltip"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Данные страницы для /static/switch_view.js (всё через tojson — безопасно для JS)
+const SWITCH_ID = {{ switch['id']|tojson }};
+const SWITCH_IP = {{ (switch['ip_address'] or '')|tojson }};
+// Настройки SNMP без паролей: в браузер попадает только факт, что пароль сохранён
+const SNMP_CFG = {{ {
+    'version': switch['snmp_version'] or '2c',
+    'auth_proto': switch['snmp_v3_auth_proto'] or 'none',
+    'priv_proto': switch['snmp_v3_priv_proto'] or 'none',
+    'has_auth_key': (switch['snmp_v3_auth_key'] or '') != '',
+    'has_priv_key': (switch['snmp_v3_priv_key'] or '') != ''
+}|tojson }};
+const SWITCH_DATA = {{ {
+    'ports': switch['ports'],
+    'patch_panels': switch['patch_panels'],
+    'connections': switch['connections'],
+    'layout': switch['switch_layout'],
+    'port_types': switch['port_types'],
+    'trunk_ports': switch['trunk_ports'],
+    'port_vlans': switch['port_vlans'],
+    'vlan_colors': switch['vlan_colors']
+}|tojson }};
+// devices: id, switch_id, port_number, ip, mac, hostname, is_online, last_seen, notes
+const SAVED_DEVICES = {
+    {% for d in devices %}
+    {{ d[2]|tojson }}: { id: {{ d[0]|tojson }}, ip: {{ (d[3] or '')|tojson }}, mac: {{ (d[4] or '')|tojson }},
+        hostname: {{ (d[5] or '')|tojson }}, is_online: {{ (d[6] or 0)|tojson }},
+        last_seen: {{ (d[7] or '')|tojson }}, notes: {{ (d[8] or '')|tojson }} },
+    {% endfor %}
+};
+</script>
+<!-- Chart.js — асинхронно, чтобы медленный CDN не задерживал страницу; pdfmake грузится только при экспорте в PDF -->
+<script async src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" id="chartjsScript"></script>
+<script src="/static/switch_view.js"></script>
+{% endblock %}
