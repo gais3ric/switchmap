@@ -1775,6 +1775,27 @@ def snmp_value_text(value):
         return str(value)
 
 
+def snmp_id_text(value):
+    """LLDP chassis/port ID: часто это MAC в виде 6 байт — показываем aa:bb:cc:dd:ee:ff, а не «кракозябры»."""
+    raw = None
+    if isinstance(value, bytes):
+        raw = value
+    elif hasattr(value, "asOctets"):
+        try:
+            raw = bytes(value.asOctets())
+        except Exception:
+            raw = None
+    if raw is not None and raw and not all(32 <= b < 127 for b in raw):
+        try:
+            text = raw.decode("utf-8")
+            if text.isprintable():
+                return text.strip()
+        except UnicodeDecodeError:
+            pass
+        return ":".join(f"{b:02x}" for b in raw)
+    return snmp_value_text(value)
+
+
 def poll_switch_lldp(ip, community):
     """
     Read standard IEEE 802.1AB LLDP remote-neighbor information.
@@ -1803,8 +1824,8 @@ def poll_switch_lldp(ip, community):
         return {key(oid): snmp_value_text(val) for oid, val in (rows or [])}
 
     local = build(local_data)
-    chassis = build(chassis_data)
-    remote_port = build(port_data)
+    chassis = {key(oid): snmp_id_text(val) for oid, val in (chassis_data or [])}
+    remote_port = {key(oid): snmp_id_text(val) for oid, val in (port_data or [])}
     remote_desc = build(port_desc_data)
     remote_name = build(sysname_data)
 

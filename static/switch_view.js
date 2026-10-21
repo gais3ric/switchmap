@@ -292,7 +292,9 @@ function renderRack() {
 function renderSwitch() {
     const div = document.createElement("div");
     div.className = "device switch";
-    div.innerHTML = `<h3>Switch</h3><div id="switchPorts"></div>`;
+    // Больше 24 портов в ряду (48+4 в два ряда) — порты компактнее, чтобы ряд не переносился
+    if ((state.layout === "double" ? Math.ceil(state.switchPortsCount / 2) : state.switchPortsCount) > 24) div.classList.add("dense");
+    div.innerHTML = `<h3>${escapeHtml(t('Коммутатор'))}</h3><div id="switchPorts"></div>`;
     rackContainer.appendChild(div);
     const switchContainer = document.getElementById("switchPorts");
     
@@ -323,6 +325,7 @@ function renderSwitch() {
 function renderPatchPanel(panel) {
     const div = document.createElement("div");
     div.className = "device";
+    if (((panel.layout || 'single') === "double" ? Math.ceil(panel.ports / 2) : panel.ports) > 24) div.classList.add("dense");
     div.innerHTML = `<h3>${escapeHtml(panel.name)}</h3><div id="patchPorts-${panel.id}"></div>`;
     rackContainer.appendChild(div);
     const patchContainer = document.getElementById(`patchPorts-${panel.id}`);
@@ -646,10 +649,10 @@ function renderPortsTable() {
         const vlan = state.portVlans[port];
         const alerts = Object.keys(p.alerts || {});
         const status = !p.up
-            ? '<span class="badge">down</span>'
+            ? `<span class="badge">${t('нет линка')}</span>`
             : alerts.length
                 ? `<span class="badge badge-danger">${alerts.includes('util') ? t('перегрузка') : t('ошибки')}</span>`
-                : '<span class="badge badge-success">up</span>';
+                : `<span class="badge badge-success">${t('активен')}</span>`;
         const util = (p.up && typeof p.util === 'number')
             ? `<div class="util-inline"><div class="meter"><span style="width:${Math.min(p.util, 100)}%;background:${utilLevelColor(p.util)}"></span></div><span class="num">${p.util.toFixed(1)}%</span></div>`
             : '<span class="muted">—</span>';

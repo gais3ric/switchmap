@@ -148,7 +148,7 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
                     <td>
                         {% if sw.polled %}
                         <div class="ports-cell">
-                            <span class="num">{{ sw.ports_up }} / {{ sw.ports_seen }} up</span>
+                            <span class="num">{{ _('{up} / {total} активны', up=sw.ports_up, total=sw.ports_seen) }}</span>
                             <div class="meter"><span style="width: {{ (100 * sw.ports_up / sw.ports_seen)|round(1) }}%"></span></div>
                         </div>
                         {% else %}
