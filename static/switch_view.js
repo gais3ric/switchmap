@@ -1299,9 +1299,11 @@ function showPortTypeMenu(x, y, portNum) {
     document.getElementById('menuSFP').classList.toggle('active', currentType === 'sfp');
     document.getElementById('menuTrunk').classList.toggle('active', !!isTrunk);
     
-    menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
     menu.style.display = 'block';
+    // У края окна меню открывается в обратную сторону, чтобы не уходить за экран
+    const w = menu.offsetWidth, h = menu.offsetHeight, gap = 8;
+    menu.style.left = Math.max(gap, Math.min(x, window.innerWidth - w - gap)) + 'px';
+    menu.style.top = Math.max(gap, y + h > window.innerHeight - gap ? y - h : y) + 'px';
 }
 
 function setPortType(type) {

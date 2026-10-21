@@ -388,30 +388,93 @@ async function dismissUpdate(version) {
 }
 
 // ───────── Подсказки «?» (templates/_help.html) ─────────
-// Наведение и фокус показывают подсказку через CSS; здесь — нажатие (для сенсорных экранов) и выбор стороны,
-// чтобы подсказка не уходила за край окна.
-function placeHelpTip(tip) {
-    tip.classList.remove('pop-below', 'pop-left', 'pop-right');
-    const r = tip.getBoundingClientRect();
-    if (r.top < 140) tip.classList.add('pop-below');
-    if (r.left < 160) tip.classList.add('pop-right');
-    else if (window.innerWidth - r.right < 160) tip.classList.add('pop-left');
+// Текст подсказки показывается в одном общем окошке поверх всей страницы (position: fixed в <body>):
+// внутри панелей, окон и таблиц с прокруткой встроенную подсказку обрезал бы край контейнера.
+// Наведение, фокус (Tab) и нажатие (сенсорные экраны) открывают; уход мыши, Esc, прокрутка — закрывают.
+const helpPopover = (() => {
+    const el = document.createElement('div');
+    el.id = 'helpPopover';
+    el.className = 'help-pop help-pop-floating';
+    el.setAttribute('role', 'tooltip');
+    el.hidden = true;
+    document.body.appendChild(el);
+    return el;
+})();
+let helpTipCurrent = null, helpTipHideTimer = null, helpTipPinned = false;
+
+function showHelpTip(tip, pinned = false) {
+    clearTimeout(helpTipHideTimer);
+    const src = tip.querySelector('.help-pop');
+    if (!src) return;
+    if (helpTipCurrent !== tip) {
+        helpPopover.replaceChildren(...[...src.childNodes].map(n => n.cloneNode(true)));
+        helpPopover.querySelectorAll('a').forEach(a => a.removeAttribute('tabindex'));
+    }
+    if (helpTipCurrent && helpTipCurrent !== tip) helpTipCurrent.classList.remove('is-open');
+    helpTipCurrent = tip;
+    helpTipPinned = pinned;
+    tip.classList.add('is-open');
+    tip.setAttribute('aria-describedby', 'helpPopover');
+    helpPopover.hidden = false;
+    // Сверху от «?», если помещается, иначе снизу; по горизонтали — по центру, но не за край окна
+    const r = tip.getBoundingClientRect(), w = helpPopover.offsetWidth, h = helpPopover.offsetHeight, gap = 8;
+    let top = r.top - h - gap;
+    if (top < gap) top = Math.min(r.bottom + gap, window.innerHeight - h - gap);
+    const left = Math.max(gap, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - gap));
+    helpPopover.style.left = `${Math.round(left)}px`;
+    helpPopover.style.top = `${Math.round(Math.max(gap, top))}px`;
 }
-document.addEventListener('mouseover', e => { const tip = e.target.closest('.help-tip'); if (tip) placeHelpTip(tip); });
-document.addEventListener('focusin', e => { const tip = e.target.closest('.help-tip'); if (tip) placeHelpTip(tip); });
+
+function hideHelpTip(delay = 0) {
+    clearTimeout(helpTipHideTimer);
+    const hide = () => {
+        helpPopover.hidden = true;
+        if (helpTipCurrent) {
+            helpTipCurrent.classList.remove('is-open');
+            helpTipCurrent.removeAttribute('aria-describedby');
+        }
+        helpTipCurrent = null;
+        helpTipPinned = false;
+    };
+    if (delay) helpTipHideTimer = setTimeout(hide, delay); else hide();
+}
+
+document.addEventListener('mouseover', e => {
+    const tip = e.target.closest('.help-tip');
+    if (tip) showHelpTip(tip, helpTipPinned && helpTipCurrent === tip);
+    else if (e.target.closest('#helpPopover')) clearTimeout(helpTipHideTimer);
+});
+document.addEventListener('mouseout', e => {
+    if (helpTipPinned || !helpTipCurrent) return;
+    const from = e.target.closest('.help-tip, #helpPopover');
+    const to = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.help-tip, #helpPopover');
+    if (from && from !== to) hideHelpTip(200);  // пауза — чтобы успеть перевести мышь на ссылку «Подробнее»
+});
+document.addEventListener('focusin', e => {
+    const tip = e.target.closest('.help-tip');
+    if (tip) showHelpTip(tip);
+    else if (helpTipCurrent && !e.target.closest('#helpPopover')) hideHelpTip();
+});
 document.addEventListener('click', e => {
     const tip = e.target.closest('.help-tip');
-    if (tip && !e.target.closest('.help-pop a')) {
+    if (tip) {
+        // «?» часто стоит в заголовке, который сам что-то делает по клику (раскрывает секцию) — не передаём клик
         e.preventDefault();
         e.stopPropagation();
-        placeHelpTip(tip);
-        tip.classList.toggle('is-open');
+        if (helpTipCurrent === tip && helpTipPinned) hideHelpTip(); else showHelpTip(tip, true);
+    } else if (helpTipCurrent && !e.target.closest('#helpPopover')) {
+        hideHelpTip();
     }
-    document.querySelectorAll('.help-tip.is-open').forEach(x => { if (x !== tip) x.classList.remove('is-open'); });
 }, true);
 document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') document.querySelectorAll('.help-tip.is-open').forEach(x => x.classList.remove('is-open'));
-});
+    if (e.key === 'Escape' && helpTipCurrent) { e.stopPropagation(); hideHelpTip(); }
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && e.target.classList.contains('help-tip')) {
+        e.preventDefault();
+        showHelpTip(e.target, true);
+    }
+}, true);
+window.addEventListener('scroll', () => { if (helpTipCurrent) hideHelpTip(); }, true);
+window.addEventListener('resize', () => { if (helpTipCurrent) hideHelpTip(); });
 
 // ───────── Язык интерфейса (меню пользователя) ─────────
 // "" — как в системе (язык браузера); иначе код языка. Сохраняется в профиле, страница перезагружается.
@@ -563,6 +626,17 @@ document.getElementById('passwordModal')?.addEventListener('click', e => {
     });
 })();
 
+// Выпадающее меню у края узкого экрана сдвигается внутрь, а не уходит за край
+function keepInViewport(el, gap = 8) {
+    if (!el) return;
+    el.style.translate = '';
+    const r = el.getBoundingClientRect();
+    let dx = 0;
+    if (r.right > window.innerWidth - gap) dx = window.innerWidth - gap - r.right;
+    if (r.left + dx < gap) dx = gap - r.left;
+    if (dx) el.style.translate = `${Math.round(dx)}px 0`;
+}
+
 // ───────── Выпадающие меню: <div class="menu-wrap"><button data-menu-toggle>…</button><div class="dropdown">… ─────────
 document.addEventListener('click', e => {
     const toggle = e.target.closest('[data-menu-toggle]');
@@ -571,7 +645,9 @@ document.addEventListener('click', e => {
     });
     if (toggle) {
         e.preventDefault();
-        toggle.closest('.menu-wrap').classList.toggle('open');
+        const wrap = toggle.closest('.menu-wrap');
+        wrap.classList.toggle('open');
+        if (wrap.classList.contains('open')) keepInViewport(wrap.querySelector('.dropdown'));
     } else if (e.target.closest('.dropdown a, .dropdown button')) {
         e.target.closest('.menu-wrap')?.classList.remove('open');
     }

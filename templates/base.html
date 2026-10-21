@@ -32,7 +32,7 @@ window.I18N = {{ js_i18n|tojson }};
             <a href="/maintenance" class="rail-item {{ 'is-active' if active_nav == 'maintenance' }}" data-label="{{ _('Данные и резервные копии') }}" aria-label="{{ _('Данные и резервные копии') }}">{{ icon('database') }}</a>
             {% if is_admin %}<a href="/discover" class="rail-item {{ 'is-active' if active_nav == 'discover' }}" data-label="{{ _('Поиск в сети и импорт из NetBox') }}" aria-label="{{ _('Поиск и импорт') }}">{{ icon('radar') }}</a>{% endif %}
             {% if is_admin %}<a href="/notifications" class="rail-item {{ 'is-active' if active_nav == 'notifications' }}" data-label="{{ _('Уведомления в Telegram и на почту') }}" aria-label="{{ _('Уведомления') }}">{{ icon('send') }}</a>{% endif %}
-            <button type="button" class="rail-item" data-label="{{ _('Поиск устройства  (Ctrl K)') }}" aria-label="{{ _('Поиск') }}"
+            <button type="button" class="rail-item rail-search" data-label="{{ _('Поиск устройства  (Ctrl K)') }}" aria-label="{{ _('Поиск') }}"
                     data-click="focusById" data-args='["netSearchInput"]'>{{ icon('search') }}</button>
         </nav>
         <div class="rail-bottom">

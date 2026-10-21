@@ -44,6 +44,7 @@ BROWSER_SUITES = [
     ("e2e_notify", "e2e_notify.js", "serve_notify.py", False),
     ("e2e_csp", "e2e_csp.js", "serve.py", False),
     ("e2e_lang", "e2e_lang.js", "serve.py", False),
+    ("e2e_tips", "e2e_tips.js", "serve.py", False),
     ("e2e_features", "e2e_features.js", "serve_live.py", True),
     ("e2e_ui", "e2e_ui.js", "serve_live.py", True),
     ("e2e_data", "e2e_data.js", "serve_live.py", True),
