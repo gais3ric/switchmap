@@ -25,6 +25,7 @@ import maintenance
 import netbox
 import notify
 import security
+import updates
 from xlsx import Sheet, write_xlsx, write_csv
 
 log = logging.getLogger("switchmap")
@@ -66,7 +67,7 @@ VIEWER_WRITE_PREFIXES = ("/logout", "/api/port_events/mark_read", "/api/poll_snm
                          "/api/refresh_devices/", "/api/status_bulk", "/api/account/password")
 # Только для администратора даже на чтение: пользователи и скачивание копий базы
 ADMIN_GET_PREFIXES = ("/users", "/api/users", "/api/backups/", "/notifications", "/api/notify",
-                      "/discover", "/api/discovery", "/api/netbox", "/add")
+                      "/discover", "/api/discovery", "/api/netbox", "/add", "/api/update")
 login_throttle = security.LoginThrottle()
 
 
@@ -226,7 +227,9 @@ def security_headers(response):
 def inject_user():
     user = current_user()
     lang = i18n.current_language()
-    return {"current_user": user, "is_admin": bool(user and user["role"] == "admin"),
+    is_admin = bool(user and user["role"] == "admin")
+    return {"current_user": user, "is_admin": is_admin,
+            "update_info": updates.status(DB, APP_VERSION) if is_admin else None,
             "csrf_token": session.get("csrf", ""), "csp_nonce": csp_nonce(), "vendor_script": vendor_scripts(),
             "app_version": APP_VERSION, "asset_v": ASSET_VERSION, "lang": lang, "html_lang": i18n.HTML_LANG.get(lang, lang),
             "languages": i18n.LANGUAGES, "user_language": (user or {}).get("language", ""),
@@ -879,7 +882,7 @@ def snmp_walk_ex(ip, auth, oid, timeout=3):
         result = future.result(timeout=timeout * 2 + 5)
         return result, (_humanize_snmp_error(error[0]) if error else None)
     except concurrent.futures.TimeoutError:
-        log.warning("SNMP %s: нет ответа (%s)", ip, oid)
+        log.warning(_s("SNMP {ip}: нет ответа ({oid})", ip=ip, oid=oid))
         return [], _humanize_snmp_error("timeout")
     except Exception as e:
         log.warning("SNMP %s: %s", ip, e)
@@ -1306,7 +1309,7 @@ def poll_switch_health(ip, community):
                 if total_mem > 0:
                     health["ram_usage"] = (used_mem / total_mem) * 100
         except Exception as e:
-            log.debug("Память коммутатора не разобрана: %s", e)
+            log.debug(_s("Память коммутатора не разобрана: {error}", error=e))
 
     # Температура
     if temp_data and not isinstance(temp_data, dict):
@@ -1556,6 +1559,8 @@ def get_settings():
     # Язык сервера: журнал, события, уведомления, экспорт по расписанию. "" — язык системы сервера
     lang = rows.get("server_language", "")
     settings["server_language"] = lang if lang in i18n.LANGUAGES else ""
+    # Проверка новых версий (раз в день, GitHub); SWITCHMAP_UPDATE_CHECK=0 запрещает её совсем
+    settings["update_check"] = rows.get("update_check", "1") == "1" and updates.allowed()
     return settings
 
 
@@ -1564,6 +1569,8 @@ def save_settings(updates):
     values = []
     if "poll_enabled" in updates:
         values.append(("poll_enabled", "1" if updates["poll_enabled"] else "0"))
+    if "update_check" in updates:
+        values.append(("update_check", "1" if updates["update_check"] else "0"))
     for key, default, lo, hi in INT_SETTINGS:
         if key in updates:
             values.append((key, str(_int_setting(updates[key], default, lo, hi))))
@@ -1594,7 +1601,7 @@ def scheduled_poll_all_switches():
             try:
                 poll_switch_and_log_events(switch_id)
             except Exception as e:
-                log.exception("Периодический опрос: ошибка опроса коммутатора %s: %s", switch_id, e)
+                log.exception(_s("Периодический опрос: ошибка опроса коммутатора {id}: {error}", id=switch_id, error=e))
     finally:
         _periodic_poll_running.clear()
     # События всех коммутаторов этого опроса — одним сообщением
@@ -1640,11 +1647,16 @@ def auto_backup_if_due(reason="auto", max_age_hours=23):
     return name
 
 
+def scheduled_update_check():
+    if get_settings()["update_check"]:
+        updates.check(DB, APP_VERSION)
+
+
 def _safe_job(fn, *args, **kwargs):
     try:
         fn(*args, **kwargs)
     except Exception as e:
-        log.exception("Фоновая задача %s: %s", fn.__name__, e)
+        log.exception(_s("Фоновая задача {name}: {error}", name=fn.__name__, error=e))
 
 
 def apply_scheduler_settings():
@@ -1671,6 +1683,14 @@ def apply_scheduler_settings():
     # NetBox: имена и IP связанных коммутаторов (если включено в настройках NetBox)
     scheduler.add_job(_safe_job, "interval", hours=1, args=[scheduled_netbox_sync],
                       id="netbox_sync", replace_existing=True, max_instances=1, coalesce=True)
+    # Новые версии: раз в день, первая проверка — через пару минут после запуска
+    if settings["update_check"]:
+        if not scheduler.get_job("update_check"):
+                scheduler.add_job(_safe_job, "interval", hours=24, args=[scheduled_update_check], id="update_check",
+                              replace_existing=True, max_instances=1, coalesce=True,
+                              next_run_time=datetime.now() + timedelta(minutes=2))
+    elif scheduler.get_job("update_check"):
+        scheduler.remove_job("update_check")
     # Уведомления: события ручных опросов и повторные попытки после ошибок сети
     scheduler.add_job(_safe_job, "interval", minutes=1, args=[dispatch_notifications],
                       id="notify", replace_existing=True, max_instances=1, coalesce=True)
@@ -1692,7 +1712,7 @@ def prepare_database():
             stored = 0
         if stored < SCHEMA_VERSION:
             name = maintenance.create_backup(DB, "pre-migrate")
-            log.info("Резервная копия перед обновлением базы: %s", os.path.join(maintenance.backups_dir(DB), name))
+            log.info(_s("Резервная копия перед обновлением базы: {path}", path=os.path.join(maintenance.backups_dir(DB), name)))
         migrate_db()
     with sqlite3.connect(DB) as conn:
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('schema_version', ?) "
@@ -1704,14 +1724,24 @@ def prepare_database():
     finally:
         conn.close()
     if mode != "wal":
-        log.warning("Режим WAL для базы не включён (%s): при нагрузке возможны задержки", mode)
+        log.warning(_s("Режим WAL для базы не включён ({mode}): при нагрузке возможны задержки", mode=mode))
     i18n.set_server_language(get_settings()["server_language"])
     encrypted = security.encrypt_plaintext_snmp_keys(DB, SECRET_BOX)
     if encrypted:
-        log.info("Зашифровано паролей SNMPv3: %s", encrypted)
+        log.info(_s("Зашифровано паролей SNMPv3: {n}", n=encrypted))
     _safe_job(auto_backup_if_due, "startup")
     # Первое обслуживание — в фоне, чтобы не задерживать запуск (на большой базе это может занять время)
     threading.Thread(target=_safe_job, args=(run_maintenance,), daemon=True).start()
+
+
+def load_server_language():
+    """Язык сервера из настроек — для журнала до prepare_database (новой базы ещё может не быть)."""
+    try:
+        with sqlite3.connect(f"file:{DB}?mode=ro", uri=True) as conn:
+            row = conn.execute("SELECT value FROM app_settings WHERE key='server_language'").fetchone()
+        i18n.set_server_language(row[0] if row and row[0] in i18n.LANGUAGES else "")
+    except sqlite3.Error:
+        pass
 
 
 def init_scheduler():
@@ -1721,7 +1751,7 @@ def init_scheduler():
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
     except ImportError:
-        log.error("APScheduler не установлен — периодический опрос не работает. Выполните: pip install apscheduler")
+        log.error(_s("APScheduler не установлен — периодический опрос не работает. Выполните: pip install apscheduler"))
         return
     scheduler = BackgroundScheduler(daemon=True)
     scheduler.start()
@@ -2253,7 +2283,7 @@ def api_topology():
     try:
         return jsonify(collect_topology())
     except Exception as e:
-        log.exception("Топология: %s", e)
+        log.exception(_s("Топология: {error}", error=e))
         return jsonify({"error": str(e), "nodes": [], "links": []}), 500
 
 
@@ -3069,7 +3099,7 @@ def api_refresh_devices(switch_id):
                 dev_id, online = future.result()
                 results[dev_id] = online
             except Exception as e:
-                log.warning("Ping устройства: %s", e)
+                log.warning(_s("Ping устройства: {error}", error=e))
 
     # Последовательная запись в БД — один писатель, изолированная транзакция
     with sqlite3.connect(DB, timeout=10, isolation_level='IMMEDIATE') as conn:
@@ -3171,7 +3201,7 @@ SETTING_LABELS = {
     "alert_cpu_percent": N_("Порог CPU, %"), "alert_temp_c": N_("Порог температуры, °C"),
     "retention_raw_days": N_("Хранить сырые данные, дней"), "retention_hourly_days": N_("Хранить почасовые данные, дней"),
     "retention_events_days": N_("Хранить события, дней"), "backup_auto": N_("Автокопия базы"), "backup_keep": N_("Хранить копий"),
-    "server_language": N_("Язык журнала и уведомлений"),
+    "server_language": N_("Язык журнала и уведомлений"), "update_check": N_("Проверка обновлений"),
 }
 
 
@@ -3180,7 +3210,7 @@ def api_save_settings():
     """Частичное обновление: меняются только переданные ключи."""
     data = request.json or {}
     before = get_settings()
-    known = {"poll_enabled", "server_language"} | {k for k, *_rest in INT_SETTINGS}
+    known = {"poll_enabled", "server_language", "update_check"} | {k for k, *_rest in INT_SETTINGS}
     save_settings({k: v for k, v in data.items() if k in known})
     after = get_settings()
     apply_scheduler_settings()
@@ -3196,6 +3226,26 @@ def api_save_settings():
     if changes:
         audit.log(DB, "settings", actor=current_actor(), summary=audit.summarize(changes), changes=changes)
     return jsonify(after)
+
+
+@app.route("/api/update")
+def api_update_status():
+    return jsonify(updates.status(DB, APP_VERSION))
+
+
+@app.route("/api/update/check", methods=["POST"])
+def api_update_check():
+    """«Проверить сейчас» — работает и при выключенной ежедневной проверке, но не при SWITCHMAP_UPDATE_CHECK=0."""
+    if not updates.allowed():
+        return jsonify({"ok": False, "error": _("Проверка обновлений отключена в файле настроек сервера")}), 403
+    return jsonify(updates.check(DB, APP_VERSION))
+
+
+@app.route("/api/update/dismiss", methods=["POST"])
+def api_update_dismiss():
+    """Скрыть напоминание об этой версии (о следующей — напомнит снова)."""
+    updates.dismiss(DB, str((request.get_json(silent=True) or {}).get("version", ""))[:20])
+    return jsonify({"ok": True})
 
 
 # ─────────────────────────────────────────
@@ -3892,19 +3942,21 @@ def serve_forever():
     port = int(os.environ.get("SWITCHMAP_PORT", "5000"))
     threads = max(4, int(os.environ.get("SWITCHMAP_THREADS", "8")))
     log_file = config.setup_logging(DATA_DIR)
-    log.info("SwitchMap %s, данные: %s, настройки: %s, журнал: %s", APP_VERSION, DATA_DIR,
-             CONFIG_FILE or "нет файла (значения по умолчанию)", log_file or "только консоль")
+    load_server_language()  # журнал — на языке сервера с первой строки
+    log.info(_s("SwitchMap {version}, данные: {data}, настройки: {config}, журнал: {log}", version=APP_VERSION,
+                data=DATA_DIR, config=CONFIG_FILE or _s("нет файла (значения по умолчанию)"),
+                log=log_file or _s("только консоль")))
     prepare_database()
     init_scheduler()
-    log.info("Адрес: http://%s:%s", "localhost" if host in ("127.0.0.1", "0.0.0.0") else host, port)
+    log.info(_s("Адрес: {url}", url=f"http://{'localhost' if host in ('127.0.0.1', '0.0.0.0') else host}:{port}"))
     if security.count_users(DB) == 0:
-        log.info("Первый запуск: откройте адрес выше и создайте администратора.")
+        log.info(_s("Первый запуск: откройте адрес выше и создайте администратора."))
     _stop_on_sigterm()
     try:
         try:
             from waitress import serve
         except ImportError:
-            log.warning("waitress не установлен (pip install waitress) — используется встроенный сервер Flask без отладки.")
+            log.warning(_s("waitress не установлен (pip install waitress) — используется встроенный сервер Flask без отладки."))
             # Отладчик Flask (debug=True) не включаем никогда: он позволяет выполнить код на сервере
             app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
         else:
@@ -3914,7 +3966,7 @@ def serve_forever():
     finally:
         if scheduler is not None:
             scheduler.shutdown(wait=False)
-        log.info("SwitchMap остановлен")
+        log.info(_s("SwitchMap остановлен"))
     return 0
 
 
@@ -3926,10 +3978,13 @@ def main(argv):
         print(_s(USAGE, version=APP_VERSION))
         return 0
     if argv[:1] == ["--paths"]:
-        print(f"Данные:    {DATA_DIR}\nБаза:      {DB}\nКлючи:     {security.secrets_path(DB)}\n"
-              f"Копии:     {maintenance.backups_dir(DB)}\n"
-              f"Настройки: {CONFIG_FILE or config.default_config_path() + ' (файла нет)'}\n"
-              f"Журнал:    {os.environ.get('SWITCHMAP_LOG_DIR') or os.path.join(DATA_DIR, 'logs')}")
+        load_server_language()
+        rows = [(_s("Данные"), DATA_DIR), (_s("База"), DB), (_s("Ключи"), security.secrets_path(DB)),
+                (_s("Копии"), maintenance.backups_dir(DB)),
+                (_s("Настройки"), CONFIG_FILE or config.default_config_path() + " " + _s("(файла нет)")),
+                (_s("Журнал"), os.environ.get("SWITCHMAP_LOG_DIR") or os.path.join(DATA_DIR, "logs"))]
+        width = max(len(k) for k, _v in rows) + 2
+        print("\n".join(f"{k + ':':<{width}}{v}" for k, v in rows))
         return 0
     if len(argv) >= 2 and argv[0] == "reset-password":
         return cli_reset_password(argv[1])

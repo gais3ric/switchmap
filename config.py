@@ -19,7 +19,7 @@ WINDOWS = os.name == "nt"
 
 KNOWN_KEYS = ("SWITCHMAP_HOST", "SWITCHMAP_PORT", "SWITCHMAP_HTTPS", "SWITCHMAP_DATA", "SWITCHMAP_LOG_DIR",
               "SWITCHMAP_LOG_LEVEL", "SWITCHMAP_LOG_CONSOLE", "SWITCHMAP_THREADS", "SWITCHMAP_TELEGRAM_API",
-              "SWITCHMAP_PROXY", "SWITCHMAP_LANG")
+              "SWITCHMAP_PROXY", "SWITCHMAP_LANG", "SWITCHMAP_UPDATE_CHECK", "SWITCHMAP_UPDATE_URL")
 
 
 def _program_data():
@@ -135,7 +135,7 @@ def setup_logging(data, console=True):
         handler.setFormatter(fmt)
         root.addHandler(handler)
     except OSError as e:
-        print(f"Журнал в файл недоступен ({log_dir}): {e}", file=sys.stderr)
+        print(f"Log file unavailable / Журнал в файл недоступен ({log_dir}): {e}", file=sys.stderr)  # i18n: ignore
         log_file = None
     # Служба Windows пишет консоль в свой файл — там журнал не нужен второй раз (SWITCHMAP_LOG_CONSOLE=0)
     console = console and os.environ.get("SWITCHMAP_LOG_CONSOLE", "1") != "0"

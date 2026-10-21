@@ -23,7 +23,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 I18N = os.path.join(ROOT, "locales")
 PY_FILES = ["app.py", "audit.py", "config.py", "discovery.py", "maintenance.py", "netbox.py", "notify.py",
-            "security.py", "xlsx.py", "helpdocs.py"]
+            "security.py", "xlsx.py", "helpdocs.py", "updates.py"]
 CYR = re.compile(r"[А-Яа-яЁё]")
 PLURAL_FORMS = {"en": 2, "es": 2, "de": 2, "fr": 2, "zh": 1}
 PY_FUNCS = {"_": 1, "_s": 1, "N_": 1, "_n": 3, "_ns": 3}
@@ -64,10 +64,6 @@ class PyStrings(ast.NodeVisitor):
                 self.messages.append((strs[0], strs if n == 3 else None, node.lineno))
             for a in args:
                 self.wrapped.add(id(a))
-        # Журнал работы и вывод в консоль — для администратора сервера, не переводятся
-        if attr in ("debug", "info", "warning", "error", "exception", "critical") or name in ("print",):
-            for sub in ast.walk(node):
-                self.skip.add(id(sub))
         self.generic_visit(node)
 
     def visit_FunctionDef(self, node):

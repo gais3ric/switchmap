@@ -23,6 +23,11 @@ SWITCHMAP_PORT=5000
 #SWITCHMAP_LOG_LEVEL=INFO
 #SWITCHMAP_LOG_DIR=
 
+# Проверка новых версий (раз в день, GitHub). 0 — запретить совсем (закрытая сеть);
+# включается и выключается также в «Настройках». Свой адрес — зеркало в формате GitHub API.
+#SWITCHMAP_UPDATE_CHECK=0
+#SWITCHMAP_UPDATE_URL=https://api.github.com/repos/gais3ric/switchmap/releases/latest
+
 # Потоков веб-сервера (одновременных запросов)
 #SWITCHMAP_THREADS=8
 

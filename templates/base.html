@@ -44,7 +44,7 @@ window.I18N = {{ js_i18n|tojson }};
             {% if current_user %}
             <div class="menu-wrap user-menu">
                 <button type="button" class="rail-avatar" data-menu-toggle aria-haspopup="true"
-                        title="{{ current_user.username }} · {{ current_user.role_label }}">{{ current_user.username[:2]|upper }}</button>
+                        title="{{ current_user.username }} · {{ current_user.role_label }}">{{ current_user.username[:2]|upper }}{% if update_info and update_info.newer %}<span class="update-dot" title="{{ _('Доступна новая версия') }}"></span>{% endif %}</button>
                 <div class="dropdown" role="menu">
                     <div class="user-card">
                         <b>{{ current_user.username }}</b>
@@ -68,7 +68,8 @@ window.I18N = {{ js_i18n|tojson }};
                         <button type="submit" role="menuitem" id="logoutBtn">{{ icon('open') }} {{ _('Выйти') }}</button>
                     </form>
                     <hr>
-                    <div class="menu-note" id="appVersion">SwitchMap {{ app_version }}</div>
+                    <div class="menu-note" id="appVersion">SwitchMap {{ app_version }}{% if update_info and update_info.newer %}
+                        · <a href="{{ update_info.url }}" target="_blank" rel="noopener noreferrer">{{ _('доступна {v}', v=update_info.latest) }}</a>{% endif %}</div>
                 </div>
             </div>
             {% endif %}
@@ -106,6 +107,14 @@ window.I18N = {{ js_i18n|tojson }};
         </header>
 
         <main class="content {% block content_class %}{% endblock %}">
+            {% if update_info and update_info.show %}
+            <div class="update-bar" id="updateBar" role="status">
+                {{ icon('download') }}
+                <span>{{ _('Доступна новая версия SwitchMap {v} (у вас {current}).', v=update_info.latest, current=update_info.current) }}</span>
+                <a class="btn btn-sm btn-primary" href="{{ update_info.url }}" target="_blank" rel="noopener noreferrer">{{ _('Что нового и скачать') }}</a>
+                <button type="button" class="btn btn-sm btn-ghost" data-click="dismissUpdate" data-args='{{ [update_info.latest]|tojson }}'>{{ _('Скрыть') }}</button>
+            </div>
+            {% endif %}
             {% block content %}{% endblock %}
         </main>
     </div>
@@ -159,6 +168,16 @@ window.I18N = {{ js_i18n|tojson }};
                     {% for code, name in languages.items() %}<option value="{{ code }}">{{ name }}</option>{% endfor %}
                 </select>
                 <div class="hint">{{ _('Общий для всех: на этом языке записываются журнал изменений и события, приходят сообщения в Telegram и на почту. Интерфейс не меняет.') }}</div>
+            </div>
+
+            <div class="modal-section-title">{{ _('Обновления') }}</div>
+            <label class="check" style="margin-bottom:8px">
+                <input type="checkbox" id="updateCheckInput" {{ 'disabled' if update_info and not update_info.allowed }}>
+                {{ _('Проверять наличие новых версий') }}{{ tip(_('Раз в день сервер спрашивает у GitHub номер последней версии. Ничего не скачивается и не устанавливается само, сведения о вашей сети не передаются.'), 'installation', 'update') }}
+            </label>
+            <div class="update-status">
+                <span id="updateStatus" class="hint"></span>
+                <button type="button" class="btn btn-sm" id="updateCheckNow" data-click="checkUpdatesNow" {{ 'disabled' if update_info and not update_info.allowed }}>{{ icon('refresh') }} {{ _('Проверить сейчас') }}</button>
             </div>
         </div>
         <div class="modal-footer">

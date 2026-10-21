@@ -171,10 +171,12 @@ function openSettingsModal() {
                 document.getElementById(id).value = data[key] ?? 0;
             });
             document.getElementById('serverLangInput').value = data.server_language || '';
+            document.getElementById('updateCheckInput').checked = !!data.update_check;
         })
         .catch(() => notify(t('Не удалось загрузить настройки'), 'error'));
     const uiLang = document.getElementById('settingsUiLang');
     uiLang.value = uiLang.dataset.current;
+    fetch('/api/update').then(r => r.json()).then(showUpdateStatus).catch(() => {});
     document.getElementById('settingsModal').classList.add('active');
 }
 
@@ -188,6 +190,8 @@ function saveSettings() {
     if (!poll_interval_minutes || poll_interval_minutes < 1) poll_interval_minutes = 1;
 
     const body = { poll_enabled, poll_interval_minutes, server_language: document.getElementById('serverLangInput').value };
+    const updateCheck = document.getElementById('updateCheckInput');
+    if (!updateCheck.disabled) body.update_check = updateCheck.checked;
     Object.entries(THRESHOLD_INPUTS).forEach(([key, id]) => {
         const v = parseInt(document.getElementById(id).value, 10);
         body[key] = Number.isFinite(v) && v > 0 ? v : 0;
@@ -205,6 +209,39 @@ function saveSettings() {
             notify(t('Настройки сохранены'), 'success');
         })
         .catch(() => notify(t('Не удалось сохранить настройки'), 'error'));
+}
+
+// ───────── Новые версии ─────────
+function showUpdateStatus(s) {
+    const el = document.getElementById('updateStatus');
+    if (!s.allowed) { el.textContent = t('Проверка отключена в файле настроек сервера (SWITCHMAP_UPDATE_CHECK=0).'); return; }
+    let text = t('Установлена версия {v}.', { v: s.current });
+    if (s.newer) text += ' ' + t('Доступна {v}.', { v: s.latest });
+    else if (s.latest) text += ' ' + t('Это последняя версия.');
+    if (s.error) text += ' ' + t('Последняя проверка не удалась: {e}', { e: s.error });
+    else if (s.checked_at) text += ' ' + t('Проверено: {when}', { when: s.checked_at });
+    el.textContent = text;
+}
+
+async function checkUpdatesNow() {
+    const btn = document.getElementById('updateCheckNow');
+    btn.disabled = true;
+    try {
+        const r = await fetch('/api/update/check', { method: 'POST' });
+        const s = await r.json();
+        if (!r.ok) throw new Error(s.error || r.status);
+        showUpdateStatus(s);
+        if (s.newer) notify(t('Доступна новая версия: {v}', { v: s.latest }), 'success');
+    } catch (err) {
+        notify(t('Не удалось проверить обновления: {e}', { e: err.message }), 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function dismissUpdate(version) {
+    try { await fetch('/api/update/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version }) }); } catch (e) { /* не важно */ }
+    document.getElementById('updateBar')?.remove();
 }
 
 // ───────── Подсказки «?» (templates/_help.html) ─────────

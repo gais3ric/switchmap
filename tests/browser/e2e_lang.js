@@ -73,6 +73,29 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
         }
         check('страница входа: выбор языка работает', await page2.evaluate(() => document.documentElement.lang.startsWith('zh')),
               await page2.evaluate(() => document.documentElement.lang));
+        // ── PDF: на китайском — шрифт с иероглифами, на русском — обычный Roboto
+        const pdfFonts = async () => {
+            await page.goto(base + '/switch/1', { waitUntil: 'load' }); await sleep(500);
+            return page.evaluate(async () => {
+                for (const [url, integrity] of PDFMAKE_SCRIPTS) await loadScript(url, integrity);
+                const orig = pdfMake.createPdf;
+                const pdf = await new Promise(resolve => {
+                    pdfMake.createPdf = (...a) => { const d = orig.apply(pdfMake, a); d.download = () => d.getBase64(resolve); return d; };
+                    exportToPDF();
+                });
+                const text = atob(pdf);
+                return { size: text.length, noto: text.includes('NotoSansSC'), roboto: text.includes('Roboto'), pdf };
+            });
+        };
+        await page.evaluate(() => fetch('/api/language', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"language":"zh"}' }));
+        const zh = await pdfFonts();
+        require('fs').writeFileSync(path.join(shots, 'export_zh.pdf'), Buffer.from(zh.pdf, 'base64'));
+        check('PDF на китайском — шрифт Noto Sans SC с иероглифами', zh.noto && zh.size > 5000, { size: zh.size, noto: zh.noto });
+        await page.evaluate(() => fetch('/api/language', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"language":"ru"}' }));
+        const ru = await pdfFonts();
+        check('PDF на русском — Roboto, без лишнего шрифта', ru.roboto && !ru.noto, { size: ru.size, roboto: ru.roboto });
+        await page.evaluate(() => fetch('/api/language', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"language":""}' }));
+
         check('нет ошибок JS', jsErrors.length === 0, jsErrors);
     } catch (e) {
         console.log('СЦЕНАРИЙ УПАЛ: ' + (e.stack || e));

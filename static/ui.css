@@ -820,6 +820,19 @@ a.event-item:hover { background: var(--surface-2); color: var(--text); }
 .help-tip.pop-left .help-pop { left: auto; right: -8px; transform: none; }
 .help-tip.pop-right .help-pop { left: -8px; transform: none; }
 .help-link { font-size: 12.5px; }
+
+/* ── Новая версия ── */
+.update-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 16px; padding: 10px 14px;
+    border: 1px solid var(--accent); border-radius: var(--r); background: var(--accent-soft); color: var(--text); font-size: 13px;
+}
+.update-bar > span { flex: 1 1 220px; }
+.update-bar svg { width: 16px; height: 16px; color: var(--accent-text); flex: none; }
+.rail-avatar { position: relative; }
+.update-dot { position: absolute; top: -1px; right: -1px; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--surface, var(--bg)); }
+.update-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.update-status .hint { flex: 1 1 200px; margin: 0; }
 .first-steps { max-width: 520px; margin: 18px auto 14px; padding-left: 22px; text-align: left; font-size: 13px; color: var(--text-2); line-height: 1.6; }
 .first-steps li { margin: 4px 0; }
 

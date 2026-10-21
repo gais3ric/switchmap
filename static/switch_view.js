@@ -897,6 +897,31 @@ loadPortLoad();
 setInterval(loadPortLoad, LOAD_REFRESH_MS);
 
 
+// Иероглифы, знаки препинания CJK и полноширинные символы
+const CJK_RE = /[\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/;
+const PDF_FONTS = {
+    Roboto: { normal: 'Roboto-Regular.ttf', bold: 'Roboto-Medium.ttf', italics: 'Roboto-Italic.ttf', bolditalics: 'Roboto-MediumItalic.ttf' },
+    NotoSansSC: { normal: 'NotoSansSC-Regular.ttf', bold: 'NotoSansSC-Bold.ttf', italics: 'NotoSansSC-Regular.ttf', bolditalics: 'NotoSansSC-Bold.ttf' },
+};
+
+// Шрифт с иероглифами (2 × 2,5 МБ) загружается только когда нужен — один раз за страницу
+async function loadCjkFont() {
+    if (pdfMake.vfs['NotoSansSC-Regular.ttf']) return;
+    const wait = notify(t('Готовлю PDF…'), 'info', 15000);
+    try {
+        for (const name of ['NotoSansSC-Regular.ttf', 'NotoSansSC-Bold.ttf']) {
+            const r = await fetch('/static/vendor/fonts/' + name);
+            if (!r.ok) throw new Error(r.status);
+            const bytes = new Uint8Array(await r.arrayBuffer());
+            let bin = '';
+            for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            pdfMake.vfs[name] = btoa(bin);
+        }
+    } finally {
+        wait.remove();
+    }
+}
+
 async function exportToPDF() {
     // pdfmake (~1.5 МБ) нужен только здесь — загружаем при первом экспорте, а не с каждой страницей
     if (typeof pdfMake === 'undefined' || !pdfMake.vfs) {
@@ -982,7 +1007,14 @@ async function exportToPDF() {
             defaultStyle: { fontSize: 10 }
         };
         const filename = `${nameInput.value || 'switch'}_${t('схема')}.pdf`;
-        pdfMake.createPdf(docDefinition).download(filename);
+        // В Roboto нет иероглифов: для китайского интерфейса или китайских названий — шрифт Noto Sans SC
+        let fonts;
+        if ((window.I18N || {}).lang === 'zh' || CJK_RE.test(JSON.stringify(docDefinition))) {
+            await loadCjkFont();
+            fonts = PDF_FONTS;
+            docDefinition.defaultStyle.font = 'NotoSansSC';
+        }
+        pdfMake.createPdf(docDefinition, null, fonts).download(filename);
     } catch (error) {
         notify(t('Ошибка при экспорте: ') + error.message, 'error');
     }

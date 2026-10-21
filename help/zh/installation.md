@@ -58,6 +58,7 @@ SwitchMap 以服务方式运行：随系统启动，崩溃后自动重启。
 | `SWITCHMAP_PROXY` | `1`——从代理请求头获取用户地址 |
 | `SWITCHMAP_DATA` | 其他数据文件夹 |
 | `SWITCHMAP_LOG_LEVEL` | 日志详细程度：`DEBUG`、`INFO`、`WARNING` |
+| `SWITCHMAP_UPDATE_CHECK` | `0`：不检查新版本（隔离网络） |
 
 在 Linux 上，设置 `SWITCHMAP_HOST=0.0.0.0` 后，还需在防火墙中开放端口：`sudo firewall-cmd --permanent --add-port=5000/tcp && sudo firewall-cmd --reload`（RHEL）或 `sudo ufw allow 5000/tcp`（Ubuntu）。
 
@@ -88,6 +89,8 @@ SwitchMap 本身使用 HTTP。如果有人从其他电脑访问，请在其前�
 # 更新 {#update}
 
 使用同样的安装程序或软件包在旧版本上直接安装新版本。数据和设置会保留，数据库结构变化前会自动备份。版本号显示在个人菜单中。
+
+SwitchMap 每天在 GitHub 上检查一次是否有新版本，并向管理员显示“有新版本可用”提示条及下载页面链接。它不会自行下载或安装任何内容，也不会发送您网络的任何信息。可在 **设置 → 更新** 中关闭检查；在隔离网络中可在配置文件中写入 `SWITCHMAP_UPDATE_CHECK=0` 完全禁止。如需通过代理访问，请设置环境变量 `HTTPS_PROXY`。
 
 # 卸载 {#uninstall}
 

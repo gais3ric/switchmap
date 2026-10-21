@@ -58,6 +58,7 @@ The `switchmap.conf` file contains lines like `KEY=value`. Restart the service a
 | `SWITCHMAP_PROXY` | `1` — take the user's address from the proxy headers |
 | `SWITCHMAP_DATA` | Another data folder |
 | `SWITCHMAP_LOG_LEVEL` | Log detail: `DEBUG`, `INFO`, `WARNING` |
+| `SWITCHMAP_UPDATE_CHECK` | `0`: never check for new versions (isolated network) |
 
 On Linux, to allow network access, after `SWITCHMAP_HOST=0.0.0.0` open the port in the firewall: `sudo firewall-cmd --permanent --add-port=5000/tcp && sudo firewall-cmd --reload` (RHEL) or `sudo ufw allow 5000/tcp` (Ubuntu).
 
@@ -88,6 +89,8 @@ If you already have nginx or IIS, configure a reverse proxy to `http://127.0.0.1
 # Updating {#update}
 
 Install the new version over the old one with the same installer or package. Data and settings are kept, and a backup is made automatically before the database structure changes. The version is shown in the profile menu.
+
+Once a day SwitchMap checks GitHub for a new version and shows administrators an «A new version is available» bar with a link to the download page. It never downloads or installs anything itself, and no information about your network is sent. You can turn the check off in **Settings → Updates**, or forbid it completely on an isolated network with `SWITCHMAP_UPDATE_CHECK=0` in the settings file. To go through a proxy, set the `HTTPS_PROXY` environment variable.
 
 # Uninstalling {#uninstall}
 

@@ -32,6 +32,7 @@ BACKEND = [
     ("notify", "test_notify.py", [], False),
     ("config", "test_config.py", [], False),
     ("i18n", "test_i18n.py", [], False),
+    ("updates", "test_updates.py", [], False),
     ("live", "test_live.py", [], True),
     ("import", "test_import.py", [], True),
 ]
@@ -55,6 +56,8 @@ def env():
     e["PYTHONIOENCODING"] = "utf-8"
     # Тесты проверяют русские тексты: язык сервера — русский (браузер в тестах тоже запускается с --lang=ru-RU)
     e.setdefault("SWITCHMAP_LANG", "ru")
+    # Проверка новых версий в тестах не ходит в интернет (test_updates поднимает свой сервер)
+    e.setdefault("SWITCHMAP_UPDATE_URL", "http://127.0.0.1:9/no-updates")
     return e
 
 
