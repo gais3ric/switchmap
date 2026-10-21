@@ -806,15 +806,15 @@ a.event-item:hover { background: var(--surface-2); color: var(--text); }
 .help-tip:hover, .help-tip:focus, .help-tip.is-open { color: var(--accent-text); border-color: var(--accent); outline: none; }
 .help-pop {
     position: absolute; z-index: 60; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
-    width: max-content; max-width: 300px; padding: 9px 11px; border-radius: var(--r);
+    width: max-content; max-width: min(300px, calc(100vw - 32px)); padding: 9px 11px; border-radius: var(--r);
     font-size: 12.5px; font-weight: 400; line-height: 1.5; text-align: left; white-space: normal; cursor: default;
     color: var(--text); background: var(--surface-3, var(--surface)); border: 1px solid var(--border);
     box-shadow: var(--shadow-lg, 0 8px 24px rgba(0,0,0,.25));
-    opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--dur-1, .12s) var(--ease, ease);
+    display: none;  /* скрытая подсказка не должна занимать место — иначе на узком экране появляется прокрутка */
 }
 .help-pop a { display: inline-block; margin-top: 4px; font-weight: 600; }
 .help-tip:hover .help-pop, .help-tip:focus .help-pop, .help-tip:focus-within .help-pop, .help-tip.is-open .help-pop {
-    opacity: 1; visibility: visible; pointer-events: auto;
+    display: block;
 }
 .help-tip.pop-below .help-pop { bottom: auto; top: calc(100% + 8px); }
 .help-tip.pop-left .help-pop { left: auto; right: -8px; transform: none; }
@@ -880,6 +880,7 @@ a.event-item:hover { background: var(--surface-2); color: var(--text); }
         border-right: 0; border-top: 1px solid var(--border);
     }
     .rail-logo { display: none; }
+    .rail-help { display: none; }  /* справка — в меню профиля и кнопкой «?» в шапке */
     .rail-nav, .rail-bottom { flex-direction: row; flex: 0; }
     .rail-nav { flex: 1; justify-content: space-around; }
     .rail-item[data-label]::after { display: none; }

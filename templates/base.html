@@ -36,7 +36,7 @@ window.I18N = {{ js_i18n|tojson }};
                     data-click="focusById" data-args='["netSearchInput"]'>{{ icon('search') }}</button>
         </nav>
         <div class="rail-bottom">
-            <a href="/help" class="rail-item {{ 'is-active' if active_nav == 'help' }}" data-label="{{ _('Справка') }}" aria-label="{{ _('Справка') }}">{{ icon('book') }}</a>
+            <a href="/help" class="rail-item rail-help {{ 'is-active' if active_nav == 'help' }}" data-label="{{ _('Справка') }}" aria-label="{{ _('Справка') }}">{{ icon('book') }}</a>
             <button type="button" class="rail-item" id="themeToggle" data-label="{{ _('Светлая тема') }}" aria-label="{{ _('Сменить тему') }}" data-click="toggleTheme">
                 <span class="icon-sun">{{ icon('sun') }}</span><span class="icon-moon" hidden>{{ icon('moon') }}</span>
             </button>

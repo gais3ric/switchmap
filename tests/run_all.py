@@ -31,6 +31,7 @@ BACKEND = [
     ("security", "test_security.py", [], False),
     ("notify", "test_notify.py", [], False),
     ("config", "test_config.py", [], False),
+    ("i18n", "test_i18n.py", [], False),
     ("live", "test_live.py", [], True),
     ("import", "test_import.py", [], True),
 ]

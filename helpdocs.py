@@ -72,7 +72,7 @@ def articles(lang):
                 "summary": meta.get("summary", ""), "keywords": meta.get("keywords", ""), "body": body,
                 "text": plain_text(body),
             }
-    order = {c: i for i, (c, _) in enumerate(CATEGORIES)}
+    order = {c: i for i, (c, _title) in enumerate(CATEGORIES)}
     result = sorted(found.values(), key=lambda a: (order.get(a["category"], 99), a["order"], a["title"]))
     _cache[key] = result
     return result

@@ -262,7 +262,8 @@ def js_keys():
         for name in os.listdir(base):
             if name.endswith(ext):
                 with open(os.path.join(base, name), encoding="utf-8") as f:
-                    for m in JS_CALL.finditer(f.read()):
+                    text = re.sub(r"(?m)^\s*//.*$", "", f.read())  # примеры в комментариях — не строки интерфейса
+                    for m in JS_CALL.finditer(text):
                         keys.add(_unescape_js(m.group(2)))
     return sorted(keys)
 

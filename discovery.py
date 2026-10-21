@@ -96,7 +96,7 @@ def parse_targets(text, limit=MAX_HOSTS):
 def parse_lldp_mgmt_ips(rows):
     """IPv4-адреса управления соседей из lldpRemManAddrTable (адрес закодирован в OID)."""
     out = []
-    for oid, _ in rows or []:
+    for oid, _value in rows or []:
         parts = str(oid).split(".")
         # …4.2.1.<col>.<timeMark>.<localPort>.<remIndex>.<subtype>.<len>.<a>.<b>.<c>.<d>
         if len(parts) >= 6 and parts[-6] == "1" and parts[-5] == "4":

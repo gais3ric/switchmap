@@ -337,12 +337,6 @@ def _parse_ts(value):
         return None
 
 
-def _plural(n, one, few, many):
-    if n % 10 == 1 and n % 100 != 11:
-        return one
-    return few if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else many
-
-
 def _duration(minutes):
     minutes = int(round(minutes))
     if minutes < 1:

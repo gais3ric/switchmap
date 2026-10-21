@@ -242,16 +242,6 @@ def api_language():
     return resp
 
 
-@app.template_filter("plural")
-def plural_filter(n, one, few, many):
-    """{{ 24|plural('порт', 'порта', 'портов') }} → «24 порта»."""
-    try:
-        n = int(n or 0)
-    except (TypeError, ValueError):
-        return f"{n} {many}"
-    return f"{n} {notify._plural(n, one, few, many)}"
-
-
 def _safe_next(target):
     """Только относительные адреса внутри приложения (защита от открытого редиректа)."""
     if target and target.startswith("/") and not target.startswith("//") and "\\" not in target:
@@ -2029,7 +2019,7 @@ def create_switch_record(name, ports, ip_address, auth, layout="single", patch_p
             "connections": "{}", "ip_address": ip_address or "", "port_types": "{}", "trunk_ports": "{}",
             "model": model or None, "netbox_id": netbox_id, **snmp_columns(auth)}
     with sqlite3.connect(DB) as conn:
-        cur = conn.execute(f"INSERT INTO switches ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
+        cur = conn.execute(f"INSERT INTO switches ({', '.join(cols)}) VALUES ({', '.join('?' for _c in cols)})",
                            list(cols.values()))
         new_id = cur.lastrowid
         conn.commit()
@@ -3146,7 +3136,7 @@ def api_port_events_mark_read():
                 return jsonify({"error": _("ids должен содержать только числа")}), 400
 
             if validated_ids:
-                placeholders = ",".join("?" for _ in validated_ids)
+                placeholders = ",".join("?" for _v in validated_ids)
                 c.execute(f"UPDATE port_events SET is_read = 1 WHERE id IN ({placeholders})", validated_ids)
         conn.commit()
 
@@ -3722,7 +3712,7 @@ def switch_export_tables(switch_id):
                                FROM mac_table WHERE switch_id=? ORDER BY port_number, mac""", (switch_id,)).fetchall()
     devices = [[p, m, i, h, None, _("привязано вручную"), None, notes, seen] for p, m, i, h, notes, seen in manual]
     devices += [[p, m, i, h, vl, _("SNMP (таблица MAC)"), (cnt or 0) > UPLINK_MAC_THRESHOLD or bool(trunks.get(str(p))), None, seen]
-                for p, m, i, h, vl, cnt, seen, _ in macs]
+                for p, m, i, h, vl, cnt, seen, _unused in macs]
     return sw, {
         "ports": (_("Порты"), [_("Порт"), _("Интерфейс"), _("Описание (ifAlias)"), _("Подключение"), _("Тип"), _("Транк"), _("Статус"),
                             _("Скорость, Мбит/с"), _("Загрузка, %"), _("Вход, Мбит/с"), _("Выход, Мбит/с"), _("Ошибки за интервал"),

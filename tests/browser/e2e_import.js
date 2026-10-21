@@ -90,7 +90,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     console.log('INFO под кнопкой:', await page.$eval('#scanAdd', b => { b.scrollIntoView(); const r = b.getBoundingClientRect(); const el = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return el && (el.id || el.className); }));
     await page.$eval('#scanAdd', b => b.click());
     await page.waitForFunction(() => document.getElementById('scanBody').innerText.includes('добавлен'), { timeout: 15000 }).catch(() => {});
-    check('добавлено — уведомление и отметка в строке', (await lastToast()).includes('Добавлено 1')
+    check('добавлено — уведомление и отметка в строке', (await lastToast()).includes('Добавлен 1')
         && (await page.$eval('#scanBody', el => el.innerText)).includes('добавлен'), await toasts());
     await page.screenshot({ path: path.join(shots, 'i_scan.png'), fullPage: true });
     await page.reload({ waitUntil: 'domcontentloaded' }); await sleep(1200);
