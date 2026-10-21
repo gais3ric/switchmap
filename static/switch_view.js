@@ -1197,11 +1197,12 @@ function renderVlanList() {
         container.innerHTML = t('<div class="empty-note">Нет данных. Опросите коммутатор по SNMP.</div>');
     } else {
         container.innerHTML = ids.map(id => {
-            const color = state.vlanColors[id] || '#666';
-            const name = vlans[id] ? ` — ${vlans[id]}` : '';
+            // Имя VLAN приходит с коммутатора по SNMP — только экранированным
+            const color = escapeAttr(state.vlanColors[id] || '#666');
+            const name = vlans[id] ? ` — ${escapeHtml(vlans[id])}` : '';
             return `<div class="vlan-item">
                 <span class="vlan-swatch" style="background:${color}" data-click="setVlanColor" data-args="${escapeAttr(JSON.stringify([id]))}" title="${escapeAttr(t('Назначить цвет'))}"></span>
-                <span class="vlan-label">VLAN ${id}${name}</span>
+                <span class="vlan-label">VLAN ${escapeHtml(id)}${name}</span>
             </div>`;
         }).join('');
     }

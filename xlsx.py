@@ -137,6 +137,14 @@ def write_xlsx(sheets):
     return buf.getvalue()
 
 
+def _csv_safe(v):
+    """Текст, который Excel принял бы за формулу (=, +, -, @ …), — с апострофом в начале: описания портов
+    и имена приходят с коммутаторов, и «=HYPERLINK(…)» не должен выполниться при открытии файла (OWASP)."""
+    if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r") and v != "-":
+        return "'" + v
+    return v
+
+
 def write_csv(headers, rows):
     """CSV для Excel с русской локалью: разделитель «;», UTF-8 с BOM."""
     import csv
@@ -144,5 +152,6 @@ def write_csv(headers, rows):
     writer = csv.writer(out, delimiter=";", lineterminator="\r\n")
     writer.writerow(headers)
     for row in rows:
-        writer.writerow(["" if v is None else (_("да") if v is True else _("нет") if v is False else v) for v in row])
+        writer.writerow(["" if v is None else (_("да") if v is True else _("нет") if v is False else _csv_safe(v))
+                         for v in row])
     return ("﻿" + out.getvalue()).encode("utf-8")

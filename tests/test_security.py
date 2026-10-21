@@ -277,7 +277,40 @@ src = open(os.path.join(ROOT, "app.py"), encoding="utf-8").read()
 check("debug=True больше нигде не включается", not re.search(r"app\.run\([^)]*debug\s*=\s*True", src))
 check("по умолчанию слушаем только 127.0.0.1", 'os.environ.get("SWITCHMAP_HOST", "127.0.0.1")' in src)
 
+# ── ping: адреса только из базы, без «ключей» команды и без неограниченного числа потоков
+pinged = []
+orig_ping = m.ping_host
+m.ping_host = lambda ip, timeout=1: pinged.append(ip) or True
+with sqlite3.connect(m.DB) as conn:
+    conn.execute("UPDATE switches SET ip_address='10.9.9.9' WHERE id=1")
+    conn.commit()
+v = authed("viewer1", "Viewpass123") if security.get_user(m.DB, viewer_id) and not security.get_user(m.DB, viewer_id)["disabled"] else admin
+r = v.post("/api/status_bulk", json={"switches": [{"id": 1, "ip": "8.8.8.8"}, {"id": 999999, "ip": "1.1.1.1"}]}).get_json()
+check("status_bulk: адрес берётся из базы, а не из запроса", pinged == ["10.9.9.9"] and r == {"1": "online", "999999": "unknown"},
+      (pinged, r))
+pinged.clear()
+t0 = time.time()
+r = v.post("/api/status_bulk", json={"switches": [{"id": i} for i in range(20000)]})
+check("status_bulk: огромный список не запускает тысячи проверок", r.status_code == 200 and len(pinged) <= 1
+      and time.time() - t0 < 10, (len(pinged), round(time.time() - t0, 1)))
+m.ping_host = orig_ping
+check("ping не принимает «-ключи» и мусор вместо адреса",
+      m.ping_host("-t") is False and m.ping_host("1.2.3.4; rm -rf /") is False and m.ping_host("--help") is False)
+
+r = admin.post("/api/set_vlan_color/1", json={"vlan_id": "10", "color": "red;}</style><script>alert(1)</script>"})
+check("цвет VLAN: только #RGB или имя цвета", r.status_code == 400, r.status_code)
+r = admin.post("/api/set_vlan_color/1", json={"vlan_id": "10", "color": "#3fa9f5"})
+check("цвет VLAN #RGB сохраняется", r.status_code == 200, r.status_code)
+sv = open(os.path.join(ROOT, "static", "switch_view.js"), encoding="utf-8").read()
+check("имя VLAN с коммутатора экранируется", "escapeHtml(vlans[id])" in sv)
+
+import xlsx
+csv_text = xlsx.write_csv(["a"], [["=HYPERLINK(\"http://evil\")"], ["@SUM(1)"], ["-"], [-5]]).decode("utf-8-sig")
+check("CSV: формулы из данных коммутатора не выполняются в Excel", "'=HYPERLINK" in csv_text and "'@SUM" in csv_text
+      and "\r\n-\r\n" in csv_text and "\r\n-5\r\n" in csv_text, csv_text)
+
 r = admin.post("/logout")
 check("выход", r.status_code == 302 and admin.get("/").status_code == 302)
 
 print("\nИТОГО:", "все проверки пройдены" if not fails else f"провалено {len(fails)}: {fails}")
+

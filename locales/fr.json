@@ -517,6 +517,7 @@
  "Неактивен": "Inactif",
  "Неверное имя пользователя или пароль": "Nom d’utilisateur ou mot de passe incorrect",
  "Неверный адрес получателя: {bad}": "Adresse de destinataire invalide : {bad}",
+ "Неверный цвет": "Couleur non valide",
  "Недостаточно прав: действие доступно только администратору": "Droits insuffisants : seul un administrateur peut faire cela",
  "Недостаточно прав: раздел доступен только администратору": "Droits insuffisants : cette section est réservée aux administrateurs",
  "Недоступен": "Injoignable",

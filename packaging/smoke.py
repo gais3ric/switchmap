@@ -137,8 +137,15 @@ def run_checks(base, password, snmp, expect_version, ping=True, existing=False):
             check("полный опрос коммутатора (порты, трафик, события)", status == 200 and "error" not in r,
                   {k: r.get(k) for k in ("error", "ports") if k in r} if isinstance(r, dict) else r)
     if ping:
-        status, r = c.json("/api/status_bulk", {"switches": [{"id": 1, "ip": "127.0.0.1"}]})
-        check("ping работает (127.0.0.1 доступен)", r.get("1") == "online", r)
+        # Сервер пингует адреса из базы — нужен коммутатор с адресом 127.0.0.1
+        text = c.request("/")[2]
+        if "127.0.0.1" not in text:
+            c.request("/add", data={"name": "Smoke ping", "ports": "8", "ip_address": "127.0.0.1", "snmp_version": "2c",
+                                    "snmp_community": "public", "has_patch": "0", "csrf_token": c.csrf})
+            text = c.request("/")[2]
+        ids = sorted({int(x) for x in re.findall(r"/switch/(\d+)", text)})
+        status, r = c.json("/api/status_bulk", {"switches": [{"id": i} for i in ids]})
+        check("ping работает (127.0.0.1 доступен)", isinstance(r, dict) and "online" in r.values(), r)
     status, r = c.json("/api/backups", {})
     check("резервная копия создаётся", r.get("ok"), r)
 

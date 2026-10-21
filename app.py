@@ -5,6 +5,7 @@ import sqlite3
 import json
 import logging
 import os
+import re
 import subprocess
 import threading
 import concurrent.futures
@@ -718,9 +719,14 @@ def migrate_db():
 # PING & SNMP HELPERS
 # ─────────────────────────────────────────
 
+_PING_TARGET = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.:\-]{0,252}$")  # IP или имя; не «-ключ» команды ping
+
+
 def ping_host(ip, timeout=1):
     if not ip:
         return None
+    if not _PING_TARGET.match(str(ip)):
+        return False
     try:
         # Кросс-платформенная команда ping
         import platform
@@ -2147,7 +2153,7 @@ def switch_view(switch_id):
         c.execute("SELECT * FROM switches WHERE id=?", (switch_id,))
         switch = c.fetchone()
         if not switch:
-            return "Switch not found", 404
+            return _deny(404, _("Коммутатор не найден"))
         c.row_factory = None
         c.execute("SELECT * FROM devices WHERE switch_id=? ORDER BY port_number", (switch_id,))
         devices_rows = c.fetchall()
@@ -2168,7 +2174,7 @@ def fetch_switch(switch_id):
 def update_switch(switch_id):
     before = fetch_switch(switch_id)
     if before is None:
-        return "Switch not found", 404
+        return _deny(404, _("Коммутатор не найден"))
     connections = request.form.get("connections", "{}")
     name = request.form.get("name", "")
     port_count = request.form.get("port_count")
@@ -2186,7 +2192,7 @@ def update_switch(switch_id):
             conn.row_factory = sqlite3.Row
             current = conn.execute("SELECT * FROM switches WHERE id=?", (switch_id,)).fetchone()
         if current is None:
-            return "Switch not found", 404
+            return _deny(404, _("Коммутатор не найден"))
         f = request.form
         auth = SnmpAuth(
             f.get("snmp_version", "2c"), snmp_community, f.get("snmp_v3_user", "").strip(),
@@ -2323,23 +2329,25 @@ def api_status(switch_id):
 
 @app.route("/api/status_bulk", methods=["POST"])
 def api_status_bulk():
-    data = request.json or {}
-    switches = data.get("switches", [])
-    results = {}
-
-    def check(sw_id, ip):
-        results[sw_id] = "online" if ping_host(ip) else "offline"
-
-    threads = []
-    for sw in switches:
-        if sw.get("ip"):
-            t = threading.Thread(target=check, args=(str(sw["id"]), sw["ip"]))
-            t.start()
-            threads.append(t)
-        else:
-            results[str(sw["id"])] = "unknown"
-    for t in threads:
-        t.join(timeout=5)
+    """Доступность коммутаторов по ping. Адреса — только из базы (браузер присылает лишь номера):
+    иначе любой вошедший мог бы заставить сервер пинговать что угодно и сколько угодно."""
+    data = request.get_json(silent=True) or {}
+    ids = []
+    for sw in (data.get("switches") or [])[:5000]:
+        try:
+            ids.append(int(sw.get("id") if isinstance(sw, dict) else sw))
+        except (TypeError, ValueError):
+            continue
+    results = {str(i): "unknown" for i in ids}
+    if not ids:
+        return jsonify(results)
+    with sqlite3.connect(DB) as conn:
+        rows = conn.execute(f"SELECT id, ip_address FROM switches WHERE id IN ({','.join('?' * len(set(ids)))})",
+                            list(set(ids))).fetchall()
+    targets = [(str(sid), ip) for sid, ip in rows if ip]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+        for sid, online in zip([s for s, _ip in targets], pool.map(lambda t: ping_host(t[1]), targets)):
+            results[sid] = "online" if online else "offline"
     return jsonify(results)
 
 
@@ -3016,6 +3024,8 @@ def api_set_vlan_color(switch_id):
     data = request.json or {}
     vlan_id = str(data.get("vlan_id", "")).strip()
     color = (data.get("color") or "").strip()
+    if color and not re.fullmatch(r"#[0-9A-Fa-f]{3,8}|[A-Za-z]{3,20}", color):
+        return jsonify({"ok": False, "error": _("Неверный цвет")}), 400
     if not vlan_id:
         return jsonify({"error": _("Не указан VLAN ID")}), 400
 
@@ -3861,7 +3871,7 @@ def _file_slug(text):
 def export_switch_xlsx(switch_id):
     res = switch_export_tables(switch_id)
     if not res:
-        return "Switch not found", 404
+        return _deny(404, _("Коммутатор не найден"))
     sw, tables = res
     data = write_xlsx([Sheet(t, h, r) for t, h, r in tables.values()])
     return _download(data, f"{_file_slug(sw['name'])}_{datetime.now():%Y-%m-%d}.xlsx", XLSX_MIME)
@@ -3871,10 +3881,10 @@ def export_switch_xlsx(switch_id):
 def export_switch_csv(switch_id, table):
     res = switch_export_tables(switch_id)
     if not res:
-        return "Switch not found", 404
+        return _deny(404, _("Коммутатор не найден"))
     sw, tables = res
     if table not in tables:
-        return "Unknown table", 404
+        return _deny(404, _("Страница не найдена"))
     _title, headers, rows = tables[table]
     return _download(write_csv(headers, rows), f"{_file_slug(sw['name'])}_{table}_{datetime.now():%Y-%m-%d}.csv",
                      "text/csv")
@@ -3890,7 +3900,7 @@ def export_inventory_xlsx():
 def export_inventory_csv(table):
     tables = inventory_export_tables()
     if table not in tables:
-        return "Unknown table", 404
+        return _deny(404, _("Страница не найдена"))
     _title, headers, rows = tables[table]
     return _download(write_csv(headers, rows), f"switchmap_{table}_{datetime.now():%Y-%m-%d}.csv",
                      "text/csv")
