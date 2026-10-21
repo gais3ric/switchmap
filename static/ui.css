@@ -922,3 +922,20 @@ a.event-item:hover { background: var(--surface-2); color: var(--text); }
 .probe-row { display: flex; gap: 8px; align-items: flex-end; }
 .probe-row > .field, .probe-row > .form-group { flex: 1; min-width: 0; }
 .probe-row > .btn { margin-bottom: 14px; flex-shrink: 0; }
+
+/* ── Окно-форма (formDialog): поля, ошибки, палитра цвета кабеля ── */
+.form-dialog-note { margin: 0 0 14px; color: var(--text-2); white-space: pre-line; font-size: 13px; }
+.field-error { margin-top: 5px; font-size: 12px; color: var(--danger); }
+.field input.is-invalid { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+.field input[type=color] { width: 72px; height: 36px; padding: 3px; cursor: pointer; }
+.swatch-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.swatch {
+    width: 30px; height: 30px; padding: 0; border-radius: 50%; cursor: pointer;
+    background: var(--swatch); border: 2px solid var(--border-strong);
+    box-shadow: inset 0 0 0 2px rgba(0,0,0,.15);
+    transition: transform var(--dur-1, .12s) var(--ease, ease), box-shadow var(--dur-1, .12s) var(--ease, ease);
+}
+.swatch:hover { transform: scale(1.08); }
+.swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.swatch[aria-checked="true"] { border-color: var(--surface, var(--bg)); box-shadow: 0 0 0 2px var(--accent); transform: scale(1.08); }
+.swatch-caption { margin-left: 4px; font-size: 13px; color: var(--text-2); }

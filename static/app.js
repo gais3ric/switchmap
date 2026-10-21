@@ -153,6 +153,149 @@ function confirmDialog(message, { title = t('Подтверждение'), okTex
     });
 }
 
+// ───────── Окно-форма (вместо prompt) ─────────
+// Цвета кабеля: значение — цвет CSS (так они хранятся в подключениях), подпись — на языке интерфейса
+const CABLE_COLORS = [
+    ['gray', t('серый')], ['blue', t('синий')], ['green', t('зелёный')], ['yellow', t('жёлтый')],
+    ['orange', t('оранжевый')], ['red', t('красный')], ['purple', t('фиолетовый')], ['white', t('белый')],
+    ['black', t('чёрный')],
+];
+
+// formDialog({ title, note, okText, fields: [{ name, label, type, value, placeholder, hint, required, min, max }] })
+// type: text (по умолчанию), number, cable-color (палитра), color (выбор цвета #RRGGBB).
+// Возвращает Promise: объект { name: значение } или null, если окно закрыли.
+function formDialog({ title, note = '', okText = 'OK', fields = [] }) {
+    return new Promise(resolve => {
+        const modal = document.getElementById('formModal');
+        const form = document.getElementById('formDialogForm');
+        const box = document.getElementById('formFields');
+        document.getElementById('formTitle').textContent = title;
+        const noteEl = document.getElementById('formNote');
+        noteEl.textContent = note;
+        noteEl.hidden = !note;
+        document.getElementById('formOk').textContent = okText;
+        box.replaceChildren();
+        const getters = {};
+
+        fields.forEach((f, i) => {
+            const wrap = document.createElement('div');
+            wrap.className = 'field';
+            const id = `formField${i}`;
+            const label = document.createElement('label');
+            label.textContent = f.label || '';
+            label.htmlFor = id;
+            wrap.appendChild(label);
+
+            if (f.type === 'cable-color') {
+                const palette = document.createElement('div');
+                palette.className = 'swatch-row';
+                palette.setAttribute('role', 'radiogroup');
+                palette.setAttribute('aria-label', f.label || '');
+                const colors = CABLE_COLORS.slice();
+                if (f.value && !colors.some(([c]) => c === f.value)) colors.push([f.value, f.value]);  // старый свой цвет
+                let current = f.value || colors[0][0];
+                const buttons = colors.map(([value, name]) => {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'swatch';
+                    b.dataset.value = value;
+                    b.setAttribute('role', 'radio');
+                    b.title = name;
+                    b.setAttribute('aria-label', name);
+                    b.style.setProperty('--swatch', value);
+                    b.onclick = () => select(value);
+                    palette.appendChild(b);
+                    return b;
+                });
+                const caption = document.createElement('span');
+                caption.className = 'swatch-caption';
+                const select = value => {
+                    current = value;
+                    buttons.forEach(b => b.setAttribute('aria-checked', String(b.dataset.value === value)));
+                    caption.textContent = (colors.find(([c]) => c === value) || [value, value])[1];
+                };
+                select(current);
+                buttons[0].id = id;
+                palette.appendChild(caption);
+                wrap.appendChild(palette);
+                getters[f.name] = () => current;
+            } else {
+                const input = document.createElement('input');
+                input.id = id;
+                input.name = f.name;
+                input.type = f.type === 'number' ? 'number' : f.type === 'color' ? 'color' : 'text';
+                if (f.placeholder) input.placeholder = f.placeholder;
+                if (f.min !== undefined) input.min = f.min;
+                if (f.max !== undefined) input.max = f.max;
+                if (f.maxlength) input.maxLength = f.maxlength;
+                input.value = f.value ?? '';
+                input.autocomplete = 'off';
+                wrap.appendChild(input);
+                getters[f.name] = () => f.type === 'number' ? input.valueAsNumber : input.value.trim();
+                getters[f.name].input = input;
+            }
+            if (f.hint) {
+                const hint = document.createElement('div');
+                hint.className = 'hint';
+                hint.textContent = f.hint;
+                wrap.appendChild(hint);
+            }
+            const err = document.createElement('div');
+            err.className = 'field-error';
+            err.hidden = true;
+            wrap.appendChild(err);
+            getters[f.name].error = err;
+            box.appendChild(wrap);
+        });
+
+        const done = result => {
+            modal.classList.remove('active');
+            form.onsubmit = modal.onclick = null;
+            document.getElementById('formCancel').onclick = document.getElementById('formClose').onclick = null;
+            document.removeEventListener('keydown', onKey, true);
+            resolve(result);
+        };
+        const onKey = e => {
+            if (e.key === 'Escape') { e.stopPropagation(); done(null); }
+            // Enter на кнопке палитры — тоже «сохранить», а не повторный выбор цвета
+            if (e.key === 'Enter' && e.target.closest && e.target.closest('#formModal .swatch')) { e.preventDefault(); form.requestSubmit(); }
+        };
+        form.onsubmit = e => {
+            e.preventDefault();
+            const values = {};
+            let firstBad = null;
+            fields.forEach(f => {
+                const get = getters[f.name];
+                const v = get();
+                let msg = '';
+                if (f.type === 'number') {
+                    if (!Number.isFinite(v)) msg = t('Введите число');
+                    else if (f.min !== undefined && v < f.min || f.max !== undefined && v > f.max) msg = t('Допустимо от {min} до {max}', { min: f.min, max: f.max });
+                } else if (f.required && !v) {
+                    msg = t('Заполните это поле');
+                }
+                get.error.textContent = msg;
+                get.error.hidden = !msg;
+                if (get.input) get.input.classList.toggle('is-invalid', !!msg);
+                if (msg && !firstBad) firstBad = get.input;
+                values[f.name] = v;
+            });
+            if (firstBad) { firstBad.focus(); return; }
+            if (Object.values(getters).some(g => !g.error.hidden)) return;
+            done(values);
+        };
+        document.getElementById('formCancel').onclick = () => done(null);
+        document.getElementById('formClose').onclick = () => done(null);
+        modal.onclick = e => { if (e.target === modal) done(null); };
+        document.addEventListener('keydown', onKey, true);
+        modal.classList.add('active');
+        setTimeout(() => {
+            const first = box.querySelector('input:not([type=color]), .swatch[aria-checked="true"]');
+            if (first) { first.focus(); if (first.select) first.select(); }
+        }, 50);
+    });
+}
+
 // ───────── Настройки (окно доступно на всех страницах) ─────────
 const THRESHOLD_INPUTS = {
     alert_util_percent: 'alertUtilInput',

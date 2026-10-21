@@ -70,6 +70,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await open('/switch/1');
     await press('#editBtn'); await sleep(400);
     await press('#addPatchPanelBtn'); await sleep(400);
+    await press('#formOk'); await sleep(400);  // окно «Новая патч-панель» — значения по умолчанию
     const nameInput = '#patchPanelsList .patch-panel-item:last-child [data-change="updatePatchPanelName"]';
     const hasPanelUi = await page.$(nameInput);
     if (hasPanelUi) {

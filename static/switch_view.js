@@ -439,15 +439,30 @@ function createPatchPort(panelId, portNum, isTop) {
     return container;
 }
 
-function connectPorts(patchPanelId, patchPort) {
-    if (!editMode || selectedSwitchPort === null) return;
-    // Подсказываем описание порта с коммутатора (ifAlias), если оно есть
-    let name = prompt(t("Куда уходит сеть?"), portAlias(selectedSwitchPort));
-    if (!name) return;
-    let color = prompt(t("Цвет (gray/red/black/yellow/blue/green)?"), "gray");
-    if (!color) color = "gray";
+// Поля «назначение + цвет кабеля» для окна соединения
+function connectionFields(name, color, label) {
+    return [
+        { name: 'name', label: label || t('Куда уходит сеть'), value: name || '', required: true, maxlength: 200,
+          placeholder: t('например, «Бухгалтерия, ПК-3»') },
+        { name: 'color', label: t('Цвет кабеля'), type: 'cable-color', value: color || 'gray' },
+    ];
+}
 
-    state.connections[selectedSwitchPort] = {
+async function connectPorts(patchPanelId, patchPort) {
+    if (!editMode || selectedSwitchPort === null) return;
+    const swPort = selectedSwitchPort;
+    const panel = state.patchPanels.find(p => p.id == patchPanelId);
+    // Подсказываем описание порта с коммутатора (ifAlias), если оно есть
+    const r = await formDialog({
+        title: t('Новое соединение'),
+        note: t('Порт {sw} коммутатора → «{panel}», порт {patch}', { sw: swPort, panel: panel ? panel.name : patchPanelId, patch: patchPort }),
+        okText: t('Соединить'),
+        fields: connectionFields(portAlias(swPort), 'gray'),
+    });
+    if (!r) return;
+    const name = r.name, color = r.color;
+
+    state.connections[swPort] = {
         patchPanel: patchPanelId,
         patch: patchPort,
         color: color,
@@ -753,19 +768,24 @@ function renderConnectionsList() {
     }
 }
 
-function editConnection(portNum) {
-    let conn = state.connections[portNum];
-    let newName = prompt(t("Новое название:"), conn.name);
-    if (newName !== null && newName !== "") conn.name = newName;
-    let newColor = prompt(t("Новый цвет (gray/red/black/yellow/blue/green):"), conn.color);
-    if (newColor !== null && newColor !== "") conn.color = newColor;
+async function editConnection(portNum) {
+    const conn = state.connections[portNum];
+    if (!conn) return;
+    const r = await formDialog({
+        title: t('Соединение порта {port}', { port: portNum }),
+        okText: t('Сохранить'),
+        fields: connectionFields(conn.name, conn.color),
+    });
+    if (!r) return;
+    conn.name = r.name;
+    conn.color = r.color;
     updateHiddenFields();
     renderConnectionsList();
     restoreConnections();
 }
 
-function deleteConnection(portNum) {
-    if (confirm(t('Удалить соединение с портом {portNum}?', { portNum }))) {
+async function deleteConnection(portNum) {
+    if (await confirmDialog(t('Удалить соединение с портом {portNum}?', { portNum }), { okText: t('Удалить'), danger: true })) {
         delete state.connections[portNum];
         updateHiddenFields();
         renderConnectionsList();
@@ -818,13 +838,18 @@ function renderPatchPanelsList() {
     });
 }
 
-function addPatchPanel() {
+async function addPatchPanel() {
     if (!editMode) return;
-    let name = prompt(t("Название новой патч-панели:"), `Patch Panel ${nextPatchPanelId}`);
-    if (!name) return;
-    let ports = parseInt(prompt(t("Количество портов:"), "24"));
-    if (!ports || ports < 1) ports = 24;
-    if (ports > 96) ports = 96;
+    const r = await formDialog({
+        title: t('Новая патч-панель'),
+        okText: t('Добавить'),
+        fields: [
+            { name: 'name', label: t('Название'), value: t('Патч-панель {n}', { n: nextPatchPanelId }), required: true, maxlength: 100 },
+            { name: 'ports', label: t('Количество портов'), type: 'number', value: 24, min: 1, max: 96 },
+        ],
+    });
+    if (!r) return;
+    const name = r.name, ports = r.ports;
     state.patchPanels.push({ id: nextPatchPanelId++, name: name, ports: ports, position: 'below', layout: 'single' });
     updateHiddenFields();
     renderPatchPanelsList();
@@ -851,8 +876,8 @@ function updatePatchPanelPosition(id, position) {
     if (panel) { panel.position = position; updateHiddenFields(); renderRack(); }
 }
 
-function deletePatchPanel(id) {
-    if (!confirm(t("Удалить эту патч-панель? Все соединения с ней будут удалены."))) return;
+async function deletePatchPanel(id) {
+    if (!await confirmDialog(t("Удалить эту патч-панель? Все соединения с ней будут удалены."), { okText: t('Удалить'), danger: true })) return;
     for (let sw in state.connections) {
         if (state.connections[sw].patchPanel === id) delete state.connections[sw];
     }
@@ -1130,10 +1155,18 @@ function toggleSNMPDevices(header) {
     if (devs && devs.classList.contains('snmp-devices')) devs.classList.toggle('visible');
 }
 
-function assignDeviceToPort(ifindex, ip, mac, hostname) {
-    const portNum = prompt(t('К какому порту коммутатора привязать устройство?\nMAC: {mac}\nIP: {ip}', { mac, ip }), ifindex);
-    if (!portNum) return;
-    const notes = prompt(t('Комментарий (необязательно):'), '') || '';
+async function assignDeviceToPort(ifindex, ip, mac, hostname) {
+    const r = await formDialog({
+        title: t('Привязать устройство к порту'),
+        note: [hostname, mac && `MAC: ${mac}`, ip && `IP: ${ip}`].filter(Boolean).join('\n'),
+        okText: t('Привязать'),
+        fields: [
+            { name: 'port', label: t('Порт коммутатора'), type: 'number', value: ifindex, min: 1, max: state.switchPortsCount },
+            { name: 'notes', label: t('Комментарий'), hint: t('Необязательно: что это за устройство, где стоит'), maxlength: 200 },
+        ],
+    });
+    if (!r) return;
+    const portNum = r.port, notes = r.notes || '';
     fetch(`/api/assign_device/${SWITCH_ID}`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -1146,8 +1179,10 @@ function assignDeviceToPort(ifindex, ip, mac, hostname) {
     });
 }
 
-function removeDeviceFromPort(portNum) {
-    if (!confirm(t('Удалить устройство с порта {portNum}?', { portNum }))) return;
+async function removeDeviceFromPort(portNum, displayText) {
+    const text = displayText ? t('Удалить устройство с порта {portNum}?\n{displayText}', { portNum, displayText })
+                             : t('Удалить устройство с порта {portNum}?', { portNum });
+    if (!await confirmDialog(text, { okText: t('Удалить'), danger: true })) return;
     fetch(`/api/remove_device/${SWITCH_ID}/${portNum}`, {method: 'POST'})
         .then(r => r.json())
         .then(() => location.reload());
@@ -1216,11 +1251,15 @@ function renderVlanList() {
     }
 }
 
-function setVlanColor(vlanId) {
-    const current = state.vlanColors[vlanId] || '#3498db';
-    const color = prompt(t('Цвет для VLAN {vlanId} (HEX, например #3498db):', { vlanId }), current);
-    if (color === null) return;
-    const trimmed = color.trim();
+async function setVlanColor(vlanId) {
+    const current = /^#[0-9a-f]{6}$/i.test(state.vlanColors[vlanId] || '') ? state.vlanColors[vlanId] : '#3498db';
+    const r = await formDialog({
+        title: t('Цвет VLAN {vlanId}', { vlanId }),
+        okText: t('Сохранить'),
+        fields: [{ name: 'color', label: t('Цвет'), type: 'color', value: current }],
+    });
+    if (!r) return;
+    const trimmed = r.color;
 
     fetch(`/api/set_vlan_color/${SWITCH_ID}`, {
         method: 'POST',
@@ -1292,19 +1331,20 @@ function toggleTrunk() {
     renderRack();
 }
 
-function assignDirectPort() {
+async function assignDirectPort() {
     if (portTypeMenuTarget === null || !editMode) return;
-    
-    let name = prompt(t("Назначение порта (куда идет линк)?"), portAlias(portTypeMenuTarget));
-    if (!name) {
-        document.getElementById('portTypeMenu').style.display = 'none';
-        return;
-    }
-    
-    let color = prompt(t("Цвет (gray/red/black/yellow/blue/green)?"), "gray");
-    if (!color) color = "gray";
+    const port = portTypeMenuTarget;
+    document.getElementById('portTypeMenu').style.display = 'none';
+    const r = await formDialog({
+        title: t('Подключение порта {port} напрямую', { port }),
+        note: t('Без патч-панели: кабель идёт от порта коммутатора прямо к устройству.'),
+        okText: t('Сохранить'),
+        fields: connectionFields(portAlias(port), 'gray', t('Назначение порта (куда идёт линк)')),
+    });
+    if (!r) return;
+    const name = r.name, color = r.color;
 
-    state.connections[portTypeMenuTarget] = {
+    state.connections[port] = {
         patchPanel: null,
         patch: null,
         color: color,
@@ -1361,9 +1401,7 @@ function renderDeviceBadges() {
             badge.oncontextmenu = function(e) {
                 e.preventDefault();
                 e.stopPropagation();
-                if (confirm(t('Удалить устройство с порта {portNum}?\n{displayText}', { portNum, displayText }))) {
-                    removeDeviceFromPort(portNum);
-                }
+                removeDeviceFromPort(portNum, displayText);
             };
         }
     });

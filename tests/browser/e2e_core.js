@@ -23,12 +23,19 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     page.on('pageerror', e => jsErrors.push(String(e.message || e)));
     page.on('console', m => { if (m.type() === 'error' && !String(m.location().url).includes('favicon')) jsErrors.push('console: ' + m.text()); });
     page.on('framenavigated', f => { if (f === page.mainFrame()) navigations++; });
-    const answers = { 'Название новой патч-панели': 'Тест-панель', 'Количество портов': '12' };
-    page.on('dialog', async d => {
-        const key = Object.keys(answers).find(k => d.message().startsWith(k));
-        if (d.type() === 'prompt') await d.accept(key ? answers[key] : d.defaultValue());
-        else await d.accept();
-    });
+    // Окна браузера (prompt/confirm) не должны появляться вовсе — всё во встроенных окнах приложения
+    const nativeDialogs = [];
+    page.on('dialog', async d => { nativeDialogs.push(d.type() + ': ' + d.message()); await d.dismiss(); });
+    const formOpen = () => page.$eval('#formModal', el => el.classList.contains('active'));
+    const fillForm = async values => {
+        await page.waitForSelector('#formModal.active', { timeout: 5000 });
+        const inputs = await page.$$('#formFields input');
+        for (let i = 0; i < values.length; i++) {
+            if (values[i] === undefined) continue;
+            await inputs[i].click({ clickCount: 3 }); await page.keyboard.press('Backspace');
+            await inputs[i].type(String(values[i]));
+        }
+    };
     const open = async url => { await page.goto(base + url, { waitUntil: 'load', timeout: 60000 }); await sleep(300); };
     const st = expr => page.evaluate(expr);
     const sidebar = async () => { if (!(await page.$eval('#sidebar', el => el.classList.contains('open')))) { await page.click('.menu-toggle'); await sleep(500); } };
@@ -60,6 +67,43 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await page.select('#layoutSelect', 'double');
     if (await page.$eval('#content-patch', el => getComputedStyle(el).display === 'none')) { await page.click('#arrow-patch'); await sleep(400); }
     await page.click('#addPatchPanelBtn'); await sleep(300);
+    check('«Добавить патч-панель» — окно приложения', await formOpen());
+    await fillForm(['Тест-панель', 12]);
+    await page.click('#formOk'); await sleep(400);
+    check('патч-панель добавлена из окна', await st(() => state.patchPanels.some(p => p.name === 'Тест-панель' && p.ports === 12)));
+
+    // Соединение «порт коммутатора → порт патч-панели» во встроенном окне
+    const panelId = await st(() => state.patchPanels.find(p => p.name === 'Тест-панель').id);
+    await page.click(".port[data-type='switch'][data-port='3']"); await sleep(200);
+    await page.click(`.port[data-type='patch'][data-panel='${panelId}'][data-port='2']`); await sleep(400);
+    check('соединение: открылось окно приложения, а не браузера', await formOpen() && nativeDialogs.length === 0, nativeDialogs);
+    const note = await page.$eval('#formNote', el => el.textContent);
+    check('в окне видно, что с чем соединяем', note.includes('3') && note.includes('Тест-панель') && note.includes('2'), note);
+    check('палитра цветов кабеля', (await page.$$('#formFields .swatch')).length >= 6);
+    await fillForm(['']);
+    await page.click('#formOk'); await sleep(300);
+    check('пустое назначение не принимается — подсказка в окне', await formOpen()
+        && await page.$eval('#formFields .field-error', el => !el.hidden && el.textContent.length > 0));
+    await fillForm(['Склад']);
+    await page.click("#formFields .swatch[data-value='blue']");
+    await page.keyboard.press('Enter'); await sleep(400);
+    const c3 = await st(() => state.connections['3']);
+    check('соединение создано: назначение, цвет, патч-панель и порт', !await formOpen() && c3 && c3.name === 'Склад'
+        && c3.color === 'blue' && c3.patchPanel == panelId && c3.patch === 2, c3);
+    await page.click(".port[data-type='switch'][data-port='4']"); await sleep(200);
+    await page.click(`.port[data-type='patch'][data-panel='${panelId}'][data-port='5']`); await sleep(300);
+    await page.keyboard.press('Escape'); await sleep(300);
+    check('Esc закрывает окно без соединения', !await formOpen() && await st(() => !state.connections['4']));
+    await page.click('#connectionsList [data-click="editConnection"][data-args="[3]"]'); await sleep(300);
+    check('«Изменить»: окно с текущими значениями', await page.$eval('#formFields input', el => el.value) === 'Склад'
+        && await page.$eval("#formFields .swatch[data-value='blue']", el => el.getAttribute('aria-checked') === 'true'));
+    await page.click("#formFields .swatch[data-value='green']"); await page.click('#formOk'); await sleep(300);
+    check('«Изменить»: цвет поменялся', await st(() => state.connections['3'].color === 'green'));
+    await page.click('#connectionsList [data-click="deleteConnection"][data-args="[3]"]'); await sleep(300);
+    check('«Удалить»: подтверждение в окне приложения', await page.$eval('#confirmModal', el => el.classList.contains('active')));
+    await page.click('#confirmOk'); await sleep(300);
+    check('соединение удалено', await st(() => !state.connections['3']));
+    check('ни одного окна браузера', nativeDialogs.length === 0, nativeDialogs);
     if (await page.$eval('#content-monitor', el => getComputedStyle(el).display === 'none')) { await page.click('#arrow-monitor'); await sleep(400); }
     await page.click('#ipInput', { clickCount: 3 }); await page.keyboard.press('Backspace');
     await page.type('#ipInput', '10.0.0.1');

@@ -230,6 +230,24 @@ window.I18N = {{ js_i18n|tojson }};
     </div>
 </div>
 
+<!-- Окно-форма (вместо prompt): заполняется из app.js formDialog() -->
+<div id="formModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="formTitle">
+    <form class="modal-content is-narrow" id="formDialogForm" novalidate>
+        <div class="modal-header">
+            <h2 id="formTitle"></h2>
+            <button type="button" class="modal-close" id="formClose" aria-label="{{ _('Закрыть') }}">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p id="formNote" class="form-dialog-note" hidden></p>
+            <div id="formFields"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn" id="formCancel">{{ _('Отмена') }}</button>
+            <button type="submit" class="btn btn-primary" id="formOk">OK</button>
+        </div>
+    </form>
+</div>
+
 <script src="/static/app.js?v={{ asset_v }}"></script>
 {% block scripts %}{% endblock %}
 </body>
