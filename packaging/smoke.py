@@ -86,9 +86,11 @@ def free_port():
         return s.getsockname()[1]
 
 
-def run_checks(base, password, snmp, expect_version, ping=True):
+def run_checks(base, password, snmp, expect_version, ping=True, existing=False):
     c = Client(base)
     status, url, text, _ = c.request("/login")
+    if existing:
+        check("после обновления пользователи на месте (нет повторной настройки)", "/setup" not in url, url)
     if "/setup" in url:
         c.request("/setup")
         status, url, text, _ = c.request("/setup", data={"username": "admin", "password": password, "password2": password,
@@ -149,6 +151,7 @@ def main():
     ap.add_argument("--snmp", action="store_true")
     ap.add_argument("--expect-version")
     ap.add_argument("--skip-ping", action="store_true", help="контейнер без ping/ICMP")
+    ap.add_argument("--existing", action="store_true", help="после обновления: администратор уже должен быть")
     a = ap.parse_args()
     if bool(a.exe) == bool(a.url):
         ap.error("укажите --exe или --url")
@@ -171,7 +174,7 @@ def main():
         up = wait_up(base, proc)
         check("сервер отвечает", up, base)
         if up:
-            run_checks(base, a.password, a.snmp, a.expect_version, ping=not a.skip_ping)
+            run_checks(base, a.password, a.snmp, a.expect_version, ping=not a.skip_ping, existing=a.existing)
     finally:
         if proc is not None:
             proc.terminate()

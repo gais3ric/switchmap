@@ -84,3 +84,7 @@ python tests\run_all.py --all    # все, включая SNMP-симулято�
 | `xlsx.py` | экспорт в Excel и CSV |
 | `templates/`, `static/` | интерфейс (`static/vendor` — Chart.js, d3, pdfmake) |
 | `packaging/` | сборка установщиков Windows, deb, rpm |
+
+## Лицензия
+
+MIT — см. файл [LICENSE](LICENSE). Библиотеки в `static/vendor` распространяются под своими лицензиями (файлы рядом с ними).

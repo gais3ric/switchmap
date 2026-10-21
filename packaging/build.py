@@ -74,6 +74,7 @@ def build_program(version):
     r = subprocess.run([exe, "--version"], capture_output=True, text=True)
     if r.stdout.strip() != version:
         sys.exit(f"Собранная программа сообщает версию {r.stdout.strip()!r} вместо {version}: {r.stderr}")
+    shutil.copyfile(os.path.join(ROOT, "LICENSE"), os.path.join(out, "LICENSE.txt"))
     print(f"Программа: {out} (версия {version})")
     return out
 

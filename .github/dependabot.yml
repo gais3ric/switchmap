@@ -1,0 +1,20 @@
+# Предложения обновлений: библиотеки Python (сборка и запуск из исходников) и действия GitHub.
+# Срочные обновления безопасности приходят сразу; обычные — раз в месяц, одним запросом на группу.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directories: ["/", "/packaging"]
+    schedule:
+      interval: monthly
+    groups:
+      python:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

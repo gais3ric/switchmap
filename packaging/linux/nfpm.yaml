@@ -14,6 +14,7 @@ description: |
   Веб-интерфейс: схема портов, опрос по SNMP v2c/v3, трафик, LLDP-топология,
   уведомления в Telegram и на почту. Работает как служба systemd.
 vendor: SwitchMap
+license: MIT
 
 contents:
   - src: ${SWITCHMAP_PROGRAM}
