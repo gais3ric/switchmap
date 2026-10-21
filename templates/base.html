@@ -144,13 +144,21 @@ window.I18N = {{ js_i18n|tojson }};
             <div class="hint">{{ _('Событие появляется при превышении порога и ещё одно — при возврате в норму. 0 — оповещение выключено.') }}</div>
 
             <div class="modal-section-title">{{ _('Язык') }}</div>
+            <div class="field">
+                <label for="settingsUiLang">{{ _('Язык интерфейса') }}</label>
+                <select id="settingsUiLang" data-current="{{ user_language or '' }}">
+                    <option value="">{{ _('Как в системе ({name})', name=languages[browser_lang]) }}</option>
+                    {% for code, name in languages.items() %}<option value="{{ code }}">{{ name }}</option>{% endfor %}
+                </select>
+                <div class="hint">{{ _('Только для вас; другие пользователи выбирают язык сами.') }}</div>
+            </div>
             <div class="field" style="margin-bottom:0">
                 <label for="serverLangInput">{{ _('Язык журнала, событий и уведомлений') }}{{ tip(_('Записи журнала сохраняются на том языке, который был выбран в момент записи. Уже сделанные записи при смене языка не переводятся.')) }}</label>
                 <select id="serverLangInput">
                     <option value="">{{ _('Как в системе сервера ({name})', name=languages[server_system_lang]) }}</option>
                     {% for code, name in languages.items() %}<option value="{{ code }}">{{ name }}</option>{% endfor %}
                 </select>
-                <div class="hint">{{ _('На этом языке записываются журнал изменений и события, приходят сообщения в Telegram и на почту. Язык интерфейса каждый пользователь выбирает сам — в своём меню.') }}</div>
+                <div class="hint">{{ _('Общий для всех: на этом языке записываются журнал изменений и события, приходят сообщения в Telegram и на почту. Интерфейс не меняет.') }}</div>
             </div>
         </div>
         <div class="modal-footer">

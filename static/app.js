@@ -173,6 +173,8 @@ function openSettingsModal() {
             document.getElementById('serverLangInput').value = data.server_language || '';
         })
         .catch(() => notify(t('Не удалось загрузить настройки'), 'error'));
+    const uiLang = document.getElementById('settingsUiLang');
+    uiLang.value = uiLang.dataset.current;
     document.getElementById('settingsModal').classList.add('active');
 }
 
@@ -197,6 +199,8 @@ function saveSettings() {
     })
         .then(r => { if (!r.ok) throw new Error(); return r.json(); })
         .then(() => {
+            const uiLang = document.getElementById('settingsUiLang');
+            if (uiLang.value !== uiLang.dataset.current) return setUserLanguage(uiLang.value);  // перезагрузит страницу
             closeSettingsModal();
             notify(t('Настройки сохранены'), 'success');
         })
