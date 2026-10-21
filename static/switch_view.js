@@ -1096,7 +1096,7 @@ function toggleSNMPDevices(header) {
 }
 
 function assignDeviceToPort(ifindex, ip, mac, hostname) {
-    const portNum = prompt(t('К какому порту коммутатора привязать устройство?\\nMAC: {mac}\\nIP: {ip}', { mac, ip }), ifindex);
+    const portNum = prompt(t('К какому порту коммутатора привязать устройство?\nMAC: {mac}\nIP: {ip}', { mac, ip }), ifindex);
     if (!portNum) return;
     const notes = prompt(t('Комментарий (необязательно):'), '') || '';
     fetch(`/api/assign_device/${SWITCH_ID}`, {
@@ -1317,7 +1317,7 @@ function renderDeviceBadges() {
             badge.className = 'port-device-badge' + (dev.is_online ? '' : ' offline');
             badge.dataset.dev = dev.id;
             const displayText = dev.hostname || dev.ip || dev.mac || '?';
-            badge.title = t('{displayText}\\nПравый клик - удалить', { displayText });
+            badge.title = t('{displayText}\nПравый клик — удалить', { displayText });
             badge.textContent = displayText;
             portEl.appendChild(badge);
 
@@ -1325,7 +1325,7 @@ function renderDeviceBadges() {
             badge.oncontextmenu = function(e) {
                 e.preventDefault();
                 e.stopPropagation();
-                if (confirm(t('Удалить устройство с порта {portNum}?\\n{displayText}', { portNum, displayText }))) {
+                if (confirm(t('Удалить устройство с порта {portNum}?\n{displayText}', { portNum, displayText }))) {
                     removeDeviceFromPort(portNum);
                 }
             };

@@ -839,7 +839,7 @@ def send(channel, cfg, box, msg):
 
 def test_message(base_url):
     now = datetime.now()
-    text = (_s("Тестовое сообщение. Если вы его видите — уведомления настроены правильно.\nВремя сервера: {S}", S=now.strftime('%d.%m.%Y %H:%M:%S')))
+    text = (_s("Тестовое сообщение. Если вы его видите — уведомления настроены правильно.\nВремя сервера: {time}", time=now.strftime('%d.%m.%Y %H:%M:%S')))
     rich = "✅ " + html.escape(text)
     if base_url:
         text += f"\nSwitchMap: {base_url}"

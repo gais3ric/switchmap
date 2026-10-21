@@ -220,7 +220,7 @@ def inject_user():
 
 
 _JS_KEYS = i18n.js_keys()  # строки t("…") из скриптов: их переводы передаются на страницу
-app.jinja_env.globals.update(_=_, _n=_n)
+app.jinja_env.globals.update(_=i18n.jinja_gettext, _n=i18n.jinja_ngettext)
 
 
 @app.route("/api/language", methods=["POST"])
@@ -2201,7 +2201,7 @@ def delete_switch(switch_id):
     if row:
         # Снимок для восстановления: настройки, подключения, патч-панели, привязанные устройства
         audit.log(DB, "delete", actor=current_actor(), switch_id=switch_id, switch_name=row["name"],
-                  summary=_s("{ports} портов", ports=row['ports']) + (f", IP {row['ip_address']}" if row["ip_address"] else ""),
+                  summary=_ns(row['ports'], "{n} порт", "{n} порта", "{n} портов") + (f", IP {row['ip_address']}" if row["ip_address"] else ""),
                   revert={"switch": row, "devices": [dict(zip(dev_cols, d)) for d in devices]})
     return redirect(url_for("index"))
 
@@ -2626,7 +2626,7 @@ def api_discovery_add(job_id):
         if not f:
             continue
         if ip in existing:
-            skipped.append(_("{ip}: уже есть («{ip2}»)", ip=ip, ip2=existing[ip][1]))
+            skipped.append(_("{ip}: уже есть («{name}»)", ip=ip, name=existing[ip][1]))
             continue
         name = (str(item.get("name") or "").strip() or f.get("sys_name") or ip)[:100]
         ports = _clamp_ports(item.get("ports") or f.get("ports"))

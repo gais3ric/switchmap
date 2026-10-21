@@ -98,7 +98,8 @@ def run_checks(base, password, snmp, expect_version, ping=True):
         status, url, text, _ = c.request("/login", data={"username": "admin", "password": password, "csrf_token": c.csrf})
         check("вход администратора", status == 200 and "/login" not in url, url)
 
-    for page in ("/", "/topology", "/maintenance", "/audit", "/users", "/notifications", "/discover"):
+    for page in ("/", "/topology", "/maintenance", "/audit", "/users", "/notifications", "/discover", "/help",
+                 "/help/snmp-vendors"):
         status, _, text, _ = c.request(page)
         check(f"страница {page}", status == 200 and "Traceback" not in text and "</html>" in text, status)
     status, _, text, _ = c.request("/")
@@ -109,6 +110,12 @@ def run_checks(base, password, snmp, expect_version, ping=True):
     check("скрипты и стили отдаются", scripts and not bad, bad)
     status, _, _, body = c.request("/static/vendor/d3.min.js")
     check("библиотеки внутри программы (без интернета)", status == 200 and len(body) > 100000, status)
+    c.json("/api/language", {"language": "en"})
+    status, _, text, _ = c.request("/")
+    check("переводы внутри программы (английский интерфейс)", "Switches" in text and "Коммутаторы" not in text)
+    status, _, text, _ = c.request("/help/getting-started")
+    check("справка на английском", status == 200 and "Getting started" in text, status)
+    c.json("/api/language", {"language": ""})
 
     if snmp:
         status, r = c.json("/api/snmp_probe", {"ip_address": "127.0.0.1", "snmp_version": "2c", "snmp_community": "public"})

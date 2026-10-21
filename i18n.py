@@ -149,18 +149,22 @@ def gettext(lang, msg, **kwargs):
     return _format(value or msg, kwargs)
 
 
-def ngettext(lang, n, one, few, many, **kwargs):
-    """_n(5, "{n} порт", "{n} порта", "{n} портов") → «5 портов» / «5 ports». Ключ — первая форма."""
-    kwargs.setdefault("n", n)
+def plural_form(lang, n, one, few, many):
+    """Нужная форма (ещё без подстановок): перевод или русская форма, если перевода нет."""
     if lang == SOURCE:
         forms = [one, few, many]
     else:
         value = catalog(lang).get(one)
         forms = value if isinstance(value, list) else [value] if value else [one, few, many]
-        if value is None:
+        if not value:
             lang = SOURCE
-    i = min(plural_index(lang, n), len(forms) - 1)
-    return _format(forms[i], kwargs)
+    return forms[min(plural_index(lang, n), len(forms) - 1)]
+
+
+def ngettext(lang, n, one, few, many, **kwargs):
+    """_n(5, "{n} порт", "{n} порта", "{n} портов") → «5 портов» / «5 ports». Ключ — первая форма."""
+    kwargs.setdefault("n", n)
+    return _format(plural_form(lang, n, one, few, many), kwargs)
 
 
 # ─────────── Текущий язык ───────────
@@ -204,6 +208,28 @@ def _s(msg, **kwargs):
 
 def _ns(n, one, few, many, **kwargs):
     return ngettext(server_language(), n, one, few, many, **kwargs)
+
+
+def jinja_gettext(msg, **kwargs):
+    """_() для шаблонов: перевод экранируется, значения тоже — кроме уже готовой разметки (|safe).
+    {{ _('Файлы в папке {folder}', folder='<code>backups</code>'|safe) }}"""
+    from markupsafe import Markup, escape
+    text = gettext(current_language(), msg)
+    if not kwargs:
+        return text
+    return Markup(escape(text)).format_map(_EscapingDict(kwargs))
+
+
+def jinja_ngettext(n, one, few, many, **kwargs):
+    from markupsafe import Markup, escape
+    kwargs.setdefault("n", n)
+    text = plural_form(current_language(), n, one, few, many)
+    return Markup(escape(text)).format_map(_EscapingDict(kwargs))
+
+
+class _EscapingDict(dict):
+    def __missing__(self, key):
+        return "{" + key + "}"
 
 
 def N_(msg):

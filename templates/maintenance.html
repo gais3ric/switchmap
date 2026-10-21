@@ -96,7 +96,7 @@
             <span></span>
             <label for="backupKeep">{{ _('Сколько копий хранить') }}</label>
             <input type="number" id="backupKeep" min="1" max="365">
-            <div class="hint">{{ _('Копия также создаётся при запуске (раз в сутки), перед обновлением схемы базы и перед каждым восстановлением. Файлы лежат в папке') }} <code>backups</code> {{ _('рядом с базой.') }}</div>
+            <div class="hint">{{ _('Копия также создаётся при запуске (раз в сутки), перед обновлением схемы базы и перед каждым восстановлением. Файлы лежат в папке {folder} рядом с базой.', folder='<code>backups</code>'|safe) }}</div>
         </div>
         <div class="card-actions" style="margin-top:10px">
             <button type="button" class="btn btn-sm admin-only" id="saveBackupSettings">{{ icon('check') }} {{ _('Сохранить') }}</button>

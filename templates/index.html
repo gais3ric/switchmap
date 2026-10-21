@@ -244,7 +244,7 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
                 {{ snmp_fields('add') }}
                 <div class="probe-result" data-probe-result hidden></div>
                 <input type="hidden" name="model">
-                <div class="hint" style="margin:-6px 0 6px">{{ _('Много коммутаторов сразу —') }} <a href="/discover">{{ _('поиск в сети или импорт из NetBox') }}</a>.</div>
+                <div class="hint" style="margin:-6px 0 6px">{{ _('Много коммутаторов сразу — {link}.', link=('<a href="/discover">' ~ _('поиск в сети или импорт из NetBox') ~ '</a>')|safe) }}</div>
 
                 <div class="modal-section-title row" style="justify-content:space-between">
                     <span>{{ _('Патч-панели') }}</span>

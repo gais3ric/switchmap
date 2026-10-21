@@ -130,7 +130,7 @@ def validate_username(name):
 
 def validate_password(password, username=None):
     if not password or len(password) < MIN_PASSWORD:
-        return _("Пароль должен быть не короче {MIN_PASSWORD} символов", MIN_PASSWORD=MIN_PASSWORD)
+        return _("Пароль должен быть не короче {n} символов", n=MIN_PASSWORD)
     if username and password.lower() == username.lower():
         return _("Пароль не должен совпадать с именем пользователя")
     return None

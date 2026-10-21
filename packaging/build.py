@@ -53,7 +53,10 @@ def build_program(version):
         f.write(version)
     sep = ";" if WINDOWS else ":"
     data = [(os.path.join(ROOT, "templates"), "templates"), (os.path.join(ROOT, "static"), "static"),
-            (version_file, ".")]
+            (os.path.join(ROOT, "help"), "help"), (version_file, ".")]
+    # переводы — только каталоги, без инструмента разработчика
+    data += [(os.path.join(ROOT, "locales", n), "locales") for n in os.listdir(os.path.join(ROOT, "locales"))
+             if n.endswith(".json")]
     cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir", "--console",
            "--name", "switchmap", "--distpath", DIST, "--workpath", os.path.join(BUILD, "pyinstaller"),
            "--specpath", BUILD, "--paths", ROOT,
