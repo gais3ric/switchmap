@@ -193,6 +193,23 @@ def build_csp(nonce=None):
             "frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'")
 
 
+def _asset_version():
+    """Метка для ссылок на app.js / ui.css / i18n.js: меняется вместе с файлами — после обновления браузер
+    не возьмёт старые скрипты из кэша."""
+    import hashlib
+    h = hashlib.sha256()
+    for name in ("app.js", "ui.css", "i18n.js"):
+        try:
+            with open(os.path.join(app.static_folder, name), "rb") as f:
+                h.update(f.read())
+        except OSError:
+            pass
+    return h.hexdigest()[:10]
+
+
+ASSET_VERSION = _asset_version()
+
+
 @app.after_request
 def security_headers(response):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -211,7 +228,7 @@ def inject_user():
     lang = i18n.current_language()
     return {"current_user": user, "is_admin": bool(user and user["role"] == "admin"),
             "csrf_token": session.get("csrf", ""), "csp_nonce": csp_nonce(), "vendor_script": vendor_scripts(),
-            "app_version": APP_VERSION, "lang": lang, "html_lang": i18n.HTML_LANG.get(lang, lang),
+            "app_version": APP_VERSION, "asset_v": ASSET_VERSION, "lang": lang, "html_lang": i18n.HTML_LANG.get(lang, lang),
             "languages": i18n.LANGUAGES, "user_language": (user or {}).get("language", ""),
             "browser_lang": (i18n.negotiate(request.headers.get("Accept-Language")) or i18n.FALLBACK)
                             if has_request_context() else i18n.FALLBACK,
