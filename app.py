@@ -836,66 +836,92 @@ def _humanize_snmp_error(text):
     return str(text)
 
 
+# SNMP-запросы выполняются в постоянных рабочих потоках: у каждого свой цикл asyncio и свой SnmpEngine.
+# Раньше на каждый запрос создавались новый поток и новый движок (~0,1 с), а коммутатор — это ~24 запроса.
+SNMP_WORKERS = max(4, int(os.environ.get("SWITCHMAP_SNMP_WORKERS", "32") or 32))
+SNMP_BULK_REPETITIONS = 25   # строк таблицы за один запрос GETBULK
+_snmp_pool = None
+_snmp_pool_lock = threading.Lock()
+_snmp_local = threading.local()
+
+
+def _snmp_executor():
+    global _snmp_pool
+    with _snmp_pool_lock:
+        if _snmp_pool is None:
+            _snmp_pool = concurrent.futures.ThreadPoolExecutor(max_workers=SNMP_WORKERS, thread_name_prefix="snmp")
+        return _snmp_pool
+
+
+def _snmp_thread_state():
+    """Цикл asyncio и SnmpEngine этого рабочего потока (создаются один раз)."""
+    state = getattr(_snmp_local, "state", None)
+    if state is None:
+        import asyncio
+        from pysnmp.hlapi.v3arch.asyncio import SnmpEngine
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        # Служебная задача таймеров pysnmp живёт, пока жив движок; при выходе из программы она «уничтожается
+        # незавершённой» — это не ошибка, в журнал не пишем
+        loop.set_exception_handler(lambda lp, ctx: None if "destroyed but it is pending" in str(ctx.get("message"))
+                                   else lp.default_exception_handler(ctx))
+        state = _snmp_local.state = (loop, SnmpEngine())
+    return state
+
+
 def snmp_walk_ex(ip, auth, oid, timeout=3):
     """SNMP walk. Возвращает (список (oid, value), текст ошибки или None).
-    auth — SnmpAuth или строка community (v2c). Работает с pysnmp 7.x."""
-    import asyncio
-
+    auth — SnmpAuth или строка community (v2c). Работает с pysnmp 7.x.
+    Таблица читается пачками (GETBULK); если устройство пачки не понимает — по одной строке (GETNEXT)."""
     try:
         from pysnmp.hlapi.v3arch.asyncio import (
-            SnmpEngine, UdpTransportTarget, ContextData, ObjectType, ObjectIdentity, walk_cmd)
+            UdpTransportTarget, ContextData, ObjectType, ObjectIdentity, walk_cmd, bulk_walk_cmd)
     except ImportError:
         return [], _("pysnmp не установлен. Выполните: pip install pysnmp")
 
     auth = _as_snmp_auth(auth)
-    error = []
 
-    async def _walk():
-        results = []
-        engine = SnmpEngine()
+    async def _walk(engine, bulk):
+        results, error = [], None
         # lexicographicMode=False: только запрошенная ветка. По умолчанию pysnmp
         # продолжает walk до конца MIB — медленно и с чужими данными в результате.
         walker = None
         try:
             transport = await UdpTransportTarget.create((ip, 161), timeout=timeout, retries=1)
-            walker = walk_cmd(engine, auth.to_pysnmp(), transport, ContextData(contextName=auth.context),
-                              ObjectType(ObjectIdentity(oid)), lexicographicMode=False)
+            target = (engine, auth.to_pysnmp(), transport, ContextData(contextName=auth.context))
+            walker = (bulk_walk_cmd(*target, 0, SNMP_BULK_REPETITIONS, ObjectType(ObjectIdentity(oid)), lexicographicMode=False)
+                      if bulk else walk_cmd(*target, ObjectType(ObjectIdentity(oid)), lexicographicMode=False))
             async for (errorIndication, errorStatus, errorIndex, varBinds) in walker:
                 if errorIndication or errorStatus:
                     if not results:
-                        error.append(str(errorIndication or errorStatus.prettyPrint()))
+                        error = str(errorIndication or errorStatus.prettyPrint())
                     break
                 for varBind in varBinds:
                     results.append((str(varBind[0]), varBind[1]))
         finally:
-            # Закрываем генератор и транспорт, иначе asyncio сыплет «Task was destroyed»
             if walker is not None:
                 await walker.aclose()
-            engine.close_dispatcher()
-        return results
+        return results, error
 
-    def run_in_thread():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(_walk())
-        finally:
-            loop.close()
+    def run_in_worker():
+        loop, engine = _snmp_thread_state()
+        results, error = loop.run_until_complete(_walk(engine, bulk=True))
+        # Пачки не прошли (старая прошивка, ошибка tooBig и т. п.) — повторяем построчно.
+        # По таймауту не повторяем: устройство просто не отвечает, ждать вдвое дольше незачем.
+        if error and not results and "timeout" not in error.lower() and "no snmp response" not in error.lower():
+            results, error = loop.run_until_complete(_walk(engine, bulk=False))
+        return results, error
 
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    future = executor.submit(run_in_thread)
+    future = _snmp_executor().submit(run_in_worker)
     try:
-        result = future.result(timeout=timeout * 2 + 5)
-        return result, (_humanize_snmp_error(error[0]) if error else None)
+        result, error = future.result(timeout=timeout * 4 + 5)
+        return result, (_humanize_snmp_error(error) if error else None)
     except concurrent.futures.TimeoutError:
         log.warning(_s("SNMP {ip}: нет ответа ({oid})", ip=ip, oid=oid))
         return [], _humanize_snmp_error("timeout")
     except Exception as e:
         log.warning("SNMP %s: %s", ip, e)
         return [], _humanize_snmp_error(e)
-    finally:
-        executor.shutdown(wait=True, cancel_futures=True)
-
 
 def snmp_walk(ip, auth, oid, timeout=3):
     """SNMP walk без текста ошибки: при любой проблеме — пустой список."""
@@ -1594,6 +1620,9 @@ def save_settings(updates):
         conn.commit()
 
 
+POLL_WORKERS = max(1, int(os.environ.get("SWITCHMAP_POLL_WORKERS", "8") or 8))  # коммутаторов одновременно
+
+
 def scheduled_poll_all_switches():
     """Опрашивает по SNMP все коммутаторы с заданным IP. Вызывается планировщиком."""
     with sqlite3.connect(DB) as conn:
@@ -1601,13 +1630,18 @@ def scheduled_poll_all_switches():
         c.execute("SELECT id FROM switches WHERE ip_address IS NOT NULL AND ip_address != ''")
         switch_ids = [row[0] for row in c.fetchall()]
 
+    def poll_one(switch_id):
+        try:
+            poll_switch_and_log_events(switch_id)
+        except Exception as e:
+            log.exception(_s("Периодический опрос: ошибка опроса коммутатора {id}: {error}", id=switch_id, error=e))
+
     _periodic_poll_running.set()
     try:
-        for switch_id in switch_ids:
-            try:
-                poll_switch_and_log_events(switch_id)
-            except Exception as e:
-                log.exception(_s("Периодический опрос: ошибка опроса коммутатора {id}: {error}", id=switch_id, error=e))
+        # Несколько коммутаторов одновременно: недоступный (ждём таймаут) не задерживает остальных
+        workers = max(1, min(POLL_WORKERS, len(switch_ids)))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="poll") as pool:
+            list(pool.map(poll_one, switch_ids))
     finally:
         _periodic_poll_running.clear()
     # События всех коммутаторов этого опроса — одним сообщением
@@ -1932,7 +1966,7 @@ def collect_topology():
         return sid, poll_switch_lldp(ip, auth)
 
     lldp_results = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(8, len(switches)))) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(2 * POLL_WORKERS, len(switches)))) as executor:
         futures = [executor.submit(poll_one, sw) for sw in switches]
         for future in futures:
             try:
