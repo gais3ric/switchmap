@@ -30,8 +30,15 @@ keywords: 拓扑 地图 网络图 lldp 邻居 cdp 链路 图
 
 > **提示：** 在[网络发现](/help/add-switch#discovery)中开启 **跟随 LLDP 邻居** 后，SwitchMap 会自动找到在此图上作为邻居出现的交换机。
 
+# 拓扑图有多新 {#freshness}
+
+拓扑图根据 SwitchMap 在最近几次轮询交换机时记住的邻居绘制，因此即使网络很大也能立即打开。邻居在定期轮询时更新（最多每 10 分钟一次；在“每小时一次”模式下每小时一次，参见[监控](/help/monitoring#polling)），也可以在交换机页面点击 **通过 SNMP 轮询** 更新。
+
+拓扑图上的 **刷新** 按钮会重新查询所有交换机的 LLDP——如果刚刚调整过线缆，请点击它。
+
 # 没有链路时 {#empty}
 
+- SwitchMap 启动后尚未轮询该交换机——请点击 **刷新**。
 - 交换机或个别端口上禁用了 LLDP。
 - 交换机不通过 SNMP 提供 LLDP-MIB（简单型号常见）。
 - 部分 Cisco 设备默认只使用 CDP——请用 `lldp run` 启用 LLDP。

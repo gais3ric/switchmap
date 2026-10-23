@@ -30,8 +30,15 @@ Déplacez le plan à la souris, zoomez avec la molette, et le bouton **Ajuster**
 
 > **Astuce :** avec **Suivre les voisins LLDP** activé lors de la [recherche sur le réseau](/help/add-switch#discovery), SwitchMap trouve lui-même les commutateurs qui apparaissent comme voisins sur ce plan.
 
+# Fraîcheur du plan {#freshness}
+
+Le plan est construit à partir des voisins que SwitchMap a mémorisés lors des dernières interrogations des commutateurs ; il s’ouvre donc instantanément, même sur un grand réseau. Les voisins sont mis à jour par l’interrogation périodique (au plus toutes les 10 minutes, ou une fois par heure en mode « une fois par heure », voir [Supervision et alertes](/help/monitoring#polling)) et par **Interroger en SNMP** sur la page du commutateur.
+
+Le bouton **Actualiser** du plan interroge à nouveau LLDP sur tous les commutateurs — utilisez-le si vous venez de déplacer des câbles.
+
 # S’il n’y a pas de liens {#empty}
 
+- Le commutateur n’a pas encore été interrogé depuis le démarrage de SwitchMap — cliquez sur **Actualiser**.
 - LLDP est désactivé sur le commutateur ou sur certains ports.
 - Le commutateur ne fournit pas LLDP-MIB en SNMP (c’est le cas des modèles simples).
 - Certains équipements Cisco n’utilisent que CDP par défaut : activez LLDP avec `lldp run`.

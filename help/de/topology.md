@@ -30,8 +30,15 @@ Ziehen Sie den Plan mit der Maus, zoomen Sie mit dem Mausrad, und die Schaltflä
 
 > **Tipp:** Mit aktiviertem **LLDP-Nachbarn folgen** bei der [Netzsuche](/help/add-switch#discovery) findet SwitchMap die Switches, die auf diesem Plan als Nachbarn auftauchen, selbst.
 
+# Wie aktuell der Plan ist {#freshness}
+
+Der Plan wird aus den Nachbarn erstellt, die SwitchMap bei den letzten Abfragen der Switches gespeichert hat – deshalb öffnet er sich auch in großen Netzen sofort. Die Nachbarn werden bei der regelmäßigen Abfrage aktualisiert (höchstens alle 10 Minuten, im Modus „einmal pro Stunde“ stündlich, siehe [Monitoring und Alarme](/help/monitoring#polling)) und mit **Per SNMP abfragen** auf der Switch-Seite.
+
+Die Schaltfläche **Aktualisieren** auf dem Plan fragt LLDP auf allen Switches erneut ab – drücken Sie sie, wenn Sie gerade Kabel umgesteckt haben.
+
 # Wenn keine Verbindungen erscheinen {#empty}
 
+- Der Switch wurde seit dem Start von SwitchMap noch nicht abgefragt – drücken Sie **Aktualisieren**.
 - LLDP ist am Switch oder an einzelnen Ports deaktiviert.
 - Der Switch liefert LLDP-MIB nicht per SNMP (bei einfachen Modellen).
 - Manche Cisco-Geräte nutzen standardmäßig nur CDP — aktivieren Sie LLDP mit `lldp run`.

@@ -30,8 +30,15 @@ Drag the map with the mouse, zoom with the wheel, and the **Fit** button brings 
 
 > **Tip:** with **Follow LLDP neighbors** turned on in [network discovery](/help/add-switch#discovery), SwitchMap finds the switches that appear on this map as neighbors by itself.
 
+# How fresh the map is {#freshness}
+
+The map is built from the neighbors SwitchMap remembered during the latest switch polls, so it opens instantly even in a large network. Neighbors are refreshed by periodic polling (no more often than every 10 minutes, or once an hour in the «once an hour» mode, see [Monitoring](/help/monitoring#polling)) and by **Poll via SNMP** on the switch page.
+
+The **Refresh** button on the map queries LLDP on all switches again — press it if you have just moved cables.
+
 # If there are no links {#empty}
 
+- The switch has not been polled since SwitchMap started — press **Refresh**.
 - LLDP is disabled on the switch or on individual ports.
 - The switch does not provide LLDP-MIB via SNMP (this happens with simple models).
 - Some Cisco devices use only CDP by default — enable LLDP with `lldp run`.

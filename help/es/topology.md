@@ -30,8 +30,15 @@ Arrastre el mapa con el ratón, haga zoom con la rueda, y el botón **Ajustar** 
 
 > **Consejo:** con **Seguir vecinos LLDP** activado en la [búsqueda en la red](/help/add-switch#discovery), SwitchMap encuentra por sí mismo los switches que aparecen en este mapa como vecinos.
 
+# Qué tan actual es el mapa {#freshness}
+
+El mapa se construye con los vecinos que SwitchMap recordó en los últimos sondeos de los switches, por lo que se abre al instante incluso en una red grande. Los vecinos se actualizan con el sondeo periódico (como mucho cada 10 minutos, o una vez por hora en el modo «una vez por hora», vea [Monitorización](/help/monitoring#polling)) y con **Consultar por SNMP** en la página del switch.
+
+El botón **Actualizar** del mapa vuelve a consultar LLDP en todos los switches: púlselo si acaba de cambiar cables.
+
 # Si no hay enlaces {#empty}
 
+- El switch aún no se ha sondeado desde que se inició SwitchMap: pulse **Actualizar**.
 - LLDP está desactivado en el switch o en algunos puertos.
 - El switch no ofrece LLDP-MIB por SNMP (ocurre en modelos sencillos).
 - Algunos equipos Cisco solo usan CDP por defecto: active LLDP con `lldp run`.
