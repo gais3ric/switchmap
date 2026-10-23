@@ -92,7 +92,7 @@ def rollup_and_prune(db, compute_traffic_rates, raw_days=7, hourly_days=365, eve
     hourly_cutoff = (now - timedelta(days=hourly_days)).strftime("%Y-%m-%d %H:00:00")
     events_cutoff = (now - timedelta(days=events_days)).strftime(TS)
     stats = {}
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         stats["backfilled"] = backfill_rates(conn, compute_traffic_rates)
 
         cur = conn.execute("""
@@ -137,7 +137,7 @@ def rollup_and_prune(db, compute_traffic_rates, raw_days=7, hourly_days=365, eve
             "DELETE FROM port_events WHERE event_time < ?", (events_cutoff,)).rowcount
         conn.commit()
     if vacuum:
-        with sqlite3.connect(db) as conn:
+        with sqlite3.connect(db, timeout=30) as conn:
             conn.execute("VACUUM")
     stats["time"] = now.strftime(TS)
     return stats
@@ -148,7 +148,7 @@ def db_stats(db):
     tables = ("switches", "port_traffic", "port_traffic_hourly", "switch_health", "switch_health_hourly",
               "port_events", "mac_table", "audit_log", "devices")
     out = {"file_size": os.path.getsize(db) if os.path.exists(db) else 0, "tables": {}}
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         for t in tables:
             out["tables"][t] = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] if t in existing else 0
@@ -214,7 +214,7 @@ def traffic_series(db, switch_id, ifindex, period, now=None):
     now = now or datetime.now()
     start = now - timedelta(seconds=span)
     start_s = start.strftime(TS)
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         raw = conn.execute("""
             SELECT timestamp, in_mbps, out_mbps, interval_sec, errors_delta FROM port_traffic
             WHERE switch_id=? AND ifindex=? AND timestamp >= ? AND rate_done = 1 AND interval_sec > 0
@@ -243,7 +243,7 @@ def health_series(db, switch_id, period, now=None):
     span, bucket = PERIODS.get(period, PERIODS["24h"])
     now = now or datetime.now()
     start = now - timedelta(seconds=span)
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         raw = conn.execute("""
             SELECT timestamp, cpu_usage, ram_usage, temperature FROM switch_health
             WHERE switch_id=? AND timestamp >= ? ORDER BY timestamp""", (switch_id, start.strftime(TS))).fetchall()
@@ -294,7 +294,7 @@ def create_backup(db, reason="manual"):
         n += 1
         name = f"switches-{stamp}-{reason}-{n}.db"
         path = os.path.join(backups_dir(db), name)
-    src = sqlite3.connect(db)
+    src = sqlite3.connect(db, timeout=30)
     dst = sqlite3.connect(path)
     try:
         src.backup(dst)
@@ -375,7 +375,7 @@ def restore_backup(db, path):
         raise ValueError(error)
     safety = create_backup(db, "before-restore")
     src = sqlite3.connect(path)
-    dst = sqlite3.connect(db)
+    dst = sqlite3.connect(db, timeout=30)
     try:
         src.backup(dst)
         enable_wal(dst)  # копия могла быть в обычном режиме — рабочей базе возвращаем WAL

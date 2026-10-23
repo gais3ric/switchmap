@@ -17,6 +17,15 @@ keywords: abfrage intervall auslastung verkehr fehler cpu speicher temperatur sc
 
 Ohne regelmäßige Abfrage werden Daten nur über die Schaltfläche **Per SNMP abfragen** auf der Switch-Seite aktualisiert.
 
+**Portnamen, Beschreibungen und VLANs** – wie oft selten geänderte Daten gelesen werden: Portnamen und -beschreibungen, VLANs, LLDP-Nachbarn (für die Topologie).
+
+| Modus | Wann wählen |
+|---|---|
+| Bei jeder Abfrage | Das Netz wird aufgebaut, erweitert oder repariert – Änderungen sind sofort sichtbar |
+| Einmal pro Stunde | Das Netz ist stabil – fast halb so viele Anfragen an die Switches, weniger Last auf deren CPU |
+
+Portstatus, Datenverkehr, Fehler und MAC-Adressen werden in beiden Modi bei jeder Abfrage gelesen. **Per SNMP abfragen** auf der Switch-Seite liest immer alles – drücken Sie es nach einer Änderung am Switch, statt eine Stunde zu warten.
+
 # Was gemessen wird {#metrics}
 
 - **Portstatus** — Link oder kein Link. Eine Änderung erzeugt das Ereignis „Port ausgefallen“ oder „Port aktiv“.

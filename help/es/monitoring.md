@@ -17,6 +17,15 @@ Abra **Configuración** (el engranaje al final del menú) y active **Consultar l
 
 Sin sondeo periódico, los datos solo se actualizan con el botón **Consultar por SNMP** de la página del switch.
 
+**Nombres de puertos, descripciones y VLAN**: con qué frecuencia leer los datos que casi no cambian: nombres y descripciones de puertos, VLAN y vecinos LLDP (para la topología).
+
+| Modo | Cuándo elegirlo |
+|---|---|
+| Cada sondeo | La red se está construyendo, ampliando o reparando: los cambios se ven de inmediato |
+| Una vez por hora | La red es estable: casi la mitad de solicitudes a los switches y menos carga en su CPU |
+
+El estado de los puertos, el tráfico, los errores y las direcciones MAC se leen en cada sondeo en ambos modos. **Consultar por SNMP** en la página del switch siempre lee todo: púlselo después de cambiar algo en un switch en lugar de esperar una hora.
+
 # Qué se mide {#metrics}
 
 - **Estado del puerto**: con o sin enlace. Un cambio genera el evento «puerto caído» o «puerto activo».

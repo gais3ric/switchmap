@@ -315,6 +315,7 @@ function openSettingsModal() {
             });
             document.getElementById('serverLangInput').value = data.server_language || '';
             document.getElementById('updateCheckInput').checked = !!data.update_check;
+            document.getElementById('staticModeInput').value = data.static_poll_mode || 'always';
         })
         .catch(() => notify(t('Не удалось загрузить настройки'), 'error'));
     const uiLang = document.getElementById('settingsUiLang');
@@ -333,6 +334,7 @@ function saveSettings() {
     if (!poll_interval_minutes || poll_interval_minutes < 1) poll_interval_minutes = 1;
 
     const body = { poll_enabled, poll_interval_minutes, server_language: document.getElementById('serverLangInput').value };
+    body.static_poll_mode = document.getElementById('staticModeInput').value;
     const updateCheck = document.getElementById('updateCheckInput');
     if (!updateCheck.disabled) body.update_check = updateCheck.checked;
     Object.entries(THRESHOLD_INPUTS).forEach(([key, id]) => {

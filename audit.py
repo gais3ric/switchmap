@@ -67,7 +67,7 @@ def ensure_table(c):
 
 
 def log(db, action, *, actor=None, switch_id=None, switch_name=None, summary="", changes=None, revert=None):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         cur = conn.execute("""
             INSERT INTO audit_log (time, actor, switch_id, switch_name, action, summary, details, revert)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -178,7 +178,7 @@ def entries(db, switch_id=None, action=None, limit=50, before_id=None):
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY id DESC LIMIT ?"
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         rows = conn.execute(sql, params + [limit]).fetchall()
     return [{
         "id": r[0], "time": r[1], "actor": r[2] or "", "switch_id": r[3], "switch_name": r[4] or "",
@@ -190,7 +190,7 @@ def entries(db, switch_id=None, action=None, limit=50, before_id=None):
 
 
 def get_revert(db, entry_id):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         row = conn.execute("SELECT action, switch_id, switch_name, revert, reverted_by FROM audit_log WHERE id=?",
                            (entry_id,)).fetchone()
     if not row:
@@ -200,6 +200,6 @@ def get_revert(db, entry_id):
 
 
 def mark_reverted(db, entry_id, by_id):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         conn.execute("UPDATE audit_log SET reverted_by=? WHERE id=?", (by_id, entry_id))
         conn.commit()

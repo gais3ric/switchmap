@@ -42,14 +42,14 @@ def is_newer(latest, current):
 
 
 def _read(db):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         rows = conn.execute(f"SELECT key, value FROM app_settings WHERE key IN ({','.join('?' * len(KEYS))})",
                             KEYS).fetchall()
     return dict(rows)
 
 
 def _write(db, values):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         conn.executemany("INSERT INTO app_settings (key, value) VALUES (?, ?) "
                          "ON CONFLICT(key) DO UPDATE SET value=excluded.value", list(values.items()))
         conn.commit()

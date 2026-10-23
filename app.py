@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import threading
+import time
 import concurrent.futures
 from datetime import datetime, timedelta
 
@@ -33,6 +34,8 @@ log = logging.getLogger("switchmap")
 app = Flask(__name__, root_path=config.resource_dir())
 APP_VERSION = config.version()
 DB = os.path.join(DATA_DIR, "switches.db")
+# Ожидание очереди на запись: опрос идёт параллельно, а обслуживание базы пишет долго (по умолчанию — 5 с)
+DB_TIMEOUT = 30
 
 # Секреты (ключ сессий и ключ шифрования паролей SNMPv3) — в файле switchmap.secret рядом с базой
 _SECRETS = security.load_secrets(DB)
@@ -424,7 +427,7 @@ def api_account_password():
 # ─────────────────────────────────────────
 
 def init_db():
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute("""
         CREATE TABLE IF NOT EXISTS switches (
@@ -589,7 +592,7 @@ def _add_column(c, table, column, decl):
 
 
 def migrate_db():
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute("PRAGMA table_info(switches)")
         columns = [col[1] for col in c.fetchall()]
@@ -1010,7 +1013,29 @@ def resolve_hostnames(ips, budget_sec=5):
     return result
 
 
-def poll_switch_snmp(ip, community, port_count=None):
+# ── Справочные данные коммутатора (названия и описания портов, типы, VLAN, PoE-настройка, соседи LLDP)
+# меняются редко. В режиме «раз в час» они читаются раз в час (и при «Опросить»), между этим — из памяти;
+# в режиме «каждый опрос» — каждый раз. Состояние, трафик, ошибки и MAC-адреса читаются всегда.
+STATIC_REFRESH_SEC = 3600
+_lldp_cache = {}    # id коммутатора -> (время, ip, соседи LLDP) — для страницы «Топология»
+LLDP_REFRESH_SEC = 600  # соседи LLDP при плановом опросе — не чаще (кнопки «Опросить» и «Обновить» — сразу)
+STATIC_MODES = ("always", "hourly")
+_static_cache = {}  # (ip, учётные данные) -> {"time": ..., oid: строки ответа}
+
+
+def _snmp_auth_key(auth):
+    auth = _as_snmp_auth(auth)
+    return (auth.version, auth.community, getattr(auth, "user", ""), getattr(auth, "context", ""))
+
+
+def static_cache_age(ip, auth):
+    """Сколько секунд назад читались справочные данные коммутатора (None — ещё не читались)."""
+    import time
+    entry = _static_cache.get((ip, _snmp_auth_key(auth)))
+    return time.time() - entry["time"] if entry else None
+
+
+def poll_switch_snmp(ip, community, port_count=None, refresh_static=True):
     """
     Расширенный SNMP-опрос коммутатора:
     - Статус портов (up/down), номер порта на схеме, описание (ifAlias), скорость
@@ -1019,19 +1044,36 @@ def poll_switch_snmp(ip, community, port_count=None):
     - Трафик портов (bytes/packets in/out, errors)
     - PoE статус
     community — SnmpAuth или строка community (v2c).
+    refresh_static=False — справочные данные взять из памяти, если они там есть.
     """
+    import time
     port_status = {}
+    cache_key = (ip, _snmp_auth_key(community))
+    cached = None if refresh_static else _static_cache.get(cache_key)
+    fresh = {}
 
-    # Базовая информация о портах. По первому запросу понимаем, отвечает ли коммутатор.
-    ifdescr_data, first_error = snmp_walk_ex(ip, community, "1.3.6.1.2.1.2.2.1.2")  # ifDescr
-    if not ifdescr_data:
+    def static_walk(oid):
+        if cached is not None and oid in cached:
+            return cached[oid]
+        rows = snmp_walk(ip, community, oid)
+        fresh[oid] = rows
+        return rows
+
+    # По первому запросу понимаем, отвечает ли коммутатор: ifOperStatus читается всегда
+    ifstatus_data, first_error = snmp_walk_ex(ip, community, "1.3.6.1.2.1.2.2.1.8")  # ifOperStatus
+    if not ifstatus_data:
         return {"error": "SNMP: " + (first_error or _("коммутатор не вернул список интерфейсов"))}
-    ifstatus_data = snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.8")  # ifOperStatus
+    if cached is not None:
+        # Набор интерфейсов изменился (вставили модуль, после перезагрузки сменились ifIndex) — читаем заново
+        known = {oid.rsplit(".", 1)[-1] for oid, _v in cached.get("1.3.6.1.2.1.2.2.1.2", [])}
+        if known != {oid.rsplit(".", 1)[-1] for oid, _v in ifstatus_data}:
+            cached = None
+    ifdescr_data = static_walk("1.3.6.1.2.1.2.2.1.2")  # ifDescr
     ifspeed_data = snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.5")   # ifSpeed, бит/с (до 4.2 Гбит/с)
-    iftype_data = snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.3")    # ifType
-    ifname_data = snmp_walk(ip, community, "1.3.6.1.2.1.31.1.1.1.1")    # ifName (Gi1/0/1)
+    iftype_data = static_walk("1.3.6.1.2.1.2.2.1.3")    # ifType
+    ifname_data = static_walk("1.3.6.1.2.1.31.1.1.1.1")    # ifName (Gi1/0/1)
     ifhighspeed_data = snmp_walk(ip, community, "1.3.6.1.2.1.31.1.1.1.15")  # ifHighSpeed, Мбит/с
-    ifalias_data = snmp_walk(ip, community, "1.3.6.1.2.1.31.1.1.1.18")  # ifAlias — описание порта
+    ifalias_data = static_walk("1.3.6.1.2.1.31.1.1.1.18")  # ifAlias — описание порта
 
     # Трафик портов. 64-битные счётчики (IF-MIB ifXTable) предпочтительнее:
     # 32-битный ifInOctets на 1 Гбит/с переполняется примерно за 34 секунды.
@@ -1045,7 +1087,7 @@ def poll_switch_snmp(ip, community, port_count=None):
     ifout_errors = snmp_walk(ip, community, "1.3.6.1.2.1.2.2.1.20")  # ifOutErrors
 
     # PoE (Power over Ethernet) - RFC 3621, индекс строки: <группа>.<порт>
-    poe_admin = snmp_walk(ip, community, "1.3.6.1.2.1.105.1.1.1.1.3")   # pethPsePortAdminEnable: 1=true, 2=false
+    poe_admin = static_walk("1.3.6.1.2.1.105.1.1.1.1.3")   # pethPsePortAdminEnable: 1=true, 2=false
     poe_status = snmp_walk(ip, community, "1.3.6.1.2.1.105.1.1.1.1.6")  # pethPsePortDetectionStatus
     # В RFC 3621 нет потребления по портам — берём из CISCO-POWER-ETHERNET-EXT-MIB
     # (cpeExtPsePortPwrConsumption, мВт). На других вендорах мощность будет неизвестна.
@@ -1173,13 +1215,13 @@ def poll_switch_snmp(ip, community, port_count=None):
 
     fdb_mac = snmp_walk(ip, community, "1.3.6.1.2.1.17.4.3.1.1")
     fdb_port = snmp_walk(ip, community, "1.3.6.1.2.1.17.4.3.1.2")
-    bridge_port_data = snmp_walk(ip, community, "1.3.6.1.2.1.17.1.4.1.2")
+    bridge_port_data = static_walk("1.3.6.1.2.1.17.1.4.1.2")
     arp_data = snmp_walk(ip, community, "1.3.6.1.2.1.4.22.1.2")
 
     # VLAN: dot1qPvid (PVID по dot1dBasePort) и dot1qVlanStaticName (имя по VLAN ID).
     # Раньше здесь по ошибке опрашивался 1.0.8802.1.1.2.1.4.1.1.5 — это LLDP chassis ID соседей.
-    pvid_data = snmp_walk(ip, community, "1.3.6.1.2.1.17.7.1.4.5.1.1")
-    vlan_name_data = snmp_walk(ip, community, "1.3.6.1.2.1.17.7.1.4.3.1.1")
+    pvid_data = static_walk("1.3.6.1.2.1.17.7.1.4.5.1.1")
+    vlan_name_data = static_walk("1.3.6.1.2.1.17.7.1.4.3.1.1")
 
     mac_to_bridge_port = {}
     if fdb_mac and fdb_port:
@@ -1265,6 +1307,8 @@ def poll_switch_snmp(ip, community, port_count=None):
             "traffic": info.get("traffic", {}),
             "poe": info.get("poe")
         }
+    if fresh and (cached is None or refresh_static):
+        _static_cache[cache_key] = {"time": time.time(), **fresh}
     return final
 
 
@@ -1431,7 +1475,7 @@ def detect_duplicate_macs(switch_id):
     Обнаружение дублирующихся MAC-адресов на разных портах.
     Возвращает список дубликатов: [{mac, ports: [port1, port2, ...]}]
     """
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute("""
             SELECT mac, GROUP_CONCAT(port_number) as ports, COUNT(*) as count
@@ -1500,7 +1544,7 @@ def insert_port_events(switch_id, events):
     """events: [{ifindex, port_name, port_number?, event_type, event_time, details?}]"""
     if not events:
         return
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         conn.executemany("""
             INSERT INTO port_events (switch_id, ifindex, port_name, port_number, event_type, event_time, details, is_read)
             VALUES (?, ?, ?, ?, ?, ?, ?, 0)
@@ -1593,7 +1637,7 @@ def update_mac_table(switch_id, result, now):
             if dev.get("mac"):
                 rows.append((switch_id, dev["mac"].lower(), ifindex, info.get("port"), info.get("name"),
                              vlan, dev.get("ip") or None, dev.get("hostname") or None, len(devices), now, now))
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         conn.executemany("""
             INSERT INTO mac_table (switch_id, mac, ifindex, port_number, port_name, vlan, ip, hostname,
                                    port_mac_count, first_seen, last_seen)
@@ -1646,7 +1690,7 @@ def _int_setting(raw, default, lo, hi):
 
 
 def get_settings():
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute("SELECT key, value FROM app_settings")
         rows = dict(c.fetchall())
@@ -1658,6 +1702,9 @@ def get_settings():
     settings["server_language"] = lang if lang in i18n.LANGUAGES else ""
     # Проверка новых версий (раз в день, GitHub); SWITCHMAP_UPDATE_CHECK=0 запрещает её совсем
     settings["update_check"] = rows.get("update_check", "1") == "1" and updates.allowed()
+    # Справочные данные: «always» — каждый опрос (сеть строится/меняется), «hourly» — раз в час (сеть стабильна)
+    mode = rows.get("static_poll_mode", "always")
+    settings["static_poll_mode"] = mode if mode in STATIC_MODES else "always"
     return settings
 
 
@@ -1668,6 +1715,8 @@ def save_settings(updates):
         values.append(("poll_enabled", "1" if updates["poll_enabled"] else "0"))
     if "update_check" in updates:
         values.append(("update_check", "1" if updates["update_check"] else "0"))
+    if updates.get("static_poll_mode") in STATIC_MODES:
+        values.append(("static_poll_mode", updates["static_poll_mode"]))
     for key, default, lo, hi in INT_SETTINGS:
         if key in updates:
             values.append((key, str(_int_setting(updates[key], default, lo, hi))))
@@ -1675,7 +1724,7 @@ def save_settings(updates):
         lang = updates["server_language"] if updates["server_language"] in i18n.LANGUAGES else ""
         values.append(("server_language", lang))
         i18n.set_server_language(lang)
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.executemany(
             "INSERT INTO app_settings (key, value) VALUES (?, ?) "
@@ -1691,7 +1740,7 @@ MIN_RATE_INTERVAL_SEC = 10  # скорость порта — по интерв�
 
 def scheduled_poll_all_switches():
     """Опрашивает по SNMP все коммутаторы с заданным IP. Вызывается планировщиком."""
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute("SELECT id FROM switches WHERE ip_address IS NOT NULL AND ip_address != ''")
         switch_ids = [row[0] for row in c.fetchall()]
@@ -1811,7 +1860,7 @@ def prepare_database():
         init_db()
     else:
         try:
-            with sqlite3.connect(DB) as conn:
+            with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
                 row = conn.execute("SELECT value FROM app_settings WHERE key='schema_version'").fetchone()
             stored = int(row[0]) if row else 0
         except sqlite3.Error:
@@ -1820,11 +1869,11 @@ def prepare_database():
             name = maintenance.create_backup(DB, "pre-migrate")
             log.info(_s("Резервная копия перед обновлением базы: {path}", path=os.path.join(maintenance.backups_dir(DB), name)))
         migrate_db()
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('schema_version', ?) "
                      "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(SCHEMA_VERSION),))
         conn.commit()
-    conn = sqlite3.connect(DB)
+    conn = sqlite3.connect(DB, timeout=DB_TIMEOUT)
     try:
         mode = maintenance.enable_wal(conn)
     finally:
@@ -1957,9 +2006,9 @@ def poll_switch_lldp(ip, community):
     return links
 
 
-def collect_topology():
+def collect_topology(refresh=False):
     """Build a graph from configured switches + LLDP neighbors + assigned devices."""
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         conn.row_factory = sqlite3.Row
         snmp_auth_by_id = {r["id"]: SnmpAuth.from_row(r) for r in conn.execute("SELECT * FROM switches")}
         conn.row_factory = None
@@ -2029,7 +2078,12 @@ def collect_topology():
         auth = snmp_auth_by_id.get(sid)
         if not ip or not auth or auth.validate():
             return sid, []
-        return sid, poll_switch_lldp(ip, auth)
+        cached = _lldp_cache.get(sid)
+        if not refresh and cached and cached[1] == ip:
+            return sid, cached[2]  # соседи из последнего опроса коммутатора
+        links = poll_switch_lldp(ip, auth)
+        _lldp_cache[sid] = (time.time(), ip, links)
+        return sid, links
 
     lldp_results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(2 * POLL_WORKERS, len(switches)))) as executor:
@@ -2140,7 +2194,7 @@ def switch_overview(row, unread_by_switch):
 
 @app.route("/")
 def index():
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute("SELECT * FROM switches ORDER BY name COLLATE NOCASE").fetchall()
         unread = dict(conn.execute(
@@ -2192,7 +2246,7 @@ def create_switch_record(name, ports, ip_address, auth, layout="single", patch_p
     cols = {"name": name, "ports": ports, "patch_panels": patch_panels, "patch_position": None, "switch_layout": layout,
             "connections": "{}", "ip_address": ip_address or "", "port_types": "{}", "trunk_ports": "{}",
             "model": model or None, "netbox_id": netbox_id, **snmp_columns(auth)}
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         cur = conn.execute(f"INSERT INTO switches ({', '.join(cols)}) VALUES ({', '.join('?' for _c in cols)})",
                            list(cols.values()))
         new_id = cur.lastrowid
@@ -2245,7 +2299,7 @@ def add_switch():
 
 @app.route("/switch/<int:switch_id>")
 def switch_view(switch_id):
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         # sqlite3.Row: шаблон обращается к колонкам по имени (switch['patch_panels']).
         # Порядок колонок в старых базах зависит от миграций, номера ненадёжны.
@@ -2264,7 +2318,7 @@ def switch_view(switch_id):
 
 def fetch_switch(switch_id):
     """Строка switches как dict или None."""
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute("SELECT * FROM switches WHERE id=?", (switch_id,)).fetchone()
     return dict(row) if row else None
@@ -2288,7 +2342,7 @@ def update_switch(switch_id):
     # SNMPv3: пустой пароль в форме — «оставить сохранённый» (пароли в браузер не отдаются)
     snmp_update = None
     if "snmp_version" in request.form:
-        with sqlite3.connect(DB) as conn:
+        with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
             conn.row_factory = sqlite3.Row
             current = conn.execute("SELECT * FROM switches WHERE id=?", (switch_id,)).fetchone()
         if current is None:
@@ -2313,7 +2367,7 @@ def update_switch(switch_id):
                        stored_key(f.get("snmp_v3_priv_key"), current["snmp_v3_priv_key"], auth.priv_proto),
                        auth.context or None, switch_id)
 
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         if snmp_update:
             c.execute("""UPDATE switches SET snmp_version=?, snmp_v3_user=?, snmp_v3_auth_proto=?, snmp_v3_auth_key=?,
@@ -2353,7 +2407,7 @@ SWITCH_TABLES = ("devices", "port_events", "port_traffic", "switch_health", "poe
 @app.route("/delete/<int:switch_id>", methods=["POST"])
 def delete_switch(switch_id):
     row = fetch_switch(switch_id)
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         devices = conn.execute("SELECT * FROM devices WHERE switch_id=?", (switch_id,)).fetchall()
         dev_cols = [c[1] for c in conn.execute("PRAGMA table_info(devices)")]
         c = conn.cursor()
@@ -2408,7 +2462,7 @@ def help_page(slug=None):
 @app.route("/api/topology")
 def api_topology():
     try:
-        return jsonify(collect_topology())
+        return jsonify(collect_topology(refresh=request.args.get("refresh") == "1"))
     except Exception as e:
         log.exception(_s("Топология: {error}", error=e))
         return jsonify({"error": str(e), "nodes": [], "links": []}), 500
@@ -2416,7 +2470,7 @@ def api_topology():
 
 @app.route("/api/status/<int:switch_id>")
 def api_status(switch_id):
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute("SELECT ip_address FROM switches WHERE id=?", (switch_id,))
         row = c.fetchone()
@@ -2441,7 +2495,7 @@ def api_status_bulk():
     results = {str(i): "unknown" for i in ids}
     if not ids:
         return jsonify(results)
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         rows = conn.execute(f"SELECT id, ip_address FROM switches WHERE id IN ({','.join('?' * len(set(ids)))})",
                             list(set(ids))).fetchall()
     targets = [(str(sid), ip) for sid, ip in rows if ip]
@@ -2485,22 +2539,23 @@ def track_reachability(switch_id, row, ip, auth, result, now):
     if event:
         insert_port_events(switch_id, [{**event, "ifindex": None, "port_name": _s("Коммутатор"),
                                         "port_number": None, "event_time": now}])
-        with sqlite3.connect(DB) as conn:
+        with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
             conn.execute("UPDATE switches SET alert_state=? WHERE id=?", (json.dumps(state), switch_id))
             conn.commit()
     return result, state
 
 
-def poll_switch_and_log_events(switch_id):
+def poll_switch_and_log_events(switch_id, full=False):
     """
     Опрашивает коммутатор по SNMP, обновляет port_vlans/port_status_snapshot,
     пишет события в port_events при смене статуса портов, сохраняет трафик и health.
     Используется и HTTP-эндпоинтом, и фоновым планировщиком.
+    full=True («Опросить» на странице) — справочные данные и соседи LLDP читаются заново в любом режиме.
     Возвращает результат poll_switch_snmp() (или {"error": ...}).
     """
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute("SELECT * FROM switches WHERE id=?", (switch_id,)).fetchone()
         # Последняя запись трафика по каждому порту — для скорости и загрузки
@@ -2528,8 +2583,19 @@ def poll_switch_and_log_events(switch_id):
     config_error = auth.validate()
     if config_error:
         return {"error": config_error}
-    result = poll_switch_snmp(ip, auth, row["ports"])
+    age = static_cache_age(ip, auth)
+    refresh = full or get_settings()["static_poll_mode"] == "always" or age is None or age >= STATIC_REFRESH_SEC
+    result = poll_switch_snmp(ip, auth, row["ports"], refresh_static=refresh)
     result, alert_state = track_reachability(switch_id, row, ip, auth, result, now)
+    lldp = _lldp_cache.get(switch_id)
+    lldp_due = full or not lldp or lldp[1] != ip or time.time() - lldp[0] >= LLDP_REFRESH_SEC
+    if refresh and lldp_due and isinstance(result, dict) and "error" not in result:
+        # Соседи LLDP — тоже справочные данные: страница «Топология» берёт их отсюда, не опрашивая сеть.
+        # Даже в режиме «каждый опрос» — не чаще раза в 10 минут: для карты сети этого достаточно
+        try:
+            _lldp_cache[switch_id] = (time.time(), ip, poll_switch_lldp(ip, auth))
+        except Exception as e:
+            log.warning(_s("LLDP {ip}: {error}", ip=ip, error=e))
 
     if isinstance(result, dict) and "error" not in result:
         settings = get_settings()
@@ -2594,7 +2660,7 @@ def poll_switch_and_log_events(switch_id):
         update_mac_table(switch_id, result, now)
 
         # Сохраняем статистику трафика портов
-        with sqlite3.connect(DB) as conn:
+        with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
             c = conn.cursor()
             for ifindex, info in result.items():
                 if isinstance(info, dict) and info.get("traffic"):
@@ -2624,7 +2690,7 @@ def poll_switch_and_log_events(switch_id):
         if health:
             state, events = evaluate_health_alerts(health, alert_state, settings, now)
             insert_port_events(switch_id, events)
-            with sqlite3.connect(DB) as conn:
+            with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
                 c = conn.cursor()
                 c.execute("""
                     INSERT INTO switch_health (switch_id, timestamp, cpu_usage, ram_usage, temperature)
@@ -2641,13 +2707,13 @@ def poll_switch_and_log_events(switch_id):
 
 @app.route("/api/poll_snmp/<int:switch_id>", methods=["POST"])
 def api_poll_snmp(switch_id):
-    return jsonify(poll_switch_and_log_events(switch_id))
+    return jsonify(poll_switch_and_log_events(switch_id, full=True))
 
 
 @app.route("/api/snmp_test/<int:switch_id>", methods=["POST"])
 def api_snmp_test(switch_id):
     """Проверка SNMP с сохранёнными настройками: читает sysName и sysDescr."""
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute("SELECT * FROM switches WHERE id=?", (switch_id,)).fetchone()
     if not row:
@@ -2723,7 +2789,7 @@ def api_snmp_probe():
     if r.get("ok"):
         r["model_label"] = _model_label(r.get("vendor"), r.get("model"))
         r.pop("lldp_ips", None)
-        with sqlite3.connect(DB) as conn:
+        with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
             dup = conn.execute("SELECT id, name FROM switches WHERE ip_address=?", (ip,)).fetchone()
         r["existing"] = {"id": dup[0], "name": dup[1]} if dup else None
     return jsonify(r)
@@ -2740,7 +2806,7 @@ def discover_page():
 
 
 def _existing_by_ip():
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         return {ip: (sid, name) for sid, name, ip in
                 conn.execute("SELECT id, name, ip_address FROM switches WHERE ip_address IS NOT NULL AND ip_address != ''")}
 
@@ -2825,7 +2891,7 @@ def api_discovery_add(job_id):
 
 def _netbox_payload(extra=None):
     cfg = netbox.load_config(DB)
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         linked = conn.execute("SELECT COUNT(*) FROM switches WHERE netbox_id IS NOT NULL").fetchone()[0]
     return {"config": netbox.public_config(cfg), "linked": linked, **(extra or {})}
 
@@ -2877,7 +2943,7 @@ def api_netbox_test():
 
 
 def _switch_rows():
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         conn.row_factory = sqlite3.Row
         return [dict(r) for r in conn.execute("SELECT id, name, ip_address, netbox_id FROM switches")]
 
@@ -2904,7 +2970,7 @@ def api_netbox_preview():
 def _apply_netbox_changes(switch_id, device, actor_note):
     """Обновить имя и IP связанного коммутатора по данным NetBox; изменения — в журнал."""
     before = fetch_switch(switch_id)
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         conn.execute("UPDATE switches SET name=?, ip_address=?, netbox_id=? WHERE id=?",
                      (device["name"], device["ip"] or before["ip_address"], device["id"], switch_id))
         conn.commit()
@@ -2944,7 +3010,7 @@ def api_netbox_import():
                 changes = _apply_netbox_changes(sid, p, current_actor())
                 (updated if changes else linked).append({"id": sid, "name": p["name"]})
             else:
-                with sqlite3.connect(DB) as conn:
+                with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
                     conn.execute("UPDATE switches SET netbox_id=? WHERE id=?", (dev_id, sid))
                     conn.commit()
                 linked.append({"id": sid, "name": p["match"]["switch_name"]})
@@ -2961,7 +3027,7 @@ def api_netbox_import():
 def netbox_sync(actor=_("NetBox (синхронизация)")):
     """Обновляет имена и IP связанных коммутаторов. Возвращает итог для отображения."""
     cfg = netbox.load_config(DB)
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         rows = conn.execute("SELECT id, name, netbox_id FROM switches WHERE netbox_id IS NOT NULL").fetchall()
     if not rows:
         return {"checked": 0, "updated": [], "missing": []}
@@ -3006,7 +3072,7 @@ def api_netbox_sync():
 
 @app.route("/api/netbox/unlink/<int:switch_id>", methods=["POST"])
 def api_netbox_unlink(switch_id):
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         conn.execute("UPDATE switches SET netbox_id=NULL WHERE id=?", (switch_id,))
         conn.commit()
     return jsonify({"ok": True})
@@ -3054,7 +3120,7 @@ def search_network(q, limit=50):
     text_like = f"%{_like_escape(q.lower())}%"
 
     results = []
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         conn.row_factory = sqlite3.Row
         switches = {r["id"]: r for r in conn.execute("SELECT * FROM switches")}
 
@@ -3144,7 +3210,7 @@ def api_set_vlan_color(switch_id):
     if not vlan_id:
         return jsonify({"error": _("Не указан VLAN ID")}), 400
 
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute("SELECT vlan_colors FROM switches WHERE id=?", (switch_id,))
         row = c.fetchone()
@@ -3182,7 +3248,7 @@ def api_assign_device(switch_id):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     is_online = 1 if ping_host(ip) else 0
 
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute("SELECT id FROM devices WHERE switch_id=? AND port_number=?",
                   (switch_id, port_number))
@@ -3204,7 +3270,7 @@ def api_assign_device(switch_id):
 
 @app.route("/api/remove_device/<int:switch_id>/<int:port_number>", methods=["POST"])
 def api_remove_device(switch_id, port_number):
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         dev = c.execute("SELECT ip, mac, hostname FROM devices WHERE switch_id=? AND port_number=?",
                         (switch_id, port_number)).fetchone()
@@ -3221,7 +3287,7 @@ def api_remove_device(switch_id, port_number):
 @app.route("/api/refresh_devices/<int:switch_id>", methods=["POST"])
 def api_refresh_devices(switch_id):
     """Обновляет онлайн-статус всех устройств коммутатора"""
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute("SELECT id, ip FROM devices WHERE switch_id=?", (switch_id,))
         devices = c.fetchall()
@@ -3278,7 +3344,7 @@ def api_port_events():
         query += " WHERE pe.is_read = 0"
     query += " ORDER BY pe.id DESC LIMIT ?"
 
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute(query, (limit,))
         rows = c.fetchall()
@@ -3301,7 +3367,7 @@ def api_port_events():
 
 @app.route("/api/port_events/unread_count")
 def api_port_events_unread_count():
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute("SELECT COUNT(*) FROM port_events WHERE is_read = 0")
         count = c.fetchone()[0]
@@ -3315,7 +3381,7 @@ def api_port_events_mark_read():
     ids = data.get("ids")
     mark_all = data.get("all", False)
 
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         if mark_all or not ids:
             c.execute("UPDATE port_events SET is_read = 1 WHERE is_read = 0")
@@ -3348,6 +3414,7 @@ SETTING_LABELS = {
     "retention_raw_days": N_("Хранить сырые данные, дней"), "retention_hourly_days": N_("Хранить почасовые данные, дней"),
     "retention_events_days": N_("Хранить события, дней"), "backup_auto": N_("Автокопия базы"), "backup_keep": N_("Хранить копий"),
     "server_language": N_("Язык журнала и уведомлений"), "update_check": N_("Проверка обновлений"),
+    "static_poll_mode": N_("Чтение названий портов и VLAN"),
 }
 
 
@@ -3356,7 +3423,7 @@ def api_save_settings():
     """Частичное обновление: меняются только переданные ключи."""
     data = request.json or {}
     before = get_settings()
-    known = {"poll_enabled", "server_language", "update_check"} | {k for k, *_rest in INT_SETTINGS}
+    known = {"poll_enabled", "server_language", "update_check", "static_poll_mode"} | {k for k, *_rest in INT_SETTINGS}
     save_settings({k: v for k, v in data.items() if k in known})
     after = get_settings()
     apply_scheduler_settings()
@@ -3366,6 +3433,8 @@ def api_save_settings():
             return _s("да") if v else _s("нет")
         if k == "server_language":
             return i18n.LANGUAGES.get(v) or _s("как в системе")
+        if k == "static_poll_mode":
+            return _s("каждый опрос") if v == "always" else _s("раз в час")
         return str(v)
     changes = [{"field": _s(SETTING_LABELS[k]) if k in SETTING_LABELS else k, "before": fmt(k, before[k]), "after": fmt(k, after[k])}
                for k in after if before.get(k) != after.get(k)]
@@ -3548,7 +3617,7 @@ def api_port_traffic(switch_id, ifindex):
         limit = 100
     limit = max(1, min(limit, 1000))
 
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         # Берём на одну запись больше: она нужна для скорости у самой старой из N
         c.execute("""
@@ -3577,7 +3646,7 @@ def api_port_traffic(switch_id, ifindex):
 @app.route("/api/switch_health/<int:switch_id>", methods=["GET"])
 def api_switch_health(switch_id):
     """Получить текущее состояние здоровья коммутатора"""
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute("""
             SELECT cpu_usage, ram_usage, temperature, last_poll_time
@@ -3611,7 +3680,7 @@ def api_switch_health_history(switch_id):
         limit = 100
     limit = max(1, min(limit, 1000))
 
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute("""
             SELECT timestamp, cpu_usage, ram_usage, temperature
@@ -3641,7 +3710,7 @@ def api_duplicate_macs(switch_id):
 
 def load_port_snapshot(switch_id):
     """Снимок портов из последнего SNMP-опроса: {ifindex: {"up", "name", "poe"?}} или None."""
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         c = conn.cursor()
         c.execute("SELECT port_status_snapshot FROM switches WHERE id=?", (switch_id,))
         row = c.fetchone()
@@ -3696,7 +3765,7 @@ def api_poe_status(switch_id):
 
 @app.route("/audit")
 def audit_view():
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         switches = conn.execute("SELECT id, name FROM switches ORDER BY name COLLATE NOCASE").fetchall()
     return render_template("audit.html", switches=switches, actions={k: _(v) for k, v in audit.ACTIONS.items()})
 
@@ -3715,7 +3784,7 @@ def api_audit():
 
 
 def _switch_columns():
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         return [c[1] for c in conn.execute("PRAGMA table_info(switches)")]
 
 
@@ -3736,7 +3805,7 @@ def api_audit_revert(entry_id):
             return jsonify({"ok": False, "error": _("Коммутатор уже удалён — сначала восстановите его")}), 409
         if not fields:
             return jsonify({"ok": False, "error": _("Нечего откатывать")}), 400
-        with sqlite3.connect(DB) as conn:
+        with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
             conn.execute(f"UPDATE switches SET {', '.join(f'{k}=?' for k in fields)} WHERE id=?",
                          list(fields.values()) + [info["switch_id"]])
             conn.commit()
@@ -3753,7 +3822,7 @@ def api_audit_revert(entry_id):
         cols = [c for c in _switch_columns() if c in snap]
         if not snap or "name" not in snap:
             return jsonify({"ok": False, "error": _("В записи нет данных для восстановления")}), 400
-        with sqlite3.connect(DB) as conn:
+        with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
             if conn.execute("SELECT 1 FROM switches WHERE id=?", (snap.get("id"),)).fetchone():
                 cols = [c for c in cols if c != "id"]  # id уже занят — получим новый
             cur = conn.execute(f"INSERT INTO switches ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
@@ -3824,7 +3893,7 @@ def api_backup_delete(name):
 def _restore_from(path, source_label):
     # Пользователи — не часть «данных сети»: если в копии их нет (она старше входа по паролю),
     # возвращаем текущих, иначе после восстановления любой смог бы создать себе администратора.
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         # id тоже возвращаем: по нему сессии узнают пользователя, иначе всех бы выкинуло из системы
         current_users = conn.execute("""SELECT id, username, password_hash, role, disabled, created, last_login,
                                         password_changed, session_version FROM users""").fetchall()
@@ -3834,7 +3903,7 @@ def _restore_from(path, source_label):
         return jsonify({"ok": False, "error": str(e)}), 400
     migrate_db()  # копия могла быть сделана старой версией приложения
     if security.count_users(DB, admins_only=True) == 0 and current_users:
-        with sqlite3.connect(DB) as conn:
+        with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
             conn.execute("DELETE FROM users")  # в копии могли быть только наблюдатели — заменяем целиком
             conn.executemany("""INSERT INTO users (id, username, password_hash, role, disabled, created, last_login,
                                 password_changed, session_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", current_users)
@@ -3918,7 +3987,7 @@ def switch_export_tables(switch_id):
     panel_rows = [[p.get("id"), p.get("name"), p.get("ports"), _("2 строки") if p.get("layout") == "double" else _("1 строка"),
                    _("над коммутатором") if p.get("position") == "above" else _("под коммутатором")]
                   for p in panels if isinstance(p, dict)]
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         manual = conn.execute("""SELECT port_number, mac, ip, hostname, notes, last_seen FROM devices
                                  WHERE switch_id=? ORDER BY port_number""", (switch_id,)).fetchall()
         macs = conn.execute("""SELECT port_number, mac, ip, hostname, vlan, port_mac_count, last_seen, port_name
@@ -3938,7 +4007,7 @@ def switch_export_tables(switch_id):
 
 
 def inventory_export_tables():
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute("SELECT * FROM switches ORDER BY name COLLATE NOCASE").fetchall()
         unread = dict(conn.execute("SELECT switch_id, COUNT(*) FROM port_events WHERE is_read=0 GROUP BY switch_id").fetchall())
@@ -4036,7 +4105,7 @@ def cli_reset_password(username):
     Работает только из консоли сервера (у кого есть консоль, у того и так есть доступ к базе)."""
     import getpass
     prepare_database()
-    with sqlite3.connect(DB) as conn:
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
         row = conn.execute("SELECT id FROM users WHERE username = ? COLLATE NOCASE", (username,)).fetchone()
     if not row:
         uid, error = None, None

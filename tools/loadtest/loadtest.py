@@ -55,6 +55,7 @@ def main():
     ap.add_argument("n", type=int)
     ap.add_argument("--polls", type=int, default=2)
     ap.add_argument("--keep", action="store_true")
+    ap.add_argument("--mode", choices=("always", "hourly"), default="always", help="чтение справочных данных")
     a = ap.parse_args()
 
     tmp = tempfile.mkdtemp(prefix=f"switchmap-load{a.n}-")
@@ -85,6 +86,8 @@ def main():
         m.resolve_hostnames = lambda ips, budget_sec=5: {}
         m.prepare_database()
         security.create_user(m.DB, "admin", "adminpass123", "admin")
+        m.save_settings({"static_poll_mode": a.mode})
+        print(f"режим справочных данных: {a.mode}", flush=True)
         with sqlite3.connect(m.DB) as conn:
             for i, (key, (sw, ports)) in enumerate(specs.items()):
                 conn.execute("INSERT INTO switches (name, ports, ip_address, snmp_community, switch_layout, patch_panels, "

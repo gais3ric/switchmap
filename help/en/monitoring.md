@@ -17,6 +17,15 @@ Open **Settings** (the gear at the bottom of the menu) and turn on **Poll switch
 
 Without periodic polling, data is updated only by the **Poll via SNMP** button on the switch page.
 
+**Port names, descriptions and VLANs** — how often to read data that rarely changes: port names and descriptions, VLANs, LLDP neighbors (for the topology).
+
+| Mode | When to choose |
+|---|---|
+| Every poll | The network is being built, extended or repaired — changes show up immediately |
+| Once an hour | The network is stable — almost half as many requests to the switches, less load on their CPU |
+
+Port status, traffic, errors and MAC addresses are read on every poll in both modes. **Poll via SNMP** on the switch page always reads everything — press it after changing something on a switch instead of waiting an hour.
+
 # What is measured {#metrics}
 
 - **Port status** — link or no link. A change raises a “port down” or “port up” event.

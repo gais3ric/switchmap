@@ -138,6 +138,14 @@ window.I18N = {{ js_i18n|tojson }};
                 <input type="number" id="pollIntervalInput" min="1" value="5">
                 <div class="hint">{{ _('Опрашиваются все коммутаторы с IP-адресом. Данные опросов нужны для поиска, загрузки портов и оповещений.') }}</div>
             </div>
+            <div class="field">
+                <label for="staticModeInput">{{ _('Названия портов, описания и VLAN') }}{{ tip(_('Названия и описания портов, VLAN и соседи по LLDP меняются редко. В стабильной сети их достаточно читать раз в час — запросов к коммутаторам станет почти вдвое меньше.'), 'monitoring', 'polling') }}</label>
+                <select id="staticModeInput">
+                    <option value="always">{{ _('Каждый опрос — сеть строится или меняется') }}</option>
+                    <option value="hourly">{{ _('Раз в час — сеть стабильна, меньше нагрузка на коммутаторы') }}</option>
+                </select>
+                <div class="hint">{{ _('Состояние портов, трафик, ошибки и MAC-адреса читаются при каждом опросе в любом режиме. Кнопка «Опросить» на странице коммутатора всегда читает всё.') }}</div>
+            </div>
 
             <div class="modal-section-title">{{ _('Пороги оповещений') }}</div>
             <div class="thresholds-grid">

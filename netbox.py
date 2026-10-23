@@ -37,7 +37,7 @@ class NetBoxError(Exception):
 # ─────────────────────────────────────────
 
 def load_config(db):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         row = conn.execute("SELECT value FROM app_settings WHERE key='netbox_config'").fetchone()
     try:
         data = json.loads(row[0]) if row and row[0] else {}
@@ -48,7 +48,7 @@ def load_config(db):
 
 
 def save_config(db, cfg):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('netbox_config', ?) "
                      "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (json.dumps(cfg, ensure_ascii=False),))
         conn.commit()

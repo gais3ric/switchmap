@@ -17,6 +17,15 @@ Ouvrez les **Réglages** (l’engrenage en bas du menu) et activez **Interroger 
 
 Sans interrogation périodique, les données ne sont mises à jour que par le bouton **Interroger en SNMP** de la page du commutateur.
 
+**Noms de ports, descriptions et VLAN** — à quelle fréquence lire les données qui changent rarement : noms et descriptions des ports, VLAN, voisins LLDP (pour la topologie).
+
+| Mode | Quand le choisir |
+|---|---|
+| À chaque interrogation | Le réseau est en construction, en extension ou en réparation — les changements apparaissent tout de suite |
+| Une fois par heure | Le réseau est stable — presque deux fois moins de requêtes vers les commutateurs, moins de charge sur leur processeur |
+
+L’état des ports, le trafic, les erreurs et les adresses MAC sont lus à chaque interrogation dans les deux modes. **Interroger en SNMP** sur la page du commutateur lit toujours tout — utilisez-le après une modification sur un commutateur au lieu d’attendre une heure.
+
 # Ce qui est mesuré {#metrics}
 
 - **État du port** : lien ou pas de lien. Un changement crée l’événement « port tombé » ou « port actif ».

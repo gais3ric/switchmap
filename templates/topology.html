@@ -120,7 +120,7 @@
             <span id="status">{{ _('Загрузка…') }}</span>
         </div>
         <div class="topo-actions">
-            <button type="button" class="btn btn-ghost btn-sm" data-click="loadTopology">{{ icon('refresh') }} {{ _('Обновить') }}</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-click="loadTopology" data-args="[true]" title="{{ _('Опросить соседей LLDP на всех коммутаторах заново') }}">{{ icon('refresh') }} {{ _('Обновить') }}</button>
             <button type="button" class="btn btn-ghost btn-sm" data-click="fitGraph">{{ icon('fit') }} {{ _('Вписать') }}</button>
         </div>
     </div>
@@ -339,10 +339,12 @@ function fitGraph() {
     svg.transition().duration(450).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx,ty).scale(scale));
 }
 
-async function loadTopology() {
-    statusEl.textContent = t("Опрос LLDP…");
+// refresh=true («Обновить») — опросить LLDP на коммутаторах заново; иначе — соседи из последних опросов
+async function loadTopology(refresh) {
+    refresh = refresh === true;
+    statusEl.textContent = refresh ? t("Опрос LLDP…") : t("Загрузка…");
     try {
-        const response = await fetch("/api/topology", {cache:"no-store"});
+        const response = await fetch("/api/topology" + (refresh ? "?refresh=1" : ""), {cache:"no-store"});
         const data = await response.json();
         if (!response.ok || data.error) throw new Error(data.error || t("Ошибка API"));
         graphData = data;

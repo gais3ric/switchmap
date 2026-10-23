@@ -113,7 +113,7 @@ def ensure_table(c):
 
 
 def _get_json(db, key):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         row = conn.execute("SELECT value FROM app_settings WHERE key=?", (key,)).fetchone()
     try:
         data = json.loads(row[0]) if row and row[0] else {}
@@ -123,7 +123,7 @@ def _get_json(db, key):
 
 
 def _put_json(db, key, value):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         conn.execute("INSERT INTO app_settings (key, value) VALUES (?, ?) "
                      "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, json.dumps(value, ensure_ascii=False)))
         conn.commit()
@@ -297,12 +297,12 @@ def describe_changes(before, after):
 
 
 def _max_event_id(db):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         return conn.execute("SELECT COALESCE(MAX(id), 0) FROM port_events").fetchone()[0]
 
 
 def write_log(db, channel, ok, events, title, error=""):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         conn.execute("INSERT INTO notify_log (time, channel, ok, events, title, error) VALUES (?, ?, ?, ?, ?, ?)",
                      (datetime.now().strftime(TS), channel, 1 if ok else 0, events, title[:300], (error or "")[:500]))
         conn.execute("DELETE FROM notify_log WHERE id <= (SELECT MAX(id) FROM notify_log) - ?", (LOG_KEEP,))
@@ -310,7 +310,7 @@ def write_log(db, channel, ok, events, title, error=""):
 
 
 def log_entries(db, limit=50):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         rows = conn.execute("SELECT id, time, channel, ok, events, title, error FROM notify_log "
                             "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
     return [{"id": r[0], "time": r[1], "channel": r[2], "channel_label": _(CHANNEL_LABELS[r[2]]) if r[2] in CHANNEL_LABELS else r[2],
@@ -871,7 +871,7 @@ def _dispatch(db, box, now, sender):
         if st.get("next_try") and st["next_try"] > now_s:
             report[ch] = _s("ждёт повтора")
             continue
-        with sqlite3.connect(db) as conn:
+        with sqlite3.connect(db, timeout=30) as conn:
             conn.row_factory = sqlite3.Row
             rows = [dict(r) for r in conn.execute(
                 "SELECT id, switch_id, ifindex, port_name, port_number, event_type, event_time, details "
@@ -934,7 +934,7 @@ def status(db):
         st = state.get(ch, {})
         pending = 0
         if cfg[ch]["enabled"] and "cursor" in st:
-            with sqlite3.connect(db) as conn:
+            with sqlite3.connect(db, timeout=30) as conn:
                 pending = conn.execute("SELECT COUNT(*) FROM port_events WHERE id > ?", (st["cursor"],)).fetchone()[0]
         out[ch] = {"enabled": cfg[ch]["enabled"], "last_ok": st.get("last_ok", ""), "last_error": st.get("last_error", ""),
                    "last_error_time": st.get("last_error_time", ""), "fails": st.get("fails", 0),

@@ -80,7 +80,7 @@ class SecretBox:
 def encrypt_plaintext_snmp_keys(db, box):
     """Шифрует пароли SNMPv3, сохранённые до появления шифрования. Возвращает число полей."""
     n = 0
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         cols = {c[1] for c in conn.execute("PRAGMA table_info(switches)")}
         if not {"snmp_v3_auth_key", "snmp_v3_priv_key"} <= cols:
             return 0
@@ -137,7 +137,7 @@ def validate_password(password, username=None):
 
 
 def count_users(db, admins_only=False):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         sql = "SELECT COUNT(*) FROM users WHERE disabled = 0" + (" AND role = 'admin'" if admins_only else "")
         try:
             return conn.execute(sql).fetchone()[0]
@@ -159,7 +159,7 @@ def set_language(db, user_id, language):
     """Язык интерфейса пользователя: код из i18n.LANGUAGES или "" — как в системе."""
     from i18n import LANGUAGES
     value = language if language in LANGUAGES else None
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         conn.execute("UPDATE users SET language = ? WHERE id = ?", (value, user_id))
         conn.commit()
     return value or ""
@@ -171,13 +171,13 @@ def public(user):
 
 
 def list_users(db):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         rows = conn.execute(f"SELECT {_COLS} FROM users ORDER BY username COLLATE NOCASE").fetchall()
     return [_row(r) for r in rows]
 
 
 def get_user(db, user_id):
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         r = conn.execute(f"SELECT {_COLS} FROM users WHERE id = ?", (user_id,)).fetchone()
     return _row(r) if r else None
 
@@ -194,7 +194,7 @@ def create_user(db, username, password, role="viewer"):
         return None, _("Неизвестная роль")
     now = datetime.now().strftime(TS)
     try:
-        with sqlite3.connect(db) as conn:
+        with sqlite3.connect(db, timeout=30) as conn:
             cur = conn.execute("""INSERT INTO users (username, password_hash, role, created, password_changed)
                                   VALUES (?, ?, ?, ?, ?)""", (username, generate_password_hash(password), role, now, now))
             conn.commit()
@@ -210,7 +210,7 @@ def set_password(db, user_id, password):
     err = validate_password(password, user["username"])
     if err:
         return err
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         conn.execute("""UPDATE users SET password_hash = ?, password_changed = ?,
                         session_version = COALESCE(session_version, 0) + 1 WHERE id = ?""",
                      (generate_password_hash(password), datetime.now().strftime(TS), user_id))
@@ -230,7 +230,7 @@ def update_user(db, user_id, role=None, disabled=None):
     losing_admin = user["role"] == "admin" and not user["disabled"] and (new_role != "admin" or new_disabled)
     if losing_admin and count_users(db, admins_only=True) <= 1:
         return _("Нельзя понизить или заблокировать последнего администратора")
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         conn.execute("UPDATE users SET role = ?, disabled = ? WHERE id = ?", (new_role, int(new_disabled), user_id))
         conn.commit()
     return None
@@ -242,7 +242,7 @@ def delete_user(db, user_id):
         return _("Пользователь не найден")
     if user["role"] == "admin" and not user["disabled"] and count_users(db, admins_only=True) <= 1:
         return _("Нельзя удалить последнего администратора")
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
     return None
@@ -254,7 +254,7 @@ _DUMMY_HASH = generate_password_hash("dummy-password-for-timing")
 
 def authenticate(db, username, password):
     """Возвращает пользователя (dict) или None."""
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         r = conn.execute(f"SELECT {_COLS}, password_hash FROM users WHERE username = ? COLLATE NOCASE",
                          ((username or "").strip(),)).fetchone()
     if not r:
@@ -262,7 +262,7 @@ def authenticate(db, username, password):
         return None
     if not check_password_hash(r[_NCOLS], password or "") or r[3]:
         return None
-    with sqlite3.connect(db) as conn:
+    with sqlite3.connect(db, timeout=30) as conn:
         conn.execute("UPDATE users SET last_login = ? WHERE id = ?", (datetime.now().strftime(TS), r[0]))
         conn.commit()
     return _row(r[:_NCOLS])

@@ -110,6 +110,41 @@ check("поиск по названию подключения", top.get("kind")
 check("короткий запрос — пусто", c.get("/api/search?q=a").get_json() == [])
 check("спецсимволы LIKE не ломают поиск", c.get("/api/search?q=%25_%25").status_code == 200)
 
+# ── Справочные данные: «раз в час» — реже, «каждый опрос» и «Опросить» — всё
+walked = []
+orig_walk_ex = m.snmp_walk_ex
+def counting_walk(ip, auth, oid, timeout=3):
+    walked.append(oid)
+    return orig_walk_ex(ip, auth, oid, timeout)
+m.snmp_walk_ex = counting_walk
+STATIC_OIDS = ("1.3.6.1.2.1.2.2.1.2", "1.3.6.1.2.1.31.1.1.1.18", "1.3.6.1.2.1.17.7.1.4.3.1.1")
+def ports_view(res):
+    return sorted((k, v.get("name"), v.get("alias"), str(v.get("vlan"))) for k, v in res.items() if isinstance(v, dict))
+
+walked.clear(); full = m.poll_switch_and_log_events(1, full=True); n_full = len(walked)
+check("«Опросить»: справочные данные и LLDP читаются", all(o in walked for o in STATIC_OIDS)
+      and any(o.startswith("1.0.8802.1.1.2.1.4.1.1") for o in walked), n_full)
+c.post("/api/settings", json={"static_poll_mode": "hourly"})
+check("режим «раз в час» сохраняется", m.get_settings()["static_poll_mode"] == "hourly")
+walked.clear(); quick = m.poll_switch_and_log_events(1); n_quick = len(walked)
+check(f"«раз в час»: повторный опрос — меньше запросов ({n_full} → {n_quick})",
+      n_quick <= n_full - 8 and not any(o in walked for o in STATIC_OIDS), n_quick)
+check("«раз в час»: названия, описания и VLAN портов те же", ports_view(quick) == ports_view(full))
+check("«раз в час»: состояние и трафик читаются как обычно", "1.3.6.1.2.1.2.2.1.8" in walked and "1.3.6.1.2.1.31.1.1.1.6" in walked)
+m._static_cache[next(k for k in m._static_cache if k[0] == "127.0.0.1")]["time"] -= m.STATIC_REFRESH_SEC + 1
+walked.clear(); m.poll_switch_and_log_events(1)
+check("«раз в час»: через час справочные данные читаются заново", all(o in walked for o in STATIC_OIDS))
+c.post("/api/settings", json={"static_poll_mode": "always"})
+walked.clear(); m.poll_switch_and_log_events(1)
+check("«каждый опрос»: справочные данные каждый раз", all(o in walked for o in STATIC_OIDS))
+c.get("/api/topology")  # коммутатор, который сам не опрашивается (неверный пароль), — опрашивается здесь один раз
+walked.clear(); topo = c.get("/api/topology").get_json()
+check("топология — из сохранённых соседей, без запросов к сети", not any(o.startswith("1.0.8802") for o in walked)
+      and any(n.get("switch_id") == 1 for n in topo["nodes"]), len(walked))
+walked.clear(); c.get("/api/topology?refresh=1")
+check("«Обновить» на топологии — опрос LLDP заново", any(o.startswith("1.0.8802") for o in walked))
+m.snmp_walk_ex = orig_walk_ex
+
 # ── Удаление коммутатора чистит связанные таблицы
 c.post("/delete/2")
 with sqlite3.connect(m.DB) as conn:
