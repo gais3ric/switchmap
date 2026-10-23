@@ -739,10 +739,26 @@ def ping_host(ip, timeout=1):
         
         result = subprocess.run(
             ["ping", param, "1", timeout_param, timeout_value, ip],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout + 1)
-        return result.returncode == 0
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout + 1)
+        if result.returncode != 0:
+            return False
+        if platform.system().lower() == "windows":
+            return ping_output_has_reply(result.stdout)
+        return True
     except Exception:
         return False
+
+
+# Настоящий ответ: «bytes=32 time<1ms TTL=64» / «время=5мс» — знак = или < сразу перед числом.
+# Строки статистики пишут «Sent = 1» с пробелом, а «Destination host unreachable» чисел не содержит.
+_PING_REPLY = re.compile(rb"[=<]\d")
+
+
+def ping_output_has_reply(output):
+    """Windows ping возвращает код 0 и на «Заданный узел недоступен» (ответ от своего же компьютера,
+    когда адрес в той же подсети не найден по ARP) — поэтому смотрим, был ли настоящий эхо-ответ.
+    Вывод на языке системы, но время и TTL всегда записаны как «=число» или «<число»."""
+    return bool(_PING_REPLY.search(output or b""))
 
 
 class SnmpAuth:

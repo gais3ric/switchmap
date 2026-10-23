@@ -34,6 +34,7 @@ BACKEND = [
     ("i18n", "test_i18n.py", [], False),
     ("updates", "test_updates.py", [], False),
     ("health", "test_health.py", [], False),
+    ("ping", "test_ping.py", [], False),
     ("live", "test_live.py", [], True),
     ("import", "test_import.py", [], True),
 ]
