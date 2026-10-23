@@ -174,15 +174,21 @@ def snmprec(key, sw, ports, all_plans):
         add(f"{base}.8.{idx}", 4, peer_port)
         add(f"{base}.9.{idx}", 4, peer)
 
-    # Здоровье: CPU (hrProcessorLoad), память (hrStorage), температура (Cisco)
-    add("1.3.6.1.2.1.25.3.3.1.2.1", 2, sw["cpu"])
+    # Здоровье — как у настоящих устройств: у каждого производителя свои таблицы
     size, used = sw["mem"]
-    add("1.3.6.1.2.1.25.2.3.1.2.1", 6, "1.3.6.1.2.1.25.2.1.2")
-    add("1.3.6.1.2.1.25.2.3.1.4.1", 2, 1024)
-    add("1.3.6.1.2.1.25.2.3.1.5.1", 2, size)
-    add("1.3.6.1.2.1.25.2.3.1.6.1", 2, used)
-    if sw["temp"]:
-        add("1.3.6.1.4.1.9.9.13.1.3.1.3.1", 66, sw["temp"])
+    if sw["cisco"]:   # CISCO-PROCESS-MIB, CISCO-MEMORY-POOL-MIB, CISCO-ENVMON-MIB
+        add("1.3.6.1.4.1.9.9.109.1.1.1.1.7.1", 66, sw["cpu"])
+        add("1.3.6.1.4.1.9.9.48.1.1.1.5.1", 66, used * 1024)
+        add("1.3.6.1.4.1.9.9.48.1.1.1.6.1", 66, (size - used) * 1024)
+        if sw["temp"]:
+            add("1.3.6.1.4.1.9.9.13.1.3.1.3.1", 66, sw["temp"])
+    elif "D-Link" in sw["descr"]:   # DLINK-AGENT-MIB: проценты
+        add("1.3.6.1.4.1.171.12.1.1.6.2.0", 2, sw["cpu"])
+        add("1.3.6.1.4.1.171.12.1.1.9.1.4.1", 2, round(used / size * 100))
+    else:   # HPE ProCurve / Aruba
+        add("1.3.6.1.4.1.11.2.14.11.5.1.9.6.1.0", 2, sw["cpu"])
+        add("1.3.6.1.4.1.11.2.14.11.5.1.1.2.1.1.1.5.1", 66, size * 1024)
+        add("1.3.6.1.4.1.11.2.14.11.5.1.1.2.1.1.1.7.1", 66, used * 1024)
     # PoE
     for p, i in ports.items():
         if i["poe"]:

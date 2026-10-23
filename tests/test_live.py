@@ -46,10 +46,13 @@ r1 = c.post("/api/poll_snmp/1").get_json()
 poll_time = time.time() - t0
 check("опрос 1 без ошибки", "error" not in r1, str(r1)[:200])
 check(f"опрос занимает секунды, а не минуты ({poll_time:.1f} с)", poll_time < 20, poll_time)
+h = c.get("/api/switch_health/1").get_json()
+check("Cisco: CPU, память и температура из таблиц Cisco (95%, 40%, 45 °C)",
+      h["cpu_usage"] == 95 and abs(h["ram_usage"] - 40) < 0.1 and h["temperature"] == 45, h)
 c.post("/api/poll_snmp/2"); c.post("/api/poll_snmp/3")
 r4 = c.post("/api/poll_snmp/4").get_json()
 check("опрос с неверным паролем v3 → ошибка, снимок не тронут", "error" in r4 and "неверный пароль" in r4["error"], r4)
-time.sleep(10)
+time.sleep(12)  # скорость считается по интервалу не короче 10 с
 for sid in (1, 2, 3):
     c.post(f"/api/poll_snmp/{sid}")
 c.post("/api/poll_snmp/1")  # третий опрос — повторных оповещений быть не должно

@@ -1473,7 +1473,18 @@ function chartLibMissing(emptyEl) {
 }
 
 function formatStatValue(value, unit) {
-    return (typeof value === 'number' && value > 0) ? value.toFixed(1) + unit : 'N/A';
+    return (typeof value === 'number' && value > 0) ? value.toFixed(1) + unit : '—';
+}
+
+// Карточка показателя: значение или «нет данных» с пояснением (не все коммутаторы сообщают всё)
+function setStatCard(id, value, unit) {
+    const el = document.getElementById(id);
+    const label = el.parentElement.querySelector('.stat-label');
+    if (label.dataset.text === undefined) label.dataset.text = label.textContent;
+    const ok = typeof value === 'number' && value > 0;
+    el.textContent = formatStatValue(value, unit);
+    label.textContent = ok ? label.dataset.text : t('нет данных по SNMP');
+    label.title = ok ? '' : t('Коммутатор не сообщает этот показатель по SNMP. Так бывает у некоторых моделей — например, многие Cisco 2960 не отдают температуру.');
 }
 
 async function loadHealthStats() {
@@ -1481,9 +1492,9 @@ async function loadHealthStats() {
         const response = await fetch(`/api/switch_health/${SWITCH_ID}`);
         const data = await response.json();
 
-        document.getElementById('cpuValue').textContent = formatStatValue(data.cpu_usage, '%');
-        document.getElementById('ramValue').textContent = formatStatValue(data.ram_usage, '%');
-        document.getElementById('tempValue').textContent = formatStatValue(data.temperature, '°C');
+        setStatCard('cpuValue', data.cpu_usage, '%');
+        setStatCard('ramValue', data.ram_usage, '%');
+        setStatCard('tempValue', data.temperature, '°C');
         document.getElementById('statsLastPoll').textContent = data.last_poll_time
             ? t('Последний опрос: {last_poll_time}', { last_poll_time: data.last_poll_time })
             : t('Коммутатор ещё не опрашивался');

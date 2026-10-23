@@ -26,6 +26,6 @@ for _ in range(2):
         r = m.poll_switch_and_log_events(sid)
         if "error" in r:
             print("POLL ERROR", sid, r, flush=True)
-    time.sleep(10)
+    time.sleep(12)  # скорость считается по интервалу не короче 10 с
 print("READY", flush=True)
 m.app.run(port=port, debug=False, use_reloader=False)

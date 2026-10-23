@@ -1268,98 +1268,163 @@ def poll_switch_snmp(ip, community, port_count=None):
     return final
 
 
-def poll_switch_health(ip, community):
-    """
-    Опрос данных о состоянии коммутатора:
-    - CPU usage
-    - RAM usage
-    - Температура
-    """
-    health = {
-        "cpu_usage": 0,
-        "ram_usage": 0,
-        "temperature": 0
-    }
-
-    # CPU Load (HOST-RESOURCES-MIB) - среднее за 1 минуту
-    cpu_data = snmp_walk(ip, community, "1.3.6.1.2.1.25.3.3.1.2")
-
-    # Память (HOST-RESOURCES-MIB). hrStorageTable содержит и диски/swap,
-    # поэтому учитываем только строки с типом hrStorageRam.
-    mem_type_data = snmp_walk(ip, community, "1.3.6.1.2.1.25.2.3.1.2")
-    mem_total_data = snmp_walk(ip, community, "1.3.6.1.2.1.25.2.3.1.5")
-    mem_used_data = snmp_walk(ip, community, "1.3.6.1.2.1.25.2.3.1.6")
-    mem_unit_data = snmp_walk(ip, community, "1.3.6.1.2.1.25.2.3.1.4")
-
-    # Температура (ENTITY-SENSOR-MIB) - типичные OID для коммутаторов
-    temp_data = snmp_walk(ip, community, "1.3.6.1.4.1.9.9.13.1.3.1.3")  # Cisco
-    if not temp_data or isinstance(temp_data, dict):
-        # Fallback для других производителей
-        temp_data = snmp_walk(ip, community, "1.3.6.1.4.1.2636.3.1.13.1.7")  # Juniper
-
-    # CPU
-    if cpu_data and not isinstance(cpu_data, dict):
-        cpu_values = [int(val) for oid, val in cpu_data if val]
-        if cpu_values:
-            health["cpu_usage"] = sum(cpu_values) / len(cpu_values)
-
-    # RAM
-    if mem_total_data and mem_used_data and not isinstance(mem_total_data, dict):
+def _snmp_num(val):
+    """Число из ответа SNMP (Integer, Gauge, строка «23»); None, если не число."""
+    try:
+        return float(int(val))
+    except (TypeError, ValueError):
         try:
-            total_values = []
-            used_values = []
-            units = {}
+            return float(str(val).strip())
+        except (TypeError, ValueError):
+            return None
 
-            if mem_unit_data:
-                for oid, val in mem_unit_data:
-                    idx = oid.split(".")[-1]
-                    units[idx] = int(val) if val else 1
 
-            # Индексы RAM-строк; если тип не отдаётся — считаем все строки, как раньше
-            ram_idx = None
-            if isinstance(mem_type_data, list) and mem_type_data:
-                ram_idx = {oid.split(".")[-1] for oid, val in mem_type_data
-                           if str(val).strip(".") == "1.3.6.1.2.1.25.2.1.2"}
+def _snmp_index_values(rows, depth=1):
+    """{индекс: число} по последним depth частям OID."""
+    out = {}
+    for oid, val in rows or []:
+        num = _snmp_num(val)
+        if num is not None:
+            out[".".join(oid.split(".")[-depth:])] = num
+    return out
 
-            for oid, val in mem_total_data:
-                idx = oid.split(".")[-1]
-                if ram_idx is not None and idx not in ram_idx:
-                    continue
-                unit = units.get(idx, 1)
-                total_values.append(int(val) * unit if val else 0)
 
-            for oid, val in mem_used_data:
-                idx = oid.split(".")[-1]
-                if ram_idx is not None and idx not in ram_idx:
-                    continue
-                unit = units.get(idx, 1)
-                used_values.append(int(val) * unit if val else 0)
+# ── Источники показателей «здоровья»: сначала таблицы производителей, потом стандартные.
+# Каждая функция получает walk(oid) и возвращает число или None. Какой источник сработал, запоминается
+# для коммутатора — дальше опрашивается только он (если перестал отвечать — снова перебор).
 
-            if total_values and used_values:
-                total_mem = sum(total_values)
-                used_mem = sum(used_values)
-                if total_mem > 0:
-                    health["ram_usage"] = (used_mem / total_mem) * 100
-        except Exception as e:
-            log.debug(_s("Память коммутатора не разобрана: {error}", error=e))
+def _h_avg(walk, oid):
+    vals = [v for v in _snmp_index_values(walk(oid)).values()]
+    return sum(vals) / len(vals) if vals else None
 
-    # Температура
-    if temp_data and not isinstance(temp_data, dict):
-        temps = []
-        for oid, val in temp_data:
+
+def _h_max_nonzero(walk, oid, limit=None):
+    vals = [v for v in _snmp_index_values(walk(oid)).values() if v > 0 and (limit is None or v < limit)]
+    return max(vals) if vals else None
+
+
+def _h_cisco_cpu(walk):
+    # CISCO-PROCESS-MIB: cpmCPUTotal1minRev, на старых IOS — cpmCPUTotal1min
+    return _h_avg(walk, "1.3.6.1.4.1.9.9.109.1.1.1.1.7") or _h_avg(walk, "1.3.6.1.4.1.9.9.109.1.1.1.1.4")
+
+
+def _h_pair_percent(walk, used_oid, other_oid, other_is_free):
+    used, other = _snmp_index_values(walk(used_oid)), _snmp_index_values(walk(other_oid))
+    common = [i for i in used if i in other]
+    if not common:
+        return None
+    u = sum(used[i] for i in common)
+    total = u + sum(other[i] for i in common) if other_is_free else sum(other[i] for i in common)
+    return u / total * 100 if total > 0 else None
+
+
+def _h_cisco_mem(walk):
+    # CISCO-MEMORY-POOL-MIB: пул процессора (индекс 1) used/free; IOS-XE — CISCO-ENHANCED-MEMPOOL-MIB
+    used = _snmp_index_values(walk("1.3.6.1.4.1.9.9.48.1.1.1.5"))
+    free = _snmp_index_values(walk("1.3.6.1.4.1.9.9.48.1.1.1.6"))
+    if "1" in used and "1" in free and used["1"] + free["1"] > 0:
+        return used["1"] / (used["1"] + free["1"]) * 100
+    return _h_pair_percent(walk, "1.3.6.1.4.1.9.9.221.1.1.1.1.7", "1.3.6.1.4.1.9.9.221.1.1.1.1.8", True)
+
+
+def _h_host_mem(walk):
+    # HOST-RESOURCES-MIB: только строки hrStorageRam (в таблице есть и диски, и swap)
+    types = walk("1.3.6.1.2.1.25.2.3.1.2")
+    ram = {oid.split(".")[-1] for oid, val in types or [] if str(val).strip(".").endswith("1.3.6.1.2.1.25.2.1.2")}
+    units = _snmp_index_values(walk("1.3.6.1.2.1.25.2.3.1.4"))
+    size = _snmp_index_values(walk("1.3.6.1.2.1.25.2.3.1.5"))
+    used = _snmp_index_values(walk("1.3.6.1.2.1.25.2.3.1.6"))
+    idx = [i for i in size if i in used and (not ram or i in ram)]
+    total = sum(size[i] * units.get(i, 1) for i in idx)
+    return sum(used[i] * units.get(i, 1) for i in idx) / total * 100 if total > 0 else None
+
+
+def _h_entity_sensor_temp(walk, base):
+    # ENTITY-SENSOR-MIB (стандартная и Cisco): тип 8 — градусы Цельсия; значение с учётом точности
+    types = _snmp_index_values(walk(base + ".1"))
+    values = _snmp_index_values(walk(base + ".4"))
+    precision = _snmp_index_values(walk(base + ".3"))
+    temps = [values[i] / (10 ** precision.get(i, 0)) for i, kind in types.items() if kind == 8 and i in values]
+    temps = [x for x in temps if 0 < x < 150]
+    return max(temps) if temps else None
+
+
+def _h_mikrotik_temp(walk):
+    # RouterOS 7: таблица датчиков (единица 1 — °C); RouterOS 6: температура в десятых долях градуса
+    units = _snmp_index_values(walk("1.3.6.1.4.1.14988.1.1.3.100.1.4"))
+    values = _snmp_index_values(walk("1.3.6.1.4.1.14988.1.1.3.100.1.3"))
+    temps = [values[i] for i, unit in units.items() if unit == 1 and i in values and 0 < values[i] < 150]
+    if temps:
+        return max(temps)
+    raw = _h_max_nonzero(walk, "1.3.6.1.4.1.14988.1.1.3.10")
+    return raw / 10 if raw and raw > 150 else raw
+
+
+HEALTH_SOURCES = {
+    "cpu": [
+        ("cisco", _h_cisco_cpu),
+        ("host-resources", lambda w: _h_avg(w, "1.3.6.1.2.1.25.3.3.1.2")),
+        ("juniper", lambda w: _h_max_nonzero(w, "1.3.6.1.4.1.2636.3.1.13.1.8")),
+        ("huawei", lambda w: _h_max_nonzero(w, "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5")),
+        ("comware", lambda w: _h_max_nonzero(w, "1.3.6.1.4.1.25506.2.6.1.1.1.1.6")),
+        ("hpe", lambda w: _h_avg(w, "1.3.6.1.4.1.11.2.14.11.5.1.9.6.1")),
+        ("radlan", lambda w: _h_avg(w, "1.3.6.1.4.1.89.1.8")),                   # Cisco SB, Eltex MES
+        ("dlink", lambda w: _h_avg(w, "1.3.6.1.4.1.171.12.1.1.6.2")),
+        ("tplink", lambda w: _h_avg(w, "1.3.6.1.4.1.11863.6.4.1.1.1.1.3")),
+    ],
+    "mem": [
+        ("cisco", _h_cisco_mem),
+        ("host-resources", _h_host_mem),
+        ("juniper", lambda w: _h_max_nonzero(w, "1.3.6.1.4.1.2636.3.1.13.1.11")),
+        ("huawei", lambda w: _h_max_nonzero(w, "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7")),
+        ("comware", lambda w: _h_max_nonzero(w, "1.3.6.1.4.1.25506.2.6.1.1.1.1.8")),
+        ("hpe", lambda w: _h_pair_percent(w, "1.3.6.1.4.1.11.2.14.11.5.1.1.2.1.1.1.7",
+                                          "1.3.6.1.4.1.11.2.14.11.5.1.1.2.1.1.1.5", False)),
+        ("dlink", lambda w: _h_avg(w, "1.3.6.1.4.1.171.12.1.1.9.1.4")),
+        ("tplink", lambda w: _h_avg(w, "1.3.6.1.4.1.11863.6.4.1.2.1.1.2")),
+    ],
+    "temp": [
+        ("cisco", lambda w: _h_max_nonzero(w, "1.3.6.1.4.1.9.9.13.1.3.1.3", 150)),
+        ("cisco-sensor", lambda w: _h_entity_sensor_temp(w, "1.3.6.1.4.1.9.9.91.1.1.1.1")),
+        ("entity-sensor", lambda w: _h_entity_sensor_temp(w, "1.3.6.1.2.1.99.1.1.1")),
+        ("juniper", lambda w: _h_max_nonzero(w, "1.3.6.1.4.1.2636.3.1.13.1.7", 150)),
+        ("huawei", lambda w: _h_max_nonzero(w, "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11", 150)),
+        ("comware", lambda w: _h_max_nonzero(w, "1.3.6.1.4.1.25506.2.6.1.1.1.1.12", 150)),
+        ("mikrotik", _h_mikrotik_temp),
+        ("dlink", lambda w: _h_max_nonzero(w, "1.3.6.1.4.1.171.12.11.1.8.1.2", 150)),
+    ],
+}
+_health_source_cache = {}  # ip -> {"cpu": (источник или "" — не поддерживается, время проверки), ...}
+HEALTH_RECHECK_SEC = 3600   # неподдерживаемый показатель перепроверяется раз в час, а не каждый опрос
+
+
+def poll_switch_health(ip, community):
+    """CPU, память (%) и температура (°C) коммутатора. 0 — коммутатор этот показатель не сообщает."""
+    import time
+    walk = lambda oid: snmp_walk(ip, community, oid)
+    known = _health_source_cache.setdefault(ip, {})
+    health = {"cpu_usage": 0, "ram_usage": 0, "temperature": 0}
+    now = time.time()
+    for metric, field in (("cpu", "cpu_usage"), ("mem", "ram_usage"), ("temp", "temperature")):
+        cached, checked = known.get(metric, (None, 0))
+        if cached == "" and now - checked < HEALTH_RECHECK_SEC:
+            continue
+        sources = HEALTH_SOURCES[metric]
+        if cached:
+            sources = [s for s in sources if s[0] == cached] + [s for s in sources if s[0] != cached]
+        found = ""
+        for name, fn in sources:
             try:
-                # Температура обычно в Celsius
-                temp = int(val)
-                # Фильтруем нереалистичные значения
-                if 0 < temp < 150:
-                    temps.append(temp)
-            except (ValueError, TypeError):
-                pass
-        if temps:
-            health["temperature"] = sum(temps) / len(temps)
-
+                value = fn(walk)
+            except Exception as e:
+                log.debug(_s("Показатель {metric} ({source}) не разобран: {error}", metric=metric, source=name, error=e))
+                value = None
+            if value is not None and value > 0:
+                health[field] = round(min(value, 100.0) if metric != "temp" else value, 1)
+                found = name
+                break
+        known[metric] = (found, now)
     return health
-
 
 def detect_duplicate_macs(switch_id):
     """
@@ -1621,6 +1686,7 @@ def save_settings(updates):
 
 
 POLL_WORKERS = max(1, int(os.environ.get("SWITCHMAP_POLL_WORKERS", "8") or 8))  # коммутаторов одновременно
+MIN_RATE_INTERVAL_SEC = 10  # скорость порта — по интервалу не короче этого (время хранится с точностью до секунды)
 
 
 def scheduled_poll_all_switches():
@@ -2443,6 +2509,16 @@ def poll_switch_and_log_events(switch_id):
             JOIN (SELECT ifindex, MAX(id) AS mid FROM port_traffic WHERE switch_id=? GROUP BY ifindex) last
               ON pt.id = last.mid
         """, (switch_id,))}
+        # Время хранится с точностью до секунды: по интервалу в 1–2 с скорость ошиблась бы в разы.
+        # Если прошлый замер слишком свежий (опрос подряд), сравниваем с более ранним.
+        cutoff = (datetime.now() - timedelta(seconds=MIN_RATE_INTERVAL_SEC)).strftime("%Y-%m-%d %H:%M:%S")
+        for ifindex in [i for i, r in prev_traffic.items() if (r["timestamp"] or "") > cutoff]:
+            older = conn.execute("SELECT * FROM port_traffic WHERE switch_id=? AND ifindex=? AND timestamp<=? "
+                                 "ORDER BY id DESC LIMIT 1", (switch_id, ifindex, cutoff)).fetchone()
+            if older:
+                prev_traffic[ifindex] = dict(older)
+            else:
+                prev_traffic.pop(ifindex)
 
     if not row or not row["ip_address"]:
         return {"error": _("IP адрес коммутатора не задан")}
@@ -2502,6 +2578,11 @@ def poll_switch_and_log_events(switch_id):
                         snap["errors_delta"] = rate["errors_in_delta"] + rate["errors_out_delta"]
                     if snap["speed"] and rate["in_mbps"] is not None:
                         snap["util"] = round(max(rate["in_mbps"], rate["out_mbps"]) / snap["speed"] * 100, 1)
+            elif traffic and isinstance(previous_snapshot.get(ifindex), dict):
+                # Опрос сразу после предыдущего: скорость считать не по чему — оставляем последнюю известную
+                for key in ("in_mbps", "out_mbps", "util", "errors_delta"):
+                    if key in previous_snapshot[ifindex]:
+                        snap[key] = previous_snapshot[ifindex][key]
             snap["load_time"] = now
 
             prev_alerts = (previous_snapshot.get(ifindex) or {}).get("alerts")
