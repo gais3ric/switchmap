@@ -45,7 +45,7 @@ write memory
 
 Los usuarios SNMPv3 no aparecen en `show running-config`: es normal. Para comprobarlo: `show snmp user`.
 
-Cisco guarda una tabla MAC por cada VLAN. Para que SwitchMap vea las direcciones MAC de todas las VLAN por v3, permita los contextos de VLAN: `snmp-server group SWMAP v3 priv context vlan- match prefix`.
+Cisco guarda una tabla MAC por cada VLAN; SwitchMap consulta cada VLAN por sí mismo. Con v2c no hay que configurar nada. Con v3 permita los contextos de VLAN: `snmp-server group SWMAP v3 priv context vlan- match prefix`, y deje vacío el campo «Contexto» en SwitchMap.
 
 # Cisco Business y Small Business (CBS, SG) {#cisco-sb}
 

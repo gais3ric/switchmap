@@ -45,7 +45,7 @@ write memory
 
 SNMPv3 用户不会显示在 `show running-config` 中——这是正常的。检查命令：`show snmp user`。
 
-Cisco 为每个 VLAN 单独保存 MAC 表。要让 SwitchMap 通过 v3 看到所有 VLAN 的 MAC 地址，请允许 VLAN 上下文：`snmp-server group SWMAP v3 priv context vlan- match prefix`。
+Cisco 为每个 VLAN 单独保存 MAC 表——SwitchMap 会自动逐个查询每个 VLAN。使用 v2c 时无需任何配置。使用 v3 时请允许 VLAN 上下文：`snmp-server group SWMAP v3 priv context vlan- match prefix`，并将 SwitchMap 中的“上下文”字段留空。
 
 # Cisco Business 和 Small Business（CBS、SG） {#cisco-sb}
 

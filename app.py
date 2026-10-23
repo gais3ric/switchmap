@@ -1044,6 +1044,26 @@ def _snmp_auth_key(auth):
     return (auth.version, auth.community, getattr(auth, "user", ""), getattr(auth, "context", ""))
 
 
+def snmp_vlan_auth(auth, vlan):
+    """Доступ к данным одного VLAN на Cisco: community@VLAN (v2c) или контекст vlan-N (v3).
+    None — если в SNMPv3 контекст уже задан вручную (тогда опрашиваем как настроено)."""
+    import copy
+    auth = copy.copy(_as_snmp_auth(auth))
+    if auth.version == "3":
+        if auth.context:
+            return None
+        auth.context = f"vlan-{vlan}"
+    else:
+        auth.community = f"{auth.community}@{vlan}"
+    return auth
+
+
+CISCO_VTP_VLAN_STATE = "1.3.6.1.4.1.9.9.46.1.3.1.1.2"  # vtpVlanState: индекс <домен>.<VLAN>, 1 — работает
+CISCO_VTP_VLAN_NAME = "1.3.6.1.4.1.9.9.46.1.3.1.1.4"   # vtpVlanName
+CISCO_VM_VLAN = "1.3.6.1.4.1.9.9.68.1.2.2.1.2"         # vmVlan: VLAN access-порта по ifIndex
+CISCO_MAX_VLANS = 64  # больше VLAN по одному не опрашиваем: слишком долго
+
+
 def static_cache_age(ip, auth):
     """Сколько секунд назад читались справочные данные коммутатора (None — ещё не читались)."""
     import time
@@ -1068,11 +1088,12 @@ def poll_switch_snmp(ip, community, port_count=None, refresh_static=True):
     cached = None if refresh_static else _static_cache.get(cache_key)
     fresh = {}
 
-    def static_walk(oid):
-        if cached is not None and oid in cached:
-            return cached[oid]
-        rows = snmp_walk(ip, community, oid)
-        fresh[oid] = rows
+    def static_walk(oid, auth=None, key=None):
+        key = key or oid
+        if cached is not None and key in cached:
+            return cached[key]
+        rows = snmp_walk(ip, auth or community, oid)
+        fresh[key] = rows
         return rows
 
     # По первому запросу понимаем, отвечает ли коммутатор: ifOperStatus читается всегда
@@ -1270,6 +1291,51 @@ def poll_switch_snmp(ip, community, port_count=None, refresh_static=True):
             bp = int(oid_str.split(".")[-1])
             bridge_to_ifindex[bp] = str(int(val))
 
+    mac_to_ifindex = {mac: bridge_to_ifindex.get(bp, str(bp)) for mac, bp in mac_to_bridge_port.items()}
+    cisco_vlans, cisco_port_vlan, cisco_vlan_names = [], {}, {}
+    for oid_str, val in static_walk(CISCO_VTP_VLAN_STATE):
+        try:
+            vlan = int(oid_str.rsplit(".", 1)[-1])
+            if int(val) == 1 and not 1002 <= vlan <= 1005:  # 1002–1005 — служебные FDDI/Token Ring
+                cisco_vlans.append(vlan)
+        except (TypeError, ValueError):
+            continue
+    if cisco_vlans:
+        # Cisco Catalyst отдаёт таблицу MAC только по одному VLAN: с обычным community — лишь VLAN 1.
+        # Остальные читаются как community@VLAN (v2c) или в контексте vlan-N (v3).
+        def vlan_fdb(vlan):
+            vauth = snmp_vlan_auth(community, vlan)
+            if vauth is None:
+                return {}
+            ports = {int(o.split(".")[-1]): str(int(v))
+                     for o, v in static_walk("1.3.6.1.2.1.17.1.4.1.2", vauth, f"vlan{vlan}:bridge_ports")}
+            found = {}
+            for oid_str, val in snmp_walk(ip, vauth, "1.3.6.1.2.1.17.4.3.1.2"):
+                try:
+                    octets = [int(x) for x in oid_str.split(".")[-6:]]
+                    bp = int(val)
+                except (TypeError, ValueError):
+                    continue
+                if bp and bp in ports:
+                    found[":".join(f"{b:02x}" for b in octets)] = ports[bp]
+            return found
+        vlans = sorted(cisco_vlans)[:CISCO_MAX_VLANS]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(vlans))) as pool:
+            for found in pool.map(vlan_fdb, vlans):
+                mac_to_ifindex.update(found)
+        # VLAN порта и имена VLAN — в собственных таблицах Cisco (Q-BRIDGE-MIB у Catalyst нет)
+        if not pvid_data:
+            for oid_str, val in static_walk(CISCO_VM_VLAN):
+                try:
+                    port_vlan_cisco = str(int(val))
+                except (TypeError, ValueError):
+                    continue
+                cisco_port_vlan[oid_str.rsplit(".", 1)[-1]] = port_vlan_cisco
+        if not vlan_name_data:
+            for oid_str, val in static_walk(CISCO_VTP_VLAN_NAME):
+                name = bytes(val).decode("utf-8", errors="replace") if not isinstance(val, str) else val
+                cisco_vlan_names[oid_str.rsplit(".", 1)[-1]] = name.strip()
+
     vlan_names = {}
     if vlan_name_data:
         for oid_str, val in vlan_name_data:
@@ -1279,8 +1345,11 @@ def poll_switch_snmp(ip, community, port_count=None, refresh_static=True):
             except Exception:
                 name = str(val)
             vlan_names[vlan_id] = name.strip()
+    for vlan_id, name in cisco_vlan_names.items():
+        vlan_names.setdefault(vlan_id, name)
 
-    port_vlan = {}
+    port_vlan = {ifindex: {"id": vlan_id, "name": vlan_names.get(vlan_id, "")}
+                 for ifindex, vlan_id in cisco_port_vlan.items()}
     if pvid_data:
         for oid_str, val in pvid_data:
             try:
@@ -1300,10 +1369,9 @@ def poll_switch_snmp(ip, community, port_count=None, refresh_static=True):
             mac_str = ":".join(f"{b:02x}" for b in mac_bytes)
             ip_by_mac[mac_str] = device_ip
 
-    hostnames = resolve_hostnames(ip_by_mac.get(mac, "") for mac in mac_to_bridge_port)
+    hostnames = resolve_hostnames(ip_by_mac.get(mac, "") for mac in mac_to_ifindex)
     port_devices = {}
-    for mac, bp in mac_to_bridge_port.items():
-        ifindex = bridge_to_ifindex.get(bp, str(bp))
+    for mac, ifindex in mac_to_ifindex.items():
         device_ip = ip_by_mac.get(mac, "")
         hostname = hostnames.get(device_ip, "") if device_ip else ""
         if ifindex not in port_devices:
