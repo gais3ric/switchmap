@@ -45,7 +45,7 @@ In **Settings → Alert thresholds**:
 | CPU load, % | The switch CPU is overloaded |
 | Temperature, °C | Overheating |
 
-An event is raised when a threshold is exceeded and another one when the value returns to normal. **0** turns a threshold off. If a switch stops responding, a “switch unreachable” event explains whether it still answers ping (then the problem is the SNMP settings) or not (then it is the network or power).
+An event is raised when a threshold is exceeded and another one when the value returns to normal. **0** turns a threshold off. If a switch stops responding, a “switch unreachable” event explains whether it still answers ping (then the problem is the SNMP settings) or not (then it is the network or power). If a switch that is definitely disconnected «replies to ping», see [A disconnected switch replies to ping](/help/troubleshooting#fake-ping).
 
 # Charts {#charts}
 

@@ -35,7 +35,7 @@ keywords: 错误 不工作 无响应 超时 snmp v3 密码 用户 mac 无数据 
 # 没有 MAC 地址或 VLAN {#no-mac}
 
 - 只有设备的 MAC 地址出现在交换机表中后设备才会显示：设备必须开机并在发送数据。
-- 在 **Cisco** 上每个 VLAN 的 MAC 地址分开存储——使用 SNMPv3 时请允许 VLAN 上下文（见 [Cisco](/help/snmp-vendors#cisco)）。
+- 在 **Cisco** 上，每个 VLAN 的 MAC 地址分开保存——SwitchMap 会自动逐个查询每个 VLAN。使用 SNMPv3 时，请在交换机上允许 VLAN 上下文，并将“上下文”字段留空（参见 [Cisco](/help/snmp-vendors#cisco)）。
 - 简单交换机和“智能”交换机有时完全不通过 SNMP 提供 MAC 表。
 
 # 没有端口利用率 {#no-util}

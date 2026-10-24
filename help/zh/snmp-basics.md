@@ -43,7 +43,7 @@ community 只是一个字符串，交换机会将其与收到的进行比较。�
 
 在 SwitchMap 中填写与交换机上相同的 **算法** 和 **密码**。密码至少 8 个字符（标准要求）。
 
-**上下文** 通常留空。例如在 Cisco 交换机上需要它，通过 `vlan-10` 上下文读取某个 VLAN 的 MAC 表。
+**上下文** 通常留空。在 Cisco 交换机上，SwitchMap 会通过 `vlan-N` 上下文自动读取每个 VLAN 的数据——需要在交换机上允许这些上下文（参见 [Cisco](/help/snmp-vendors#cisco)）。如果手动指定上下文，则只读取该上下文。
 
 SNMPv3 密码在 SwitchMap 数据库中加密存储，加密密钥保存在单独的 `switchmap.secret` 文件中。
 
@@ -54,8 +54,8 @@ SNMPv3 密码在 SwitchMap 数据库中加密存储，加密密钥保存在单�
 | 名称、描述、位置 | SNMPv2-MIB（system） |
 | 端口及其状态、速率、流量和错误计数 | IF-MIB |
 | 端口描述（ifAlias） | IF-MIB |
-| 端口上的 MAC 地址 | BRIDGE-MIB、Q-BRIDGE-MIB |
-| 端口 VLAN | Q-BRIDGE-MIB |
+| 端口上的 MAC 地址 | BRIDGE-MIB、Q-BRIDGE-MIB；Cisco 上按每个 VLAN 读取 |
+| 端口 VLAN | Q-BRIDGE-MIB；Cisco 上为 CISCO-VLAN-MEMBERSHIP-MIB 和 CISCO-VTP-MIB |
 | 邻居 | LLDP-MIB |
 | CPU、内存、温度 | 各不相同——取决于厂商 |
 | PoE | POWER-ETHERNET-MIB |

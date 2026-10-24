@@ -45,7 +45,7 @@ Unter **Einstellungen → Alarmschwellen**:
 | CPU-Last, % | Die CPU des Switches ist überlastet |
 | Temperatur, °C | Überhitzung |
 
-Beim Überschreiten einer Schwelle entsteht ein Ereignis und ein weiteres, wenn der Wert wieder normal ist. **0** schaltet eine Schwelle ab. Antwortet ein Switch nicht mehr, erklärt das Ereignis „Switch nicht erreichbar“, ob er noch auf Ping reagiert (dann liegt es an den SNMP-Einstellungen) oder nicht (dann am Netz oder an der Stromversorgung).
+Beim Überschreiten einer Schwelle entsteht ein Ereignis und ein weiteres, wenn der Wert wieder normal ist. **0** schaltet eine Schwelle ab. Antwortet ein Switch nicht mehr, erklärt das Ereignis „Switch nicht erreichbar“, ob er noch auf Ping reagiert (dann liegt es an den SNMP-Einstellungen) oder nicht (dann am Netz oder an der Stromversorgung). „Antwortet“ ein sicher getrennter Switch auf Ping, siehe [Ein getrennter Switch antwortet auf Ping](/help/troubleshooting#fake-ping).
 
 # Diagramme {#charts}
 

@@ -53,8 +53,8 @@
             </div>
         </div>
         <div class="field">
-            <label for="{{ prefix }}-snmp-context">{{ _('Контекст') }} <span class="muted">{{ _('(обычно пусто)') }}</span>{{ tip(_('Нужен редко: например, на Cisco таблицы MAC-адресов отдельных VLAN читаются через контекст vlan-N. Если не уверены — оставьте пустым.'), 'snmp-basics', 'snmpv3') }}</label>
-            <input type="text" id="{{ prefix }}-snmp-context" name="snmp_v3_context" placeholder="{{ _('например, vlan-10 для Cisco') }}"
+            <label for="{{ prefix }}-snmp-context">{{ _('Контекст') }} <span class="muted">{{ _('(обычно пусто)') }}</span>{{ tip(_('Нужен редко. Данные всех VLAN на Cisco SwitchMap читает сам — контекст для этого вводить не нужно. Если не уверены — оставьте пустым.'), 'snmp-basics', 'snmpv3') }}</label>
+            <input type="text" id="{{ prefix }}-snmp-context" name="snmp_v3_context"
                    autocomplete="off" spellcheck="false">
         </div>
     </div>

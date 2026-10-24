@@ -35,7 +35,7 @@ Si «Solo ping» aparece en un switch que sin duda está desconectado, quien res
 # No hay direcciones MAC ni VLAN {#no-mac}
 
 - Los dispositivos no aparecen hasta que su MAC está en la tabla del switch: el dispositivo debe estar encendido y enviando datos.
-- En **Cisco** las direcciones MAC de cada VLAN se guardan por separado: con SNMPv3 permita los contextos de VLAN (vea [Cisco](/help/snmp-vendors#cisco)).
+- En **Cisco** las direcciones MAC de cada VLAN se guardan por separado; SwitchMap consulta cada VLAN por sí mismo. Con SNMPv3 permita los contextos de VLAN en el switch y deje vacío el campo «Contexto» (vea [Cisco](/help/snmp-vendors#cisco)).
 - Los switches sencillos y no gestionables («smart») a veces no ofrecen la tabla MAC por SNMP.
 
 # No hay utilización de puertos {#no-util}

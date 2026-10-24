@@ -45,7 +45,7 @@ En **Configuración → Umbrales de alerta**:
 | Carga de CPU, % | La CPU del switch está sobrecargada |
 | Temperatura, °C | Sobrecalentamiento |
 
-Se genera un evento al superar un umbral y otro cuando el valor vuelve a la normalidad. **0** desactiva un umbral. Si un switch deja de responder, el evento «switch inaccesible» explica si aún responde al ping (entonces el problema es la configuración SNMP) o no (entonces es la red o la alimentación).
+Se genera un evento al superar un umbral y otro cuando el valor vuelve a la normalidad. **0** desactiva un umbral. Si un switch deja de responder, el evento «switch inaccesible» explica si aún responde al ping (entonces el problema es la configuración SNMP) o no (entonces es la red o la alimentación). Si un switch que sin duda está desconectado «responde al ping», vea [Un switch desconectado responde al ping](/help/troubleshooting#fake-ping).
 
 # Gráficos {#charts}
 

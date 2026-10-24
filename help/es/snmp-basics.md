@@ -43,7 +43,7 @@ Niveles de seguridad:
 
 En SwitchMap indique el mismo **algoritmo** y las mismas **contraseñas** que en el switch. Las contraseñas deben tener al menos 8 caracteres (lo exige el estándar).
 
-El **contexto** normalmente se deja vacío. Se necesita, por ejemplo, en switches Cisco, donde la tabla MAC de una VLAN se lee con el contexto `vlan-10`.
+El **contexto** suele dejarse vacío. En los switches Cisco, SwitchMap lee por sí mismo los datos de cada VLAN mediante los contextos `vlan-N`; hay que permitirlos en el switch (vea [Cisco](/help/snmp-vendors#cisco)). Si indica un contexto manualmente, solo se leerá ese.
 
 Las contraseñas SNMPv3 se guardan cifradas en la base de datos de SwitchMap, y la clave de cifrado está en un archivo aparte, `switchmap.secret`.
 
@@ -54,8 +54,8 @@ Las contraseñas SNMPv3 se guardan cifradas en la base de datos de SwitchMap, y 
 | Nombre, descripción, ubicación | SNMPv2-MIB (system) |
 | Puertos, su estado, velocidad, contadores de tráfico y errores | IF-MIB |
 | Descripciones de puertos (ifAlias) | IF-MIB |
-| Direcciones MAC en los puertos | BRIDGE-MIB, Q-BRIDGE-MIB |
-| VLAN de los puertos | Q-BRIDGE-MIB |
+| Direcciones MAC en los puertos | BRIDGE-MIB, Q-BRIDGE-MIB; en Cisco, por cada VLAN |
+| VLAN de los puertos | Q-BRIDGE-MIB; en Cisco, CISCO-VLAN-MEMBERSHIP-MIB y CISCO-VTP-MIB |
 | Vecinos | LLDP-MIB |
 | CPU, memoria, temperatura | varios: depende del fabricante |
 | PoE | POWER-ETHERNET-MIB |

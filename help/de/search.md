@@ -20,6 +20,7 @@ Ein Switch merkt sich, welche MAC-Adressen er an jedem Port sieht. SwitchMap lie
 
 - wird ein Gerät nur gefunden, wenn es bei der letzten Abfrage im Netz war;
 - aktualisieren sich die Daten bei aktivierter regelmäßiger Abfrage von selbst.
+- **IP-Adresse und Name** sind nur bekannt, wenn der Switch die IP des Geräts kennt. Ein gewöhnlicher Switch (Layer 2) kennt nur die IPs der Geräte, die mit dem Switch selbst kommuniziert haben – am zuverlässigsten ist daher die Suche nach der **MAC-Adresse**.
 
 Ein Gerät, das immer gefunden werden soll (auch ausgeschaltet), lässt sich manuell **einem Port zuweisen** — siehe [Portplan](/help/port-map#devices).
 

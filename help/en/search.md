@@ -20,6 +20,7 @@ A switch remembers which devices' MAC addresses it sees on each port. SwitchMap 
 
 - a device is found only if it was on the network during the last poll;
 - with periodic polling turned on, the data updates by itself.
+- An **IP address and name** are known only if the switch knows the device's IP. An ordinary (layer 2) switch only knows the IPs of hosts that talked to the switch itself, so searching by **MAC address** is the most reliable.
 
 A device that should always be found (even when switched off) can be **assigned to a port** manually — see [Port map](/help/port-map#devices).
 

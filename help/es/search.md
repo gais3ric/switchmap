@@ -20,6 +20,7 @@ Un switch recuerda las direcciones MAC de los dispositivos que ve en cada puerto
 
 - un dispositivo solo se encuentra si estaba en la red durante el último sondeo;
 - con el sondeo periódico activado, los datos se actualizan solos.
+- La **dirección IP y el nombre** solo se conocen si el switch conoce la IP del dispositivo. Un switch normal (de capa 2) solo conoce las IP de los equipos que se comunicaron con el propio switch, por lo que lo más fiable es buscar por **dirección MAC**.
 
 Un dispositivo que debe encontrarse siempre (incluso apagado) se puede **asignar a un puerto** a mano: vea [Mapa de puertos](/help/port-map#devices).
 

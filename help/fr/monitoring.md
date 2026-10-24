@@ -45,7 +45,7 @@ Dans **Réglages → Seuils d’alerte** :
 | Charge CPU, % | Le CPU du commutateur est surchargé |
 | Température, °C | Surchauffe |
 
-Un événement est créé quand un seuil est dépassé et un autre quand la valeur revient à la normale. **0** désactive un seuil. Si un commutateur ne répond plus, l’événement « commutateur injoignable » précise s’il répond encore au ping (le problème vient alors des réglages SNMP) ou non (il vient alors du réseau ou de l’alimentation).
+Un événement est créé quand un seuil est dépassé et un autre quand la valeur revient à la normale. **0** désactive un seuil. Si un commutateur ne répond plus, l’événement « commutateur injoignable » précise s’il répond encore au ping (le problème vient alors des réglages SNMP) ou non (il vient alors du réseau ou de l’alimentation). Si un commutateur assurément déconnecté « répond au ping », voir [Un commutateur déconnecté répond au ping](/help/troubleshooting#fake-ping).
 
 # Graphiques {#charts}
 

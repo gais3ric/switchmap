@@ -35,7 +35,7 @@ If «Ping only» shows for a switch that is definitely disconnected, something e
 # No MAC addresses or VLANs {#no-mac}
 
 - Devices do not appear until their MAC addresses are in the switch table: the device must be on and sending data.
-- On **Cisco** the MAC addresses of each VLAN are stored separately — for SNMPv3 allow VLAN contexts (see [Cisco](/help/snmp-vendors#cisco)).
+- On **Cisco** the MAC addresses of every VLAN are stored separately — SwitchMap queries each VLAN by itself. Over SNMPv3 allow the VLAN contexts on the switch and leave the «Context» field empty (see [Cisco](/help/snmp-vendors#cisco)).
 - Simple and unmanaged (“smart”) switches sometimes do not provide the MAC table via SNMP at all.
 
 # No port utilization {#no-util}

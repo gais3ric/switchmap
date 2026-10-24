@@ -35,7 +35,7 @@ Zeigt ein sicher getrennter Switch „Nur Ping“, antwortet jemand anderes auf 
 # Keine MAC-Adressen oder VLANs {#no-mac}
 
 - Geräte erscheinen erst, wenn ihre MAC-Adressen in der Tabelle des Switches stehen: Das Gerät muss eingeschaltet sein und Daten senden.
-- Bei **Cisco** werden die MAC-Adressen jedes VLANs getrennt geführt — erlauben Sie für SNMPv3 die VLAN-Kontexte (siehe [Cisco](/help/snmp-vendors#cisco)).
+- Bei **Cisco** werden die MAC-Adressen jedes VLANs getrennt gespeichert – SwitchMap fragt jedes VLAN selbst ab. Bei SNMPv3 erlauben Sie auf dem Switch die VLAN-Kontexte und lassen das Feld „Kontext“ leer (siehe [Cisco](/help/snmp-vendors#cisco)).
 - Einfache und nicht verwaltbare („Smart“-)Switches liefern die MAC-Tabelle manchmal gar nicht per SNMP.
 
 # Keine Portauslastung {#no-util}

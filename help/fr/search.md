@@ -20,6 +20,7 @@ Un commutateur retient les adresses MAC des équipements qu’il voit sur chaque
 
 - un équipement n’est trouvé que s’il était sur le réseau lors de la dernière interrogation ;
 - avec l’interrogation périodique activée, les données se mettent à jour toutes seules.
+- L’**adresse IP et le nom** ne sont connus que si le commutateur connaît l’IP de l’appareil. Un commutateur ordinaire (niveau 2) ne connaît que les IP des hôtes qui ont communiqué avec lui-même ; la recherche par **adresse MAC** est donc la plus fiable.
 
 Un équipement qui doit toujours être trouvé (même éteint) peut être **attribué à un port** à la main : voir [Plan des ports](/help/port-map#devices).
 

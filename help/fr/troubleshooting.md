@@ -35,7 +35,7 @@ Si « Ping uniquement » s’affiche pour un commutateur assurément déconnect�
 # Pas d’adresses MAC ni de VLAN {#no-mac}
 
 - Les équipements n’apparaissent qu’une fois leur MAC dans la table du commutateur : l’équipement doit être allumé et émettre des données.
-- Sur **Cisco**, les adresses MAC de chaque VLAN sont stockées séparément : en SNMPv3, autorisez les contextes VLAN (voir [Cisco](/help/snmp-vendors#cisco)).
+- Sur **Cisco**, les adresses MAC de chaque VLAN sont stockées séparément — SwitchMap interroge lui-même chaque VLAN. En SNMPv3, autorisez les contextes VLAN sur le commutateur et laissez vide le champ « Contexte » (voir [Cisco](/help/snmp-vendors#cisco)).
 - Les commutateurs simples et non administrables (« smart ») ne fournissent parfois pas du tout la table MAC en SNMP.
 
 # Pas d’utilisation des ports {#no-util}

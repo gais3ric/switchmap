@@ -43,7 +43,7 @@ Niveaux de sécurité :
 
 Dans SwitchMap, indiquez le même **algorithme** et les mêmes **mots de passe** que sur le commutateur. Les mots de passe doivent comporter au moins 8 caractères (exigence de la norme).
 
-Le **contexte** reste généralement vide. Il est nécessaire par exemple sur les commutateurs Cisco, où la table MAC d’un VLAN se lit via le contexte `vlan-10`.
+Le **contexte** reste généralement vide. Sur les commutateurs Cisco, SwitchMap lit lui-même les données de chaque VLAN via les contextes `vlan-N` — ils doivent être autorisés sur le commutateur (voir [Cisco](/help/snmp-vendors#cisco)). Si vous saisissez un contexte manuellement, seul celui-ci est lu.
 
 Les mots de passe SNMPv3 sont stockés chiffrés dans la base de SwitchMap, et la clé de chiffrement est conservée dans un fichier séparé, `switchmap.secret`.
 
@@ -54,8 +54,8 @@ Les mots de passe SNMPv3 sont stockés chiffrés dans la base de SwitchMap, et l
 | Nom, description, emplacement | SNMPv2-MIB (system) |
 | Ports, état, vitesse, compteurs de trafic et d’erreurs | IF-MIB |
 | Descriptions des ports (ifAlias) | IF-MIB |
-| Adresses MAC sur les ports | BRIDGE-MIB, Q-BRIDGE-MIB |
-| VLAN des ports | Q-BRIDGE-MIB |
+| Adresses MAC sur les ports | BRIDGE-MIB, Q-BRIDGE-MIB ; sur Cisco, par VLAN |
+| VLAN des ports | Q-BRIDGE-MIB ; sur Cisco, CISCO-VLAN-MEMBERSHIP-MIB et CISCO-VTP-MIB |
 | Voisins | LLDP-MIB |
 | CPU, mémoire, température | variable : dépend du constructeur |
 | PoE | POWER-ETHERNET-MIB |

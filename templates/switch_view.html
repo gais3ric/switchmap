@@ -541,7 +541,7 @@ body:has(#editIndicator.active) .schema-hint { display: block; animation: fade-d
 
                     <label class="label" for="snmpV3Context">{{ _('Контекст') }} <span class="muted">{{ _('(обычно пусто)') }}</span></label>
                     <input type="text" id="snmpV3Context" value="{{ switch['snmp_v3_context'] or '' }}" readonly
-                           placeholder="{{ _('например, vlan-10 для Cisco') }}">
+                          >
                 </div>
 
                 <div class="stack-btns">
