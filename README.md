@@ -44,7 +44,11 @@ database server, Python or other prerequisites.
 
 **Monitoring**
 - SNMP v2c and v3 (MD5, SHA-1…SHA-512; DES, 3DES, AES-128/192/256), periodic polling on a schedule.
+- Switches are polled in parallel. Data that rarely changes (port names, VLANs, LLDP neighbors) is read on every poll
+  or once an hour — for networks under construction and for stable ones.
 - Port status, speed, traffic in/out, utilization and errors; CPU, memory and temperature of the switch.
+- Reliable availability: «Online» means the switch answered over SNMP. A reply to ping alone is shown separately
+  as «Ping only» — VPN clients in TUN mode answer ping for any address.
 - History charts from one hour to a year: raw data is kept for a week, then rolled up into hourly averages and peaks.
 - Alerts when a switch goes down, a port drops or flaps, utilization or errors exceed a threshold,
   CPU or temperature are too high — with a notification when things return to normal.
@@ -52,10 +56,12 @@ database server, Python or other prerequisites.
 **Finding devices**
 - One search box for MAC, IP, host name, port description and connection labels (<kbd>Ctrl</kbd>+<kbd>K</kbd>).
 - The result is a switch and port; links between switches (uplinks) are recognized and shown separately.
+- On Cisco Catalyst the MAC tables of all VLANs are read automatically.
 
 **Topology**
 - Network map built from LLDP: switches, links with port numbers, unknown neighbors (access points, firewalls)
   and devices assigned to ports.
+- Opens instantly even in a large network: neighbors are saved during polling, **Refresh** queries LLDP again.
 
 **Notifications**
 - Telegram (bot, several chats, proxy or self-hosted Bot API) and email (Gmail, Yandex, Mail.ru, Outlook or your own SMTP).
@@ -115,7 +121,9 @@ Cisco IOS / IOS-XE (Catalyst) · Cisco Business (CBS, SG) · HPE Aruba (ArubaOS-
 HPE Comware / H3C · Juniper (EX, QFX) · MikroTik (RouterOS) · Huawei (S series) · D-Link (DGS, DES) ·
 TP-Link (JetStream, Omada) · Eltex (MES) · Ubiquiti UniFi.
 
-Temperature and PoE power are read from vendor MIBs where available (for example, Cisco).
+CPU, memory and temperature are read from vendor MIBs — Cisco, Juniper, Huawei, HPE Aruba and Comware, MikroTik,
+D-Link, TP-Link, Eltex — or from the standard HOST-RESOURCES-MIB and ENTITY-SENSOR-MIB. PoE power per port is shown
+for Cisco. What a particular model does not report (for example, temperature on a Catalyst 2960) is simply not shown.
 
 ## Installation
 
@@ -182,8 +190,8 @@ Everything else (polling, thresholds, notifications, users, language) is set in 
 ## Documentation
 
 The full guide is built into the application (**Help** in the side menu) and is also available here:
-[getting started](help/en/getting-started.md) · [adding switches](help/en/add-switch.md) ·
-[enabling SNMP](help/en/snmp-vendors.md) · [port map](help/en/port-map.md) · [monitoring](help/en/monitoring.md) ·
+[getting started](help/en/getting-started.md) · [interface](help/en/interface.md) · [adding switches](help/en/add-switch.md) ·
+[SNMP basics](help/en/snmp-basics.md) · [enabling SNMP](help/en/snmp-vendors.md) · [port map](help/en/port-map.md) · [monitoring](help/en/monitoring.md) ·
 [notifications](help/en/notifications.md) · [topology](help/en/topology.md) · [search](help/en/search.md) ·
 [NetBox](help/en/netbox.md) · [backups](help/en/backups.md) · [users](help/en/users.md) ·
 [installation](help/en/installation.md) · [troubleshooting](help/en/troubleshooting.md) · [glossary](help/en/glossary.md)
