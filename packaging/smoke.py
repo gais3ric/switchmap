@@ -145,7 +145,8 @@ def run_checks(base, password, snmp, expect_version, ping=True, existing=False):
             text = c.request("/")[2]
         ids = sorted({int(x) for x in re.findall(r"/switch/(\d+)", text)})
         status, r = c.json("/api/status_bulk", {"switches": [{"id": i} for i in ids]})
-        check("ping работает (127.0.0.1 доступен)", isinstance(r, dict) and "online" in r.values(), r)
+        # SNMP на 127.0.0.1 нет, поэтому ожидаем «только ping»: важно, что ping в собранной программе работает
+        check("ping работает (127.0.0.1 доступен)", isinstance(r, dict) and set(r.values()) & {"online", "ping"}, r)
     status, r = c.json("/api/backups", {})
     check("резервная копия создаётся", r.get("ok"), r)
 
