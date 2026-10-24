@@ -281,18 +281,27 @@ check("по умолчанию слушаем только 127.0.0.1", 'os.envir
 pinged = []
 orig_ping = m.ping_host
 m.ping_host = lambda ip, timeout=1: pinged.append(ip) or True
+orig_walk = m.snmp_walk
+m.snmp_walk = lambda ip, auth, oid, timeout=3: pinged.append("snmp:" + ip) or [("1.3.6.1.2.1.1.3.0", 1)]
 with sqlite3.connect(m.DB) as conn:
     conn.execute("UPDATE switches SET ip_address='10.9.9.9' WHERE id=1")
     conn.commit()
 v = authed("viewer1", "Viewpass123") if security.get_user(m.DB, viewer_id) and not security.get_user(m.DB, viewer_id)["disabled"] else admin
 r = v.post("/api/status_bulk", json={"switches": [{"id": 1, "ip": "8.8.8.8"}, {"id": 999999, "ip": "1.1.1.1"}]}).get_json()
-check("status_bulk: адрес берётся из базы, а не из запроса", pinged == ["10.9.9.9"] and r == {"1": "online", "999999": "unknown"},
+check("status_bulk: адрес берётся из базы, а не из запроса", pinged == ["snmp:10.9.9.9"] and r == {"1": "online", "999999": "unknown"},
       (pinged, r))
 pinged.clear()
 t0 = time.time()
 r = v.post("/api/status_bulk", json={"switches": [{"id": i} for i in range(20000)]})
 check("status_bulk: огромный список не запускает тысячи проверок", r.status_code == 200 and len(pinged) <= 1
       and time.time() - t0 < 10, (len(pinged), round(time.time() - t0, 1)))
+# VPN/прокси в режиме TUN отвечает на ping за любой адрес — без ответа по SNMP это не «онлайн»
+m.snmp_walk = lambda ip, auth, oid, timeout=3: []
+r = v.post("/api/status_bulk", json={"switches": [1]}).get_json()
+check("ping есть, SNMP нет — «только ping», а не «онлайн»", r == {"1": "ping"}, r)
+m.ping_host = lambda ip, timeout=1: False
+check("нет ни SNMP, ни ping — недоступен", v.get("/api/status/1").get_json().get("status") == "offline")
+m.snmp_walk = orig_walk
 m.ping_host = orig_ping
 check("ping не принимает «-ключи» и мусор вместо адреса",
       m.ping_host("-t") is False and m.ping_host("1.2.3.4; rm -rf /") is False and m.ping_host("--help") is False)

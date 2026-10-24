@@ -2552,23 +2552,43 @@ def api_topology():
         return jsonify({"error": str(e), "nodes": [], "links": []}), 500
 
 
+STATUS_SNMP_TIMEOUT = 1  # сек на попытку; быстрый запрос sysUpTime
+
+
+def switch_reachability(row):
+    """Доступность коммутатора: «online» — отвечает по SNMP; «ping» — только на ping;
+    «offline» — не отвечает никак. Одному ping верить нельзя: VPN и прокси в режиме TUN
+    (Happ, v2rayN, sing-box…) сами отвечают на ping за любой адрес, даже несуществующий."""
+    ip = row["ip_address"]
+    if not ip:
+        return "unknown"
+    auth = SnmpAuth.from_row(row)
+    if not auth.validate() and snmp_walk(ip, auth, "1.3.6.1.2.1.1.3", timeout=STATUS_SNMP_TIMEOUT):  # sysUpTime
+        return "online"
+    return "ping" if ping_host(ip) else "offline"
+
+
+def _switches_by_id(ids):
+    ids = list(set(ids))
+    if not ids:
+        return []
+    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
+        conn.row_factory = sqlite3.Row
+        return conn.execute(f"SELECT * FROM switches WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall()
+
+
 @app.route("/api/status/<int:switch_id>")
 def api_status(switch_id):
-    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
-        c = conn.cursor()
-        c.execute("SELECT ip_address FROM switches WHERE id=?", (switch_id,))
-        row = c.fetchone()
-    if not row or not row[0]:
+    rows = _switches_by_id([switch_id])
+    if not rows or not rows[0]["ip_address"]:
         return jsonify({"status": "unknown", "message": _("IP не задан")})
-    ip = row[0]
-    online = ping_host(ip)
-    return jsonify({"status": "online" if online else "offline", "ip": ip})
+    return jsonify({"status": switch_reachability(rows[0]), "ip": rows[0]["ip_address"]})
 
 
 @app.route("/api/status_bulk", methods=["POST"])
 def api_status_bulk():
-    """Доступность коммутаторов по ping. Адреса — только из базы (браузер присылает лишь номера):
-    иначе любой вошедший мог бы заставить сервер пинговать что угодно и сколько угодно."""
+    """Доступность коммутаторов (SNMP, затем ping). Адреса — только из базы (браузер присылает лишь номера):
+    иначе любой вошедший мог бы заставить сервер опрашивать что угодно и сколько угодно."""
     data = request.get_json(silent=True) or {}
     ids = []
     for sw in (data.get("switches") or [])[:5000]:
@@ -2579,13 +2599,10 @@ def api_status_bulk():
     results = {str(i): "unknown" for i in ids}
     if not ids:
         return jsonify(results)
-    with sqlite3.connect(DB, timeout=DB_TIMEOUT) as conn:
-        rows = conn.execute(f"SELECT id, ip_address FROM switches WHERE id IN ({','.join('?' * len(set(ids)))})",
-                            list(set(ids))).fetchall()
-    targets = [(str(sid), ip) for sid, ip in rows if ip]
+    targets = [r for r in _switches_by_id(ids) if r["ip_address"]]
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
-        for sid, online in zip([s for s, _ip in targets], pool.map(lambda t: ping_host(t[1]), targets)):
-            results[sid] = "online" if online else "offline"
+        for row, status in zip(targets, pool.map(switch_reachability, targets)):
+            results[str(row["id"])] = status
     return jsonify(results)
 
 

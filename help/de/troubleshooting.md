@@ -9,13 +9,19 @@ keywords: fehler funktioniert nicht keine antwort timeout snmp v3 passwort benut
 
 „Keine Antwort vom Switch“ bedeutet, dass innerhalb der vorgesehenen Zeit keine Antwort kam. Schritt für Schritt:
 
-1. **Gibt es eine Verbindung?** Klicken Sie auf der Switch-Seite auf **Erreichbarkeit prüfen** (Ping). Antwortet er auch nicht auf Ping, liegt es am Netz, an der Stromversorgung oder an der Adresse.
+1. **Besteht eine Verbindung?** Klicken Sie auf der Switch-Seite auf **Erreichbarkeit prüfen**. „Nicht erreichbar“ heißt: keine Antwort per SNMP und auf Ping – das Problem liegt im Netz, an der Stromversorgung oder an der Adresse. „Nur Ping“ heißt: Das Netz funktioniert, das Problem liegt bei SNMP (Schritte 2–5).
 2. **Ist UDP 161 offen?** Eine Firewall zwischen SwitchMap-Server und Switch muss UDP 161 zum Switch und die Antworten zurück durchlassen.
 3. **Ist die Serveradresse am Switch erlaubt?** Viele Switches antworten per SNMP nur Adressen aus einer Liste (ACL). Tragen Sie die IP des SwitchMap-Servers ein.
 4. **Stimmen die Zugangsdaten?** Community und Passwörter unterscheiden Groß- und Kleinschreibung. Ein Switch, der eine falsche Community erhält, schweigt einfach — der Fehler sieht also aus wie fehlende Verbindung.
 5. **Ist SNMP überhaupt aktiviert?** Siehe [SNMP aktivieren](/help/snmp-vendors).
 
 > **Tipp:** Funktioniert Ping, SNMP aber nicht, sind es fast immer die Punkte 3–5. SwitchMap sagt das direkt im Ereignis „Switch nicht erreichbar“.
+
+# Ein getrennter Switch antwortet auf Ping {#fake-ping}
+
+Der Status **Online** bedeutet, dass der Switch per SNMP geantwortet hat. Antwortet er nur auf Ping, lautet der Status **Nur Ping** (gelb).
+
+Zeigt ein sicher getrennter Switch „Nur Ping“, antwortet jemand anderes auf den Ping. Das tun VPNs und Proxys im TUN-Modus (Happ, v2rayN, sing-box und andere): Sie fangen den Datenverkehr ab und beantworten Ping für jede Adresse. Prüfen Sie vom Server aus: `ping 10.123.45.67` – „antwortet“ eine nicht existierende Adresse, ist das die Ursache. Nehmen Sie lokale Netze vom VPN aus (Einstellung „LAN umgehen“ oder Routen für 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) oder schalten Sie den TUN-Modus aus.
 
 # SNMPv3-Fehler {#v3}
 

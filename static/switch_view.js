@@ -1060,7 +1060,12 @@ function checkSwitchStatus() {
     fetch(`/api/status/${SWITCH_ID}`)
         .then(r => r.json())
         .then(d => {
+            txt.title = '';
             if (d.status === 'online') { dot.className = 'status-indicator online'; txt.textContent = t('Онлайн'); }
+            else if (d.status === 'ping') {
+                dot.className = 'status-indicator ping'; txt.textContent = t('Только ping');
+                txt.title = t('Отвечает на ping, но не по SNMP. Проверьте настройки SNMP. Если на сервере работает VPN или прокси, он может отвечать на ping вместо отключённого коммутатора.');
+            }
             else { dot.className = 'status-indicator offline'; txt.textContent = t('Недоступен'); }
         })
         .catch(() => { dot.className = 'status-indicator unknown'; txt.textContent = t('Ошибка'); });

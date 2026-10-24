@@ -9,13 +9,19 @@ keywords: error no funciona sin respuesta timeout snmp v3 contraseña usuario ma
 
 «El switch no respondió» significa que no llegó respuesta en el tiempo previsto. Paso a paso:
 
-1. **¿Hay conectividad?** En la página del switch pulse **Comprobar accesibilidad** (ping). Si tampoco responde al ping, el problema es la red, la alimentación o la dirección.
+1. **¿Hay conexión?** En la página del switch pulse **Comprobar accesibilidad**. «Inaccesible» significa que no responde ni a SNMP ni al ping: el problema está en la red, la alimentación o la dirección. «Solo ping» significa que la red funciona y el problema está en SNMP (pasos 2–5).
 2. **¿Está abierto el UDP 161?** Un cortafuegos entre el servidor de SwitchMap y el switch debe dejar pasar UDP 161 hacia el switch y las respuestas de vuelta.
 3. **¿Está permitida la dirección del servidor en el switch?** Muchos switches solo responden por SNMP a las direcciones de una lista (ACL). Añada la IP del servidor de SwitchMap.
 4. **¿Coinciden las credenciales?** La community y las contraseñas distinguen mayúsculas y minúsculas. Un switch que recibe una community incorrecta simplemente calla, así que el error parece igual que la falta de conectividad.
 5. **¿Está SNMP activado?** Vea [Activar SNMP](/help/snmp-vendors).
 
 > **Consejo:** si el ping funciona pero SNMP no, casi siempre son los puntos 3–5. SwitchMap lo indica directamente en el evento «switch inaccesible».
+
+# Un switch desconectado responde al ping {#fake-ping}
+
+El estado **En línea** significa que el switch respondió por SNMP. Si solo responde al ping, el estado es **Solo ping** (amarillo).
+
+Si «Solo ping» aparece en un switch que sin duda está desconectado, quien responde al ping es otro. Lo hacen las VPN y los proxies en modo TUN (Happ, v2rayN, sing-box y otros): interceptan el tráfico y responden al ping por cualquier dirección. Compruébelo desde el servidor: `ping 10.123.45.67`; si una dirección inexistente «responde», esa es la causa. Excluya las redes locales de la VPN (opción «Omitir LAN» o rutas para 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) o desactive el modo TUN.
 
 # Errores de SNMPv3 {#v3}
 

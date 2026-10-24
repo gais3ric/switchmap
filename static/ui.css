@@ -378,6 +378,7 @@ input[type=checkbox], input[type=radio] {
 .dot.online, .status-dot.online   { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
 .dot.offline, .status-dot.offline { background: var(--danger);  box-shadow: 0 0 0 3px var(--danger-soft); }
 .dot.unknown, .status-dot.unknown { background: var(--text-3); }
+.dot.ping, .status-dot.ping       { background: var(--warning); box-shadow: 0 0 0 3px var(--warning-soft); }
 .dot.checking, .status-dot.checking { background: var(--warning); animation: pulse-dot 1.2s ease-in-out infinite; }
 @keyframes pulse-dot { 50% { opacity: .35; } }
 

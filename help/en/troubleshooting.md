@@ -9,13 +9,19 @@ keywords: error not working no response timeout snmp v3 password user mac no dat
 
 “No response from the switch” means no reply arrived within the allotted time. Step by step:
 
-1. **Is there connectivity?** On the switch page click **Check reachability** (ping). If it does not answer ping either, the problem is the network, power or the address.
+1. **Is there a connection?** On the switch page press **Check reachability**. «Unreachable» means no reply to either SNMP or ping: the problem is the network, power or address. «Ping only» means the network works and the problem is SNMP (steps 2–5).
 2. **Is UDP 161 open?** A firewall between the SwitchMap server and the switch must let UDP 161 through toward the switch and the replies back.
 3. **Is the server's address allowed on the switch?** Many switches answer SNMP only to addresses on a list (ACL). Add the SwitchMap server's IP.
 4. **Do the credentials match?** The community and passwords are case-sensitive. A switch that receives a wrong community simply stays silent — so the error looks the same as no connectivity.
 5. **Is SNMP enabled at all?** See [Enabling SNMP](/help/snmp-vendors).
 
 > **Tip:** if ping works but SNMP does not, it is almost always items 3–5. SwitchMap says so directly in the “switch unreachable” event.
+
+# A disconnected switch replies to ping {#fake-ping}
+
+The **Online** status means the switch replied over SNMP. If it only replies to ping, the status is **Ping only** (yellow).
+
+If «Ping only» shows for a switch that is definitely disconnected, something else is answering the ping. VPNs and proxies in TUN mode (Happ, v2rayN, sing-box and others) do this: they intercept traffic and answer ping for any address. Check from the server: `ping 10.123.45.67` — if a non-existent address «replies», this is the cause. Exclude local networks from the VPN (a «Bypass LAN» setting or routes for 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) or turn off TUN mode.
 
 # SNMPv3 errors {#v3}
 

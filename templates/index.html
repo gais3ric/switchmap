@@ -83,7 +83,7 @@ tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
     <div class="kpi" id="kpiOnlineCard">
         <div class="kpi-label">{{ icon('activity') }} {{ _('Доступны') }}</div>
         <div class="kpi-value num"><span id="kpiOnline">—</span><small>/ {{ summary.with_ip }}</small></div>
-        <div class="kpi-foot" id="kpiOnlineFoot">{{ _('проверка ping…') }}</div>
+        <div class="kpi-foot" id="kpiOnlineFoot">{{ _('проверка доступности…') }}</div>
     </div>
     <div class="kpi">
         <div class="kpi-label">{{ icon('plug') }} {{ _('Активные порты') }}</div>
@@ -426,20 +426,28 @@ function checkSwitchStatuses() {
     })
         .then(r => r.json())
         .then(data => {
-            let online = 0;
+            let online = 0, pingOnly = 0;
+            const labels = { online: t('Онлайн'), offline: t('Недоступен'), ping: t('Только ping') };
             Object.entries(data).forEach(([id, status]) => {
                 const dot = document.getElementById('status-' + id);
                 const text = document.getElementById('status-text-' + id);
                 if (status === 'online') online++;
+                if (status === 'ping') pingOnly++;
                 if (dot) dot.className = 'status-dot dot ' + status;
-                if (text) text.textContent = status === 'online' ? t('Онлайн') : status === 'offline' ? t('Недоступен') : t('Нет IP');
+                if (text) {
+                    text.textContent = labels[status] || t('Нет IP');
+                    text.title = status === 'ping' ? t('Отвечает на ping, но не по SNMP. Проверьте настройки SNMP. Если на сервере работает VPN или прокси, он может отвечать на ping вместо отключённого коммутатора.') : '';
+                }
             });
             document.getElementById('kpiOnline').textContent = online;
             const card = document.getElementById('kpiOnlineCard');
             card.classList.toggle('is-success', online === switches.length);
             card.classList.toggle('is-danger', online < switches.length);
+            const offline = switches.length - online - pingOnly;
             document.getElementById('kpiOnlineFoot').textContent =
-                online === switches.length ? t('все отвечают на ping') : t('не отвечают: {v}', { v: switches.length - online });
+                online === switches.length ? t('все отвечают')
+                : [offline ? t('не отвечают: {v}', { v: offline }) : '', pingOnly ? t('только ping: {v}', { v: pingOnly }) : '']
+                    .filter(Boolean).join(' · ');
         })
         .catch(() => {
             document.getElementById('kpiOnlineFoot').textContent = t('ошибка проверки');

@@ -9,13 +9,19 @@ keywords: erreur ne fonctionne pas pas de réponse timeout snmp v3 mot de passe 
 
 « Le commutateur n’a pas répondu » signifie qu’aucune réponse n’est arrivée dans le délai prévu. Étape par étape :
 
-1. **Y a-t-il une connectivité ?** Sur la page du commutateur, cliquez sur **Vérifier la joignabilité** (ping). S’il ne répond pas non plus au ping, le problème vient du réseau, de l’alimentation ou de l’adresse.
+1. **Y a-t-il une connexion ?** Sur la page du commutateur, cliquez sur **Vérifier la joignabilité**. « Injoignable » signifie aucune réponse ni en SNMP ni au ping : le problème vient du réseau, de l’alimentation ou de l’adresse. « Ping uniquement » signifie que le réseau fonctionne et que le problème vient du SNMP (étapes 2 à 5).
 2. **L’UDP 161 est-il ouvert ?** Un pare-feu entre le serveur SwitchMap et le commutateur doit laisser passer l’UDP 161 vers le commutateur et les réponses en retour.
 3. **L’adresse du serveur est-elle autorisée sur le commutateur ?** De nombreux commutateurs ne répondent en SNMP qu’aux adresses d’une liste (ACL). Ajoutez l’IP du serveur SwitchMap.
 4. **Les identifiants correspondent-ils ?** La community et les mots de passe sont sensibles à la casse. Un commutateur qui reçoit une mauvaise community se tait simplement : l’erreur ressemble donc à une absence de connectivité.
 5. **SNMP est-il activé ?** Voir [Activer SNMP](/help/snmp-vendors).
 
 > **Astuce :** si le ping fonctionne mais pas SNMP, c’est presque toujours les points 3 à 5. SwitchMap l’indique directement dans l’événement « commutateur injoignable ».
+
+# Un commutateur déconnecté répond au ping {#fake-ping}
+
+Le statut **En ligne** signifie que le commutateur a répondu en SNMP. S’il répond seulement au ping, le statut est **Ping uniquement** (jaune).
+
+Si « Ping uniquement » s’affiche pour un commutateur assurément déconnecté, c’est quelqu’un d’autre qui répond au ping. Les VPN et proxys en mode TUN (Happ, v2rayN, sing-box et autres) le font : ils interceptent le trafic et répondent au ping pour n’importe quelle adresse. Vérifiez depuis le serveur : `ping 10.123.45.67` — si une adresse inexistante « répond », c’est la cause. Excluez les réseaux locaux du VPN (option « Contourner le LAN » ou routes pour 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) ou désactivez le mode TUN.
 
 # Erreurs SNMPv3 {#v3}
 
