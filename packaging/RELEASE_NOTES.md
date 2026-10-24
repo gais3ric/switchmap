@@ -5,10 +5,12 @@
 ## Что умеет
 
 - **Схема портов** — коммутаторы и патч-панели как в стойке: порты RJ-45 и SFP, транки, подключения с цветом кабеля, VLAN, PoE.
-- **Мониторинг по SNMP v2c/v3** — состояние, скорость, трафик, загрузка и ошибки портов; CPU, память и температура; графики от часа до года.
+- **Мониторинг по SNMP v2c/v3** — состояние, скорость, трафик, загрузка и ошибки портов; CPU, память и температура из MIB производителя (Cisco, Juniper, Huawei, HPE, MikroTik, D-Link, TP-Link, Eltex); графики от часа до года.
+- **Параллельный опрос** и выбор режима: редко меняющиеся данные (названия портов, VLAN, соседи LLDP) читаются при каждом опросе или раз в час.
+- **Достоверная доступность**: «Онлайн» — только если коммутатор ответил по SNMP; ответ лишь на ping показывается отдельно («Только ping») — VPN в режиме TUN отвечает на ping за любой адрес.
 - **Оповещения** в Telegram и на почту: коммутатор недоступен, порт упал, высокая загрузка, ошибки, перегрев. Тихие часы, подавление «мигающих» портов.
-- **Поиск устройства** по MAC, IP, имени и описанию порта — в каком коммутаторе и порту оно подключено.
-- **Топология сети** по LLDP.
+- **Поиск устройства** по MAC, IP, имени и описанию порта — в каком коммутаторе и порту оно подключено. На Cisco Catalyst MAC-адреса всех VLAN читаются автоматически.
+- **Топология сети** по LLDP — открывается сразу даже в большой сети.
 - **Поиск коммутаторов в сети** и **импорт из NetBox**.
 - **Пользователи** с ролями «администратор» и «наблюдатель», **журнал изменений** с отменой, **резервные копии** базы.
 - **Выгрузка** в Excel, CSV и PDF.
@@ -39,6 +41,10 @@ sudo dnf install ./switchmap-X.Y.Z-1.x86_64.rpm
 
 Windows покажет предупреждение SmartScreen «Неизвестный издатель» — установщик не подписан сертификатом. Нажмите «Подробнее» → «Выполнить в любом случае». Контрольные суммы файлов — в `SHA256SUMS.txt`.
 
+## Известные ограничения
+
+На реальном оборудовании проверены коммутаторы Cisco Catalyst. Поддержка **MikroTik** и **D-Link** проверена только на имитации, поэтому с ними возможны ошибки — например, какие-то данные не показываются. Будем рады обратной связи: опишите модель, версию прошивки и что не так в [Issues](https://github.com/gais3ric/switchmap/issues). Это касается и оборудования других производителей.
+
 ---
 
 <a id="english"></a>
@@ -49,10 +55,12 @@ The first release of SwitchMap — switch inventory and network monitoring in on
 ## Highlights
 
 - **Port map** — switches and patch panels as in the rack: RJ-45 and SFP ports, trunks, connections with cable colors, VLANs, PoE.
-- **SNMP v2c/v3 monitoring** — port status, speed, traffic, utilization and errors; CPU, memory and temperature; charts from an hour to a year.
+- **SNMP v2c/v3 monitoring** — port status, speed, traffic, utilization and errors; CPU, memory and temperature from vendor MIBs (Cisco, Juniper, Huawei, HPE, MikroTik, D-Link, TP-Link, Eltex); charts from an hour to a year.
+- **Parallel polling** with a choice of mode: data that rarely changes (port names, VLANs, LLDP neighbors) is read on every poll or once an hour.
+- **Reliable availability**: «Online» only when the switch answered over SNMP; a reply to ping alone is shown separately («Ping only») — a VPN in TUN mode answers ping for any address.
 - **Alerts** to Telegram and email: switch down, port down, high utilization, errors, overheating. Quiet hours, flap suppression.
-- **Find a device** by MAC, IP, name or port description — which switch and port it is plugged into.
-- **Network topology** from LLDP.
+- **Find a device** by MAC, IP, name or port description — which switch and port it is plugged into. On Cisco Catalyst the MAC tables of all VLANs are read automatically.
+- **Network topology** from LLDP — opens instantly even in a large network.
 - **Network discovery** and **NetBox import**.
 - **Users** with administrator and viewer roles, **change log** with undo, database **backups**.
 - **Export** to Excel, CSV and PDF.
@@ -70,3 +78,7 @@ The first release of SwitchMap — switch inventory and network monitoring in on
 Then open `http://localhost:5000` and create the administrator. To update, install the new version over the old one — data and settings are kept.
 
 The installer is not signed, so Windows SmartScreen shows «Unknown publisher»: click **More info → Run anyway**. File checksums are in `SHA256SUMS.txt`.
+
+## Known limitations
+
+Cisco Catalyst switches have been tested on real hardware. **MikroTik** and **D-Link** support has only been tested against simulated devices, so problems are possible — for example, some data may not be shown. Feedback is very welcome: please open an [issue](https://github.com/gais3ric/switchmap/issues) with the model, firmware version and what is wrong. The same goes for equipment from other vendors.
